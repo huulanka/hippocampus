@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { audioUrl, getCapture, type CaptureDetail } from "../api";
+import { useCallback, useEffect, useState } from "react";
+import { audioUrl, correctTranscript, getCapture, type CaptureDetail } from "../api";
 import { AudioPlayer } from "../components/AudioPlayer";
 import { entityColor } from "../entityType";
 
@@ -21,11 +21,21 @@ export function CaptureDetailScreen({
 }) {
   const [detail, setDetail] = useState<CaptureDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const reload = useCallback(
+    () => getCapture(eventId).then(setDetail),
+    [eventId],
+  );
 
   useEffect(() => {
     let current = true;
     setDetail(null);
     setError(null);
+    setDraft(null);
+    setSaveError(null);
     getCapture(eventId)
       .then((d) => current && setDetail(d))
       .catch((err) => current && setError(String(err)));
@@ -33,6 +43,24 @@ export function CaptureDetailScreen({
       current = false;
     };
   }, [eventId]);
+
+  async function saveCorrection() {
+    if (draft === null || !draft.trim() || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await correctTranscript(eventId, draft);
+      // Refetch rather than patch: the correction also re-embeds the
+      // capture and restarts the structuring, so the echoes and entities
+      // on screen are about the old wording.
+      await reload();
+      setDraft(null);
+    } catch (err) {
+      setSaveError(String(err));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (error) return <DetailFrame onBack={onBack}>Couldn't load that capture: {error}</DetailFrame>;
   if (!detail) return <DetailFrame onBack={onBack}>Loading…</DetailFrame>;
@@ -57,17 +85,75 @@ export function CaptureDetailScreen({
           <span className="dim">
             {detail.redacted
               ? "— the content was removed; the capture itself stays"
-              : spoken
-                ? "— transcript; the recording below is the original"
-                : "— raw, verbatim, never edited"}
+              : draft !== null
+                ? spoken
+                  ? "— fixing the transcript; the recording stays untouched"
+                  : "— fixing the text; the original is kept"
+                : spoken
+                  ? "— transcript; the recording below is the original"
+                  : "— raw, verbatim"}
           </span>
         </div>
-        <p className="detail-transcript">{detail.text ?? "(redacted)"}</p>
+
+        {draft === null ? (
+          <p className="detail-transcript">{detail.text ?? "(redacted)"}</p>
+        ) : (
+          <textarea
+            className="capture-input detail-edit"
+            autoFocus
+            rows={Math.max(3, Math.ceil(draft.length / 70))}
+            value={draft}
+            disabled={saving}
+            onChange={(e) => setDraft(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                void saveCorrection();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setDraft(null);
+              }
+            }}
+          />
+        )}
+
         {detail.audio && <AudioPlayer src={audioUrl(detail.event_id)} />}
-        {corrections.length > 0 && (
+
+        {!detail.redacted &&
+          (draft === null ? (
+            <div className="detail-actions">
+              <span className="dim link" onClick={() => setDraft(detail.text ?? "")}>
+                [ fix a word ]
+              </span>
+            </div>
+          ) : (
+            <div className="detail-actions">
+              <span
+                className={`btn btn-accent${draft.trim() && !saving ? "" : " disabled"}`}
+                onClick={saveCorrection}
+              >
+                [ {saving ? "Fixing…" : "Keep The Fix"} ]
+              </span>
+              <span className="btn" onClick={() => setDraft(null)}>
+                [ Cancel ]
+              </span>
+            </div>
+          ))}
+
+        {saveError && <p className="dim detail-note">Couldn't save that: {saveError}</p>}
+
+        {draft !== null && (
           <p className="dim detail-note">
-            Corrected {corrections.length === 1 ? "once" : `${corrections.length} times`} — the
-            original is kept below.
+            The old wording is never deleted — every version is kept below. Search and the
+            entities are rebuilt from the new one.
+          </p>
+        )}
+
+        {draft === null && corrections.length > 0 && (
+          <p className="dim detail-note">
+            Corrected {corrections.length === 1 ? "once" : `${corrections.length} times`} — every
+            earlier wording is kept below.
           </p>
         )}
       </section>
@@ -149,7 +235,7 @@ export function CaptureDetailScreen({
             <div key={version.event_id} className="detail-version">
               <div className="timeline-card-meta">
                 <span className="dim">// {shortStamp(version.created_at)}</span>
-                <span className="dim">{version.model === "user" ? "you" : version.model}</span>
+                <span className="dim">{authorOf(version.model)}</span>
               </div>
               <p className="timeline-transcript">{version.text}</p>
             </div>
@@ -189,6 +275,14 @@ function DetailFrame({ children, onBack }: { children: React.ReactNode; onBack: 
       <p className="dim">{children}</p>
     </div>
   );
+}
+
+/// Who wrote a given version. The backend uses two sentinel values where
+/// an ASR model name would otherwise stand.
+function authorOf(model: string): string {
+  if (model === "user") return "you, corrected";
+  if (model === "typed") return "you, typed";
+  return model;
 }
 
 function fullStamp(iso: string): string {

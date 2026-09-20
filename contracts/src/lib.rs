@@ -80,6 +80,18 @@ pub struct CaptureDetail {
     pub events: Vec<EventRecord>,
 }
 
+/// Body of `POST /captures/{id}/transcript` — a human fixing what the
+/// machine (or their own typing) got wrong.
+///
+/// The correction never overwrites anything: it is appended as one more
+/// transcript, superseding the previous one. The original stays readable
+/// forever, which is the whole reason the transcript is a separate thing
+/// from the capture (ADR 0004).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrectTranscriptRequest {
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDetail {
     pub mime: String,

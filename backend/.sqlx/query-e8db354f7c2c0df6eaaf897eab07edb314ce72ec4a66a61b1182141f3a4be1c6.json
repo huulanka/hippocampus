@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from entities\n        where not exists (select 1 from observations o where o.entity_id = entities.id)\n          and not exists (\n              select 1 from relations r\n              where r.from_entity_id = entities.id or r.to_entity_id = entities.id\n          )\n        returning id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e8db354f7c2c0df6eaaf897eab07edb314ce72ec4a66a61b1182141f3a4be1c6"
+}

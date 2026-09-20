@@ -26,6 +26,10 @@ pub fn router() -> Router<AppState> {
             post(captures::create_from_audio).layer(DefaultBodyLimit::max(audio::MAX_BYTES)),
         )
         .route("/captures/{id}", get(captures::detail))
+        .route(
+            "/captures/{id}/transcript",
+            post(captures::correct_transcript),
+        )
         .route("/captures/{id}/echo", get(captures::echo_for))
         .route("/captures/{id}/audio", get(captures::audio_for))
         .route("/entity-types", get(captures::entity_types))

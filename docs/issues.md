@@ -89,9 +89,17 @@ implementieren oder entfernen.
 ---
 
 ### [P2] Transkript-Korrektur
-`PUT /captures/{id}/transcript` erzeugt `transcript.corrected`, alte Fassung
-bleibt sichtbar. Löst Neu-Einbettung und Neu-Extraktion aus. UI: bearbeiten,
-Versionen nebeneinander.
+**Erledigt** in #20. `POST /captures/{id}/transcript` hängt
+`transcript.corrected` an, die alte Fassung bleibt unter
+`[ HOW THE WORDS CHANGED ]` sichtbar, und die Korrektur löst Neu-Einbettung
+und Neu-Strukturierung aus.
+
+Ein Detail, das die Re-Derivation unten betrifft: die Korrektur wirft die
+abgeleiteten Projektionszeilen weg und schreibt dafür
+`structuring.invalidated`. Die `entity.observed`-Events der alten Fassung
+stehen weiterhin im Log — ein vollständiger Replay muss diesen Marker
+beachten, sonst erweckt er die Lesart eines Satzes wieder, den es nicht
+mehr gibt.
 
 ### [P2] Redaktion mit Tombstone
 `DELETE /captures/{id}` leert Inhalte, entfernt abgeleitete Observations und
@@ -101,7 +109,8 @@ Hinweis, dass ältere Backups unberührt bleiben.
 ### [P2] Re-Derivation über den gesamten Bestand
 CLI/Endpunkt, das alle Captures neu strukturiert — für Modellwechsel und
 nach Korrekturen. Idempotent, fortsetzbar, mit Fortschritt. Ohne das ist
-`events` nur ein Audit-Log.
+`events` nur ein Audit-Log. Muss `structuring.invalidated` beachten (siehe
+Transkript-Korrektur).
 
 ### [P2] JSONL-Spiegel der Rohdaten
 Captures und Transkripte zusätzlich als Zeilen-JSON auf Platte, damit die

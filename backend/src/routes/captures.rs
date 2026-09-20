@@ -3,8 +3,8 @@ use axum::extract::{Multipart, Path as AxumPath, Query, State};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use contracts::{
-    AudioDetail, CaptureAccepted, CaptureDetail, CreateCaptureRequest, EchoItem, EntityMention,
-    EventRecord, RelationMention, TranscriptVersion,
+    AudioDetail, CaptureAccepted, CaptureDetail, CorrectTranscriptRequest, CreateCaptureRequest,
+    EchoItem, EntityMention, EventRecord, RelationMention, TranscriptVersion,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -418,15 +418,37 @@ pub async fn detail(
     .await?;
 
     let redacted = head.redacted_at.is_some();
-    // The newest transcript wins; with none, the typed text is the original
-    // and is itself the current reading (ADR 0004).
+
+    let mut versions: Vec<TranscriptVersion> = Vec::with_capacity(transcripts.len() + 1);
+    // A typed capture has no transcript row: the text *is* the original and
+    // lives on the capture itself (ADR 0004). It still belongs at the head
+    // of the chain, otherwise correcting a typed capture would appear to
+    // delete what was first written — the one thing this system promises
+    // never to do.
+    if let Some(original) = head.text.clone().filter(|_| !redacted) {
+        versions.push(TranscriptVersion {
+            event_id: id,
+            text: original,
+            model: TYPED_AUTHOR.to_string(),
+            language: None,
+            created_at: head.occurred_at,
+            supersedes: None,
+        });
+    }
+    versions.extend(transcripts.into_iter().map(|t| TranscriptVersion {
+        event_id: t.event_id,
+        text: t.text,
+        model: t.model,
+        language: t.language,
+        created_at: t.created_at,
+        supersedes: t.supersedes,
+    }));
+
+    // The newest reading wins.
     let text = if redacted {
         None
     } else {
-        transcripts
-            .last()
-            .map(|t| t.text.clone())
-            .or_else(|| head.text.clone())
+        versions.last().map(|t| t.text.clone())
     };
 
     let entities = sqlx::query!(
@@ -514,17 +536,7 @@ pub async fn detail(
         text,
         redacted,
         audio,
-        transcripts: transcripts
-            .into_iter()
-            .map(|t| TranscriptVersion {
-                event_id: t.event_id,
-                text: t.text,
-                model: t.model,
-                language: t.language,
-                created_at: t.created_at,
-                supersedes: t.supersedes,
-            })
-            .collect(),
+        transcripts: versions,
         entities: entities
             .into_iter()
             .map(|e| EntityMention {
@@ -560,4 +572,187 @@ pub async fn detail(
             })
             .collect(),
     }))
+}
+
+/// Corrects a capture's text.
+///
+/// Nothing is overwritten. The correction is appended as one more
+/// transcript, superseding the previous one, and the original stays
+/// readable in the detail view forever (ADR 0005). What *does* change is
+/// everything derived: the search index is re-embedded and the structuring
+/// runs again, because a correction that leaves the typo in the search
+/// index has not corrected anything the user can feel.
+pub async fn correct_transcript(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<Uuid>,
+    Json(req): Json<CorrectTranscriptRequest>,
+) -> Result<Json<TranscriptVersion>, AppError> {
+    let text = req.text.trim().to_string();
+    if text.is_empty() {
+        return Err(AppError::bad_request(
+            "a correction cannot be empty — redaction is a separate thing",
+        ));
+    }
+
+    let capture = sqlx::query!(
+        r#"
+        select e.occurred_at, cc.redacted_at as "redacted_at?"
+        from events e
+        left join capture_content cc on cc.event_id = e.id
+        where e.id = $1 and e.event_type = 'capture.recorded'
+        "#,
+        id,
+    )
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let Some(capture) = capture else {
+        return Err(AppError::not_found("no such capture"));
+    };
+    if capture.redacted_at.is_some() {
+        return Err(AppError::bad_request(
+            "this capture's content was removed; there is nothing left to correct",
+        ));
+    }
+
+    let previous = sqlx::query_scalar!(
+        r#"
+        select event_id from transcript_content
+        where capture_event_id = $1
+        order by created_at desc
+        limit 1
+        "#,
+        id,
+    )
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let stored = events::append(
+        &state.pool,
+        Uuid::new_v4(),
+        1,
+        "transcript.corrected",
+        &json!({
+            "capture_event_id": id,
+            "model": CORRECTION_AUTHOR,
+            "supersedes": previous,
+        }),
+        CORRECTION_AUTHOR,
+    )
+    .await?;
+
+    sqlx::query!(
+        r#"
+        insert into transcript_content (event_id, capture_event_id, text, model, supersedes)
+        values ($1, $2, $3, $4, $5)
+        "#,
+        stored.id,
+        id,
+        text,
+        CORRECTION_AUTHOR,
+        previous,
+    )
+    .execute(&state.pool)
+    .await?;
+
+    // Everything derived from the old wording is now wrong, so it goes
+    // before the new derivation runs. These are projection rows — derived
+    // read-models, not history — which is exactly why they may be dropped
+    // while the event log stays untouched (ADR 0003).
+    //
+    // Only when something can actually re-derive them, though: without a
+    // structuring model configured this would silently strip a capture of
+    // its entities and never put them back.
+    if state.openrouter.is_some() {
+        invalidate_derived(&state, id, stored.id).await?;
+    } else {
+        tracing::warn!(
+            %id,
+            "corrected without a structuring model configured — the entities still \
+             describe the old wording"
+        );
+    }
+
+    index_capture(&state, id, capture.occurred_at, &text).await?;
+
+    Ok(Json(TranscriptVersion {
+        event_id: stored.id,
+        text,
+        model: CORRECTION_AUTHOR.to_string(),
+        language: None,
+        created_at: stored.occurred_at,
+        supersedes: previous,
+    }))
+}
+
+/// Recorded as the `model` of a human correction, so a transcript written
+/// by a person is never mistaken for one an ASR model produced.
+const CORRECTION_AUTHOR: &str = "user";
+
+/// Stands in as the `model` of the original text of a typed capture, which
+/// has no transcript row of its own to carry one.
+const TYPED_AUTHOR: &str = "typed";
+
+/// Drops the entities, observations and relations this capture produced,
+/// so the next structuring run starts from a clean slate instead of
+/// stacking a second reading on top of the first.
+///
+/// An entity is only removed when this capture was the last thing holding
+/// it up: other captures' observations keep it alive, and so does any
+/// relation that does not come from here.
+async fn invalidate_derived(
+    state: &AppState,
+    capture_event_id: Uuid,
+    reason_event_id: Uuid,
+) -> Result<(), AppError> {
+    let mut tx = state.pool.begin().await?;
+
+    sqlx::query!(
+        r#"delete from relations where source_event_id = $1"#,
+        capture_event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query!(
+        r#"delete from observations where source_event_id = $1"#,
+        capture_event_id
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let orphaned = sqlx::query_scalar!(
+        r#"
+        delete from entities
+        where not exists (select 1 from observations o where o.entity_id = entities.id)
+          and not exists (
+              select 1 from relations r
+              where r.from_entity_id = entities.id or r.to_entity_id = entities.id
+          )
+        returning id
+        "#
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    // The events that produced those rows are still in the log and always
+    // will be. A future replay has to honour this marker, or it would
+    // resurrect the reading of a sentence that no longer exists.
+    events::append(
+        &state.pool,
+        Uuid::new_v4(),
+        1,
+        "structuring.invalidated",
+        &json!({
+            "capture_event_id": capture_event_id,
+            "because_of_event_id": reason_event_id,
+            "orphaned_entities": orphaned,
+        }),
+        CORRECTION_AUTHOR,
+    )
+    .await?;
+
+    Ok(())
 }

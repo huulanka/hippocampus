@@ -152,6 +152,16 @@ export function audioUrl(eventId: string): string {
   return `${BASE_URL}/captures/${eventId}/audio`;
 }
 
+/// Corrects a capture's text. The correction is appended as a new
+/// transcript; nothing is overwritten, and the original stays readable.
+export function correctTranscript(eventId: string, text: string): Promise<TranscriptVersion> {
+  return request<TranscriptVersion>(`/captures/${eventId}/transcript`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
+
 export function listEntityTypes(): Promise<EntityTypeCount[]> {
   return request<EntityTypeCount[]>("/entity-types");
 }
