@@ -25,21 +25,27 @@ Ohne bewiesenen Restore ist „permanentes Gedächtnis" eine leere Zusage.
 ---
 
 ### [P1] Datenmodell: Audio als Original, Transkript als Ableitung
+**Erledigt** in #12.
 Setzt ADR 0004 und ADR 0005 um. Migration: `capture_content` und
 `transcript_content` einführen, `capture.recorded` ohne Text,
 `transcript.derived` ergänzen. `CreateCaptureRequest` in `contracts`
 anpassen, der Kommentar über nie hochgeladenes Audio entfällt.
 
 ### [P1] Audio-Upload und -Ablage
+**Erledigt** in #12, als `POST /captures/audio` (WAV, Opus, Ogg, m4a).
 `POST /captures` nimmt Audio (Opus/Ogg) entgegen, legt es inhaltsadressiert
 unter einem konfigurierbaren Pfad ab, Größenlimit, Formatprüfung.
 
 ### [P1] Lokale Transkription im Tauri-Client
+**Erledigt** in #13: Mikrofon über `cpal`, parakeet-tdt-0.6b-v3 int8 über
+`transcribe-rs`, mehrsprachig. Audio verlässt den Mac nicht.
 `transcribe-rs` einbinden (Vorbild: Handy), Modellwahl konfigurierbar,
 deutsch/englisch. `client/src-tauri/src/lib.rs` ist derzeit noch das
 Template mit `greet()`.
 
 ### [P1] Globaler Hotkey und Push-to-talk
+**Teilweise erledigt** in #11: Shortcut holt das Fenster. Offen bleiben
+Tray-Icon, Autostart und ein frei konfigurierbarer Shortcut.
 Tauri-Plugin für globale Shortcuts, Tray-Icon, Autostart. Vom Tastendruck
 bis „nimmt auf" unter 2 Sekunden. Sicht- oder hörbares Feedback, ohne dass
 ein Fenster in den Vordergrund springt.
@@ -50,22 +56,26 @@ Retry und Backoff. Sichtbarer Zustand „n Captures warten auf Sync". Die
 Erfassung darf niemals wegen Netzwerk fehlschlagen.
 
 ### [P1] Echo-Endpunkt
+**Erledigt** in #9.
 `GET /captures/{id}/echo` — semantisch nächste frühere Captures über
 `capture_search`, eigener Capture ausgeschlossen, Mindestähnlichkeit als
 Schwelle, Standard 3 Treffer. Kein LLM beteiligt.
 
 ### [P1] Echo in der Capture-Oberfläche
+**Erledigt** in #10.
 Nach dem Erfassen Transkript plus Echo-Treffer wörtlich mit Datum anzeigen,
 klickbar zum vollständigen Capture. Kein generierter Text.
 `CaptureScreen.tsx` ist derzeit ein Mock mit Timer.
 
 ### [P1] Suche: Reciprocal Rank Fusion statt Score-Addition
+**Erledigt** in #9.
 `search.rs:27` mischt `(1 - cosine) * 0.7` mit `ts_rank * 0.3`. `ts_rank`
 liegt typisch bei 0,01–0,1, die Cosine-Werte von e5 bei 0,7–0,9 — der
 Volltextanteil ist numerisch wirkungslos und es gibt keine brauchbare
 Relevanzschwelle. Durch RRF über zwei getrennte Rangfolgen ersetzen.
 
 ### [P1] Suche: Zeitfilter und toter Parameter
+**Erledigt** in #9.
 `from`/`to` ergänzen — „wann" ist in einem Gedächtnissystem der wichtigste
 Abrufschlüssel. `entity_type` in `SearchQuery` wird akzeptiert und ignoriert:
 implementieren oder entfernen.

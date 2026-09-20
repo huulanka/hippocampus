@@ -1,12 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { Mascot } from "../mascot";
 import { createCapture, type EchoItem } from "../api";
-import { CAPTURE_SHORTCUT_LABEL, hideWindow, runningInDesktopApp } from "../desktop";
+import {
+  CAPTURE_SHORTCUT_LABEL,
+  cancelRecording,
+  hideWindow,
+  runningInDesktopApp,
+  speechAvailable,
+  startRecording,
+  stopRecording,
+} from "../desktop";
 
 /// Identifies where a capture came from. Recorded verbatim on the event as
 /// its `source`, so later captures from the phone or a recorder stay
 /// distinguishable from these.
 const DEVICE = "mac-desktop";
+
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = (seconds % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
 
 function relativeDay(iso: string): string {
   const date = new Date(iso);
@@ -19,18 +35,21 @@ function relativeDay(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-type Saved = { transcript: string; echo: EchoItem[] };
+type Saved = { transcript: string; echo: EchoItem[]; spoken: boolean };
+type Phase = "idle" | "recording" | "working";
 
-/// Capture is text-first on purpose: it makes the whole loop — record,
-/// store, echo — usable today, and macOS dictation (fn fn) already turns it
-/// into a voice path. Real audio recording with on-device transcription and
-/// a global hotkey lands next, and will reuse everything below the input.
 export function CaptureScreen({ summons = 0 }: { summons?: number }) {
   const [text, setText] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [elapsed, setElapsed] = useState(0);
   const [saved, setSaved] = useState<Saved | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [canSpeak, setCanSpeak] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    speechAvailable().then(setCanSpeak);
+  }, []);
 
   // The global shortcut should always land on an empty field, whatever was
   // on screen before. Skipped on first mount, where autoFocus already does
@@ -43,6 +62,12 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
     inputRef.current?.focus();
   }, [summons]);
 
+  useEffect(() => {
+    if (phase !== "recording") return;
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [phase]);
+
   /// Escape sends the window away, so the capture field behaves like a
   /// panel rather than an app you have to close. Unsaved text is kept in
   /// state, so summoning it again brings the half-finished thought back.
@@ -50,27 +75,87 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
     void hideWindow();
   }
 
-  async function save() {
+  async function saveTyped() {
     const transcript = text.trim();
-    if (!transcript || saving) return;
+    if (!transcript || phase !== "idle") return;
 
-    setSaving(true);
+    setPhase("working");
     setError(null);
     try {
       const accepted = await createCapture(transcript, DEVICE);
-      setSaved({ transcript, echo: accepted.echo });
+      setSaved({ transcript, echo: accepted.echo, spoken: false });
       setText("");
     } catch (err) {
       setError(String(err));
     } finally {
-      setSaving(false);
+      setPhase("idle");
     }
+  }
+
+  async function beginRecording() {
+    setError(null);
+    setElapsed(0);
+    try {
+      await startRecording();
+      setPhase("recording");
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  async function finishRecording() {
+    setPhase("working");
+    try {
+      const result = await stopRecording();
+      setSaved({ transcript: result.transcript, echo: result.capture.echo, spoken: true });
+      setText("");
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPhase("idle");
+    }
+  }
+
+  async function discardRecording() {
+    try {
+      await cancelRecording();
+    } catch {
+      // Nothing useful to say here: the recording is being thrown away.
+    }
+    setPhase("idle");
   }
 
   function startNext() {
     setSaved(null);
     setError(null);
     inputRef.current?.focus();
+  }
+
+  if (phase === "recording") {
+    return (
+      <div className="capture-idle">
+        <Mascot state="listening" cell={9} />
+        <h3>listening…</h3>
+        <p className="dim">{formatElapsed(elapsed)}</p>
+        <div className="panel transcript-panel">
+          <div className="kicker">
+            [ RECORDING ]{" "}
+            <span className="dim">— kept as the original, transcribed on this Mac</span>
+          </div>
+          <p className="transcript-placeholder">
+            speak freely<span className="blink-cursor">▌</span>
+          </p>
+        </div>
+        <div className="capture-actions">
+          <span className="btn" onClick={discardRecording}>
+            [ Discard ]
+          </span>
+          <span className="btn btn-accent" onClick={finishRecording}>
+            [ Done ]
+          </span>
+        </div>
+      </div>
+    );
   }
 
   if (saved) {
@@ -80,7 +165,12 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
         <h3>kept, word for word</h3>
         <div className="panel transcript-panel">
           <div className="kicker">
-            [ CAPTURED ] <span className="dim">— raw, verbatim, never edited</span>
+            [ CAPTURED ]{" "}
+            <span className="dim">
+              {saved.spoken
+                ? "— transcript; the recording itself is the original"
+                : "— raw, verbatim, never edited"}
+            </span>
           </div>
           <p className="timeline-transcript">{saved.transcript}</p>
         </div>
@@ -119,12 +209,21 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
     );
   }
 
+  const working = phase === "working";
+
   return (
     <div className="capture-idle">
-      <Mascot state={saving ? "thinking" : "idle"} cell={9} />
-      <h3>{saving ? "keeping it…" : "ready when you are"}</h3>
+      <Mascot state={working ? "thinking" : "idle"} cell={9} />
+      <h3>{working ? "keeping it…" : "ready when you are"}</h3>
       <p className="dim">
-        Press <strong>fn</strong> twice for macOS dictation, then <strong>⌘↵</strong> to keep it.
+        {canSpeak ? (
+          <>Speak it or type it. </>
+        ) : (
+          <>
+            Press <strong>fn</strong> twice for macOS dictation.{" "}
+          </>
+        )}
+        <strong>⌘↵</strong> keeps it.
         {runningInDesktopApp() && (
           <>
             {" "}
@@ -144,13 +243,13 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
           autoFocus
           rows={5}
           value={text}
-          disabled={saving}
+          disabled={working}
           placeholder="Say what's on your mind…"
           onChange={(e) => setText(e.currentTarget.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
-              save();
+              saveTyped();
             }
             if (e.key === "Escape") {
               e.preventDefault();
@@ -163,11 +262,16 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
       {error && <p className="dim">Couldn't keep that: {error}</p>}
 
       <div className="capture-actions">
+        {canSpeak && (
+          <span className={`btn${working ? " disabled" : ""}`} onClick={beginRecording}>
+            [ ● Record ]
+          </span>
+        )}
         <span
-          className={`btn btn-accent${text.trim() && !saving ? "" : " disabled"}`}
-          onClick={save}
+          className={`btn btn-accent${text.trim() && !working ? "" : " disabled"}`}
+          onClick={saveTyped}
         >
-          [ {saving ? "Keeping…" : "Keep It"} ]
+          [ {working ? "Keeping…" : "Keep It"} ]
         </span>
       </div>
     </div>

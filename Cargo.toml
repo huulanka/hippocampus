@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["backend", "contracts", "client/src-tauri"]
+# The Tauri client is a separate workspace: its speech model and the
+# backend's embedding model pin incompatible exact versions of `ort`.
+# See docs/adr/0007-separate-client-workspace.md.
+members = ["backend", "contracts"]
 
 [workspace.package]
 version = "0.1.0"

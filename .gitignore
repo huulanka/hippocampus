@@ -23,3 +23,4 @@ client/src-tauri/target/
 .DS_Store
 *.log
 data/audio/
+data/models/

@@ -4,6 +4,10 @@
 //! brings the capture field up from wherever the user is, and Escape sends
 //! it away again. Everything else lives in the webview.
 
+mod asr;
+mod capture;
+mod recorder;
+
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
@@ -56,6 +60,13 @@ pub fn run() {
                 })
                 .build(),
         )
+        .manage(capture::CaptureState::new())
+        .invoke_handler(tauri::generate_handler![
+            capture::speech_available,
+            capture::start_recording,
+            capture::stop_recording,
+            capture::cancel_recording,
+        ])
         .setup(|app| {
             // A missing shortcut registration must not stop the app from
             // starting — the window still works, just without the hotkey.

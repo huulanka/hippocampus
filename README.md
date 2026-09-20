@@ -30,7 +30,14 @@ backend/      Axum HTTP service: ingest, event store, embeddings, search
 contracts/    Shared DTOs between backend and client
 client/       Tauri v2 desktop app (capture + browse/search)
 docs/adr/     Architecture Decision Records
+scripts/      One-off setup scripts (speech model download)
 ```
+
+`backend/` and `contracts/` form the root Cargo workspace; `client/src-tauri/`
+is a **separate** workspace, because the speech model and the embedding model
+pin incompatible exact versions of `ort`. See
+[`docs/adr/0007-separate-client-workspace.md`](docs/adr/0007-separate-client-workspace.md).
+Cargo commands for the client must be run from `client/src-tauri/`.
 
 ## Development
 
@@ -49,9 +56,32 @@ cd backend && sqlx migrate run
 # Run the backend
 cargo run -p backend
 
+# Fetch the on-device speech model (~670 MB, once)
+./scripts/fetch-asr-model.sh
+
 # Run the desktop client
 cd client && npm install && npm run tauri dev
 ```
+
+## Voice capture
+
+Speech recognition runs on this machine, never on the server: audio is the
+most revealing thing the system holds, so it and the microphone stream stay
+local, and only the resulting text is ever sent on. See
+[`docs/adr/0004-audio-is-the-original.md`](docs/adr/0004-audio-is-the-original.md).
+
+`scripts/fetch-asr-model.sh` downloads int8-quantised
+[parakeet-tdt-0.6b-v3](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx)
+(multilingual, German included) into the app's support directory, or into
+`$HIPPOCAMPUS_ASR_MODEL_DIR` when that is set. Without the model the app still
+runs and typed capture still works — the record button simply stays hidden.
+
+macOS asks for microphone permission the first time you record.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `HIPPOCAMPUS_ASR_MODEL_DIR` | app support dir | Where the speech model lives |
+| `HIPPOCAMPUS_API_BASE_URL` | `http://localhost:8080` | Backend the client talks to |
 
 Run `cargo sqlx prepare` (from `backend/`, with `DATABASE_URL` set and
 migrations applied) after changing any `sqlx::query!` call, and commit the
