@@ -1,0 +1,19 @@
+/target
+
+# Local dev Postgres data
+/data/
+
+# Node / frontend
+node_modules/
+client/dist/
+client/src-tauri/gen/
+client/src-tauri/target/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.log

@@ -1,0 +1,13 @@
+[workspace]
+resolver = "3"
+members = ["backend", "contracts", "client/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
