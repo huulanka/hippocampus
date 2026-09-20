@@ -1,4 +1,5 @@
 mod config;
+mod embedding;
 mod error;
 mod events;
 mod routes;
@@ -7,9 +8,12 @@ use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
+use embedding::Embedder;
+
 #[derive(Clone)]
 pub struct AppState {
     pool: sqlx::PgPool,
+    embedder: Embedder,
 }
 
 #[tokio::main]
@@ -27,7 +31,11 @@ async fn main() -> anyhow::Result<()> {
 
     sqlx::migrate!().run(&pool).await?;
 
-    let state = AppState { pool };
+    tracing::info!("loading local embedding model (first run downloads it)...");
+    let embedder = Embedder::load(config.model_cache_dir.clone().into()).await?;
+    tracing::info!("embedding model ready");
+
+    let state = AppState { pool, embedder };
 
     let app = routes::router()
         .with_state(state)

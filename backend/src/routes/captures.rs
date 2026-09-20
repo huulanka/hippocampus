@@ -31,14 +31,21 @@ pub async fn create(
     )
     .await?;
 
+    let embedding: pgvector::Vector = state
+        .embedder
+        .embed_passage(&req.transcript_text)
+        .await?
+        .into();
+
     sqlx::query!(
         r#"
-        insert into capture_search (event_id, transcript, occurred_at)
-        values ($1, $2, $3)
+        insert into capture_search (event_id, transcript, occurred_at, embedding)
+        values ($1, $2, $3, $4)
         "#,
         stored.id,
         req.transcript_text,
         stored.occurred_at,
+        embedding as _,
     )
     .execute(&state.pool)
     .await?;

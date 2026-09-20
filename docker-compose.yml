@@ -26,7 +26,10 @@ services:
     environment:
       DATABASE_URL: postgres://hippocampus:hippocampus@postgres:5432/hippocampus
       BIND_ADDR: 0.0.0.0:8080
+      MODEL_CACHE_DIR: /data/models
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+    volumes:
+      - ./data/models:/data/models
     ports:
       - "8080:8080"
