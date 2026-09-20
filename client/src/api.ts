@@ -24,6 +24,9 @@ export interface EchoItem {
   transcript_text: string;
   occurred_at: string;
   similarity: number;
+  /// The cross-encoder's verdict, when one ran. A raw logit; deliberately
+  /// never shown — it is here so thresholds can be tuned by looking.
+  rerank_score: number | null;
 }
 
 export interface CaptureAccepted {

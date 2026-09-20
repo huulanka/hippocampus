@@ -1,10 +1,21 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select embedding as \"embedding: pgvector::Vector\", occurred_at\n           from capture_search where event_id = $1",
+  "query": "select transcript, embedding as \"embedding: pgvector::Vector\", occurred_at\n           from capture_search where event_id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "transcript",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "transcript"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "embedding: pgvector::Vector",
         "type_info": {
           "Custom": {
@@ -20,7 +31,7 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "occurred_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -37,9 +48,10 @@
       ]
     },
     "nullable": [
+      false,
       true,
       false
     ]
   },
-  "hash": "8ad2bcc02803a1435014c775c759ef5b429652c1847b89e262c0883f3fa6e920"
+  "hash": "939e6f3a0ba9d85731fc713a45ee37f43660c53a69ab5eef02a33acc1da3f77e"
 }

@@ -80,6 +80,22 @@ liegt typisch bei 0,01–0,1, die Cosine-Werte von e5 bei 0,7–0,9 — der
 Volltextanteil ist numerisch wirkungslos und es gibt keine brauchbare
 Relevanzschwelle. Durch RRF über zwei getrennte Rangfolgen ersetzen.
 
+### [P1] Echo-Qualität: Cross-Encoder statt nur Embedding
+**Erledigt** in #25. Der Bi-Encoder sucht weiter die Kandidaten (Recall,
+Vektoren liegen schon in der Datenbank), ein Cross-Encoder sortiert die
+Top 10 neu und die Echo-Schwelle hängt an dessen Wert. Keine Migration
+nötig.
+
+Belegt am Fall, den der Nutzer gemeldet hat: mit Kosinus stand
+*cardamom buns ↔ Sauna* (0,871) über *finnischer Aufguss ↔ Sauna* (0,849).
+Mit dem Reranker sind es −2,15 gegen −2,03 — richtig herum, Schwelle bei
+−2,0 dazwischen.
+
+Der Abstand ist mit 0,12 schmal, und einzelne unverwandte Paare liegen
+weiterhin darüber. Ehrlich ist: die *Reihenfolge* stimmt jetzt, die
+Trennung ist knapp. Neu kalibrieren, wenn der Bestand deutlich wächst —
+`GET /captures/{id}/echo?min_rerank=-99` gibt die Werte dafür aus.
+
 ### [P1] Zeitbewusstsein in der Extraktion
 **Erledigt** in #24. Der Extraktions-Prompt bekommt Aufnahmezeitpunkt,
 Wochentag und Zeitzone; das Modell löst „morgen" und „nächsten Dienstag"

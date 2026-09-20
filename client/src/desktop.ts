@@ -57,6 +57,7 @@ export interface DesktopEchoItem {
   transcript_text: string;
   occurred_at: string;
   similarity: number;
+  rerank_score: number | null;
 }
 
 /// Result of a spoken capture: what was heard, and what it echoed.

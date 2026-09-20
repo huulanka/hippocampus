@@ -83,6 +83,27 @@ macOS asks for microphone permission the first time you record.
 | `HIPPOCAMPUS_ASR_MODEL_DIR` | app support dir | Where the speech model lives |
 | `HIPPOCAMPUS_API_BASE_URL` | `http://localhost:8080` | Backend the client talks to |
 
+## Echo
+
+After every capture, Hippocampus shows the earlier captures closest to it —
+your own words, never a summary
+([`docs/adr/0006-echo-before-graph.md`](docs/adr/0006-echo-before-graph.md)).
+
+Retrieval and judgement are two different models. The bi-encoder
+(`multilingual-e5-small`, already in the database) finds candidates, because
+recall is what it is good at. A cross-encoder then reads the new capture and
+each candidate **together** and decides which survive — a bi-encoder cannot,
+because it compares two vectors that have never met, and measurably ranked
+*cardamom buns* above *finnischer Aufguss* for a note about a sauna.
+
+The default reranker is `jina-reranker-v2-base-multilingual`: 178 ms for ten
+candidates, against 605 ms for `bge-reranker-v2-m3`. Echo runs inline, right
+after a capture, so the cheaper of two correct models wins. Set
+`HIPPOCAMPUS_RERANKER=off` to fall back to similarity alone.
+
+The model files are downloaded on first start into `MODEL_CACHE_DIR`
+(1.1 GB for the default reranker, on top of the 465 MB embedding model).
+
 Run `cargo sqlx prepare` (from `backend/`, with `DATABASE_URL` set and
 migrations applied) after changing any `sqlx::query!` call, and commit the
 resulting `.sqlx/` directory — CI builds offline and needs it up to date.

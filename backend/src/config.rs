@@ -16,10 +16,17 @@ pub struct Config {
     /// Where capture audio is kept. This is the archive of originals
     /// (ADR 0004) — it must be on backed-up storage, not a scratch disk.
     pub audio_dir: String,
-    /// Minimum cosine similarity for a capture to be shown as an echo.
-    /// Configurable because the right value depends on how the user
-    /// actually speaks, and can only be found against real captures.
+    /// Minimum cosine similarity for a capture to be considered as an
+    /// echo at all. With a reranker loaded this is a recall floor rather
+    /// than a quality bar — the cross-encoder decides what is shown — so
+    /// it defaults lower in that case.
     pub echo_min_similarity: f32,
+    /// Minimum cross-encoder score for a candidate to survive. Ignored
+    /// when no reranker is loaded.
+    pub echo_min_rerank: f32,
+    /// Which cross-encoder reranks echo candidates: "jina", "bge" or
+    /// "off".
+    pub reranker: crate::reranker::Choice,
     /// Expected `aud` of the Cloudflare Access token. Unset means access
     /// verification is switched off, which is how local development runs.
     pub cf_access_aud: Option<String>,
@@ -47,6 +54,13 @@ fn env_non_empty(key: &str) -> Option<String> {
 
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
+        // Read first: both echo thresholds default differently depending
+        // on whether a cross-encoder is doing the judging.
+        let reranker = env_non_empty("HIPPOCAMPUS_RERANKER")
+            .map(|v| v.parse::<crate::reranker::Choice>())
+            .transpose()?
+            .unwrap_or(crate::reranker::Choice::Jina);
+
         let config = Self {
             database_url: env_non_empty("DATABASE_URL")
                 .ok_or_else(|| anyhow::anyhow!("DATABASE_URL must be set"))?,
@@ -64,7 +78,19 @@ impl Config {
                 .map(|v| v.parse())
                 .transpose()
                 .map_err(|err| anyhow::anyhow!("ECHO_MIN_SIMILARITY must be a number: {err}"))?
-                .unwrap_or(crate::echo::DEFAULT_MIN_SIMILARITY),
+                .unwrap_or(match reranker {
+                    // A recall floor, not a quality bar: the cross-encoder
+                    // decides. Keeping 0.89 here would hand it a candidate
+                    // set already filtered by the thing it exists to fix.
+                    crate::reranker::Choice::Off => crate::echo::DEFAULT_MIN_SIMILARITY,
+                    _ => crate::echo::CANDIDATE_MIN_SIMILARITY,
+                }),
+            echo_min_rerank: env_non_empty("ECHO_MIN_RERANK_SCORE")
+                .map(|v| v.parse())
+                .transpose()
+                .map_err(|err| anyhow::anyhow!("ECHO_MIN_RERANK_SCORE must be a number: {err}"))?
+                .unwrap_or_else(|| crate::reranker::default_min_score(reranker)),
+            reranker,
             cf_access_aud: env_non_empty("CF_ACCESS_AUD"),
             cf_access_team_domain: env_non_empty("CF_ACCESS_TEAM_DOMAIN"),
             timezone: env_non_empty("HIPPOCAMPUS_TIMEZONE")

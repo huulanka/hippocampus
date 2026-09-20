@@ -6,6 +6,7 @@ mod embedding;
 mod error;
 mod events;
 mod openrouter;
+mod reranker;
 mod routes;
 mod structuring;
 
@@ -25,6 +26,8 @@ pub struct AppState {
     embedder: Embedder,
     openrouter: Option<Arc<OpenRouterClient>>,
     echo_min_similarity: f32,
+    echo_min_rerank: f32,
+    reranker: Option<reranker::Reranker>,
     audio_dir: std::path::PathBuf,
     timezone: chrono_tz::Tz,
 }
@@ -55,6 +58,16 @@ async fn main() -> anyhow::Result<()> {
     let embedder = Embedder::load(config.model_cache_dir.clone().into()).await?;
     tracing::info!("embedding model ready");
 
+    let reranker =
+        reranker::Reranker::load(config.reranker, config.model_cache_dir.clone().into()).await?;
+    match &reranker {
+        Some(loaded) => tracing::info!(reranker = ?loaded.choice(), "echo reranking enabled"),
+        None => tracing::warn!(
+            "echo reranking is off — echoes are ordered by embedding similarity alone, \
+             which measurably ranks unrelated captures above related ones"
+        ),
+    }
+
     let openrouter = config.openrouter_api_key.clone().map(|key| {
         tracing::info!(model = %config.openrouter_model, "structuring via OpenRouter enabled");
         Arc::new(OpenRouterClient::new(
@@ -72,6 +85,8 @@ async fn main() -> anyhow::Result<()> {
         embedder,
         openrouter,
         echo_min_similarity: config.echo_min_similarity,
+        echo_min_rerank: config.echo_min_rerank,
+        reranker,
         audio_dir: config.audio_dir.clone().into(),
         timezone: config.timezone,
     };

@@ -43,8 +43,15 @@ pub struct EchoItem {
     pub capture_event_id: Uuid,
     pub transcript_text: String,
     pub occurred_at: DateTime<Utc>,
-    /// Cosine similarity in [0, 1]; higher is closer.
+    /// Cosine similarity in [0, 1]; higher is closer. This is the
+    /// retrieval score, not the one the echo was judged by.
     pub similarity: f32,
+    /// The cross-encoder's verdict, when one ran. A raw logit, not a
+    /// probability, and not comparable between reranker models — which is
+    /// why it is never shown to the user. It is here so the threshold can
+    /// be tuned by looking at real captures.
+    #[serde(default)]
+    pub rerank_score: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

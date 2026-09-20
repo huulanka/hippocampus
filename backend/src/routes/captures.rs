@@ -283,12 +283,17 @@ async fn index_capture(
     // Echo, by contrast, is computed inline: it is the one thing the user
     // is waiting to see and needs no network call. A failure still must not
     // cost the capture, so it degrades to an empty list.
-    Ok(echo::for_embedding(
+    Ok(echo::for_capture_text(
         &state.pool,
         &embedding,
+        transcript,
         occurred_at,
         Some(capture_event_id),
-        state.echo_min_similarity,
+        state.reranker.as_ref(),
+        echo::Thresholds {
+            min_similarity: state.echo_min_similarity,
+            min_rerank: state.echo_min_rerank,
+        },
         echo::DEFAULT_LIMIT,
     )
     .await
@@ -364,9 +369,11 @@ pub async fn audio_for(
 
 #[derive(serde::Deserialize)]
 pub struct EchoParams {
-    /// Override the configured similarity threshold, for tuning against
-    /// real captures without restarting the backend.
+    /// Override the configured thresholds, for tuning against real
+    /// captures without restarting the backend. The right values drift
+    /// as the corpus grows, and they can only be found by looking.
     pub min_similarity: Option<f32>,
+    pub min_rerank: Option<f32>,
     pub limit: Option<i64>,
 }
 
@@ -381,7 +388,11 @@ pub async fn echo_for(
     let items = echo::for_capture(
         &state.pool,
         id,
-        params.min_similarity.unwrap_or(state.echo_min_similarity),
+        state.reranker.as_ref(),
+        echo::Thresholds {
+            min_similarity: params.min_similarity.unwrap_or(state.echo_min_similarity),
+            min_rerank: params.min_rerank.unwrap_or(state.echo_min_rerank),
+        },
         params.limit.unwrap_or(echo::DEFAULT_LIMIT).clamp(1, 20),
     )
     .await?;
@@ -557,7 +568,11 @@ pub async fn detail(
     let echo = echo::for_capture(
         &state.pool,
         id,
-        state.echo_min_similarity,
+        state.reranker.as_ref(),
+        echo::Thresholds {
+            min_similarity: state.echo_min_similarity,
+            min_rerank: state.echo_min_rerank,
+        },
         echo::DEFAULT_LIMIT,
     )
     .await
