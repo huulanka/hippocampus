@@ -51,5 +51,10 @@ nicht gezeigt hätte.
 
 - iOS: Kurzbefehl mit Apple-Diktat, oder eigene App mit lokalem Whisper.
 - Wöchentliche Rückschau, gekoppelt an den ohnehin nötigen Review-Termin.
-- Neu bewerten: Chat, MCP, Dokumente, Konsolidierungs-Agent. Alle vier mit
-  der Frage, ob sie ein Problem lösen, das dann tatsächlich existiert.
+- Neu bewerten: Chat, MCP, Dokumente. Alle drei mit der Frage, ob sie ein
+  Problem lösen, das dann tatsächlich existiert.
+- Konsolidierungslauf: nicht mehr offen, sondern geschnitten. Zuschnitt,
+  Auslöser, Events und Reihenfolge in
+  [`docs/consolidation.md`](consolidation.md). Schritt 1 daraus
+  (Zeitkontext im Extraktions-Prompt) gehört vorgezogen — er verbessert
+  jede neue Notiz sofort.
