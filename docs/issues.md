@@ -21,6 +21,9 @@ Entwicklung, Prüfung übersprungen (Verhalten loggen).
 ersetzen.
 
 ### [P0] Backup- und Restore-Durchlauf dokumentieren
+**Erledigt** in #16: `docs/operations.md`, einmal vollständig
+durchgespielt. Dabei fiel auf, dass `docker-compose.yml` kein Volume für
+`data/audio` hatte — behoben im selben PR.
 `pg_dump` der Datenbank plus Audio-Verzeichnis, einmal vollständig in eine
 leere Instanz zurückspielen, Schritte in `docs/operations.md` festhalten.
 Ohne bewiesenen Restore ist „permanentes Gedächtnis" eine leere Zusage.

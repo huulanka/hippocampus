@@ -87,6 +87,12 @@ Run `cargo sqlx prepare` (from `backend/`, with `DATABASE_URL` set and
 migrations applied) after changing any `sqlx::query!` call, and commit the
 resulting `.sqlx/` directory — CI builds offline and needs it up to date.
 
+## Operations
+
+Backup, restore and what the container needs configured:
+[`docs/operations.md`](docs/operations.md). The restore procedure there
+has been run end to end, not just written down.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).

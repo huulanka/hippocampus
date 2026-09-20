@@ -27,9 +27,20 @@ services:
       DATABASE_URL: postgres://hippocampus:hippocampus@postgres:5432/hippocampus
       BIND_ADDR: 0.0.0.0:8080
       MODEL_CACHE_DIR: /data/models
+      # The archive of originals (ADR 0004). Without the volume below this
+      # would be written inside the container and lost on the next
+      # `--force-recreate`.
+      AUDIO_DIR: /data/audio
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      # Both or neither: the backend refuses to start with only one, and
+      # warns loudly when neither is set that every request is trusted.
       CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      ECHO_MIN_SIMILARITY: ${ECHO_MIN_SIMILARITY:-}
     volumes:
       - ./data/models:/data/models
+      - ./data/audio:/data/audio
     ports:
       - "8080:8080"
