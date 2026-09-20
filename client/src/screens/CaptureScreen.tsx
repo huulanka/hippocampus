@@ -49,6 +49,12 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
   const [canSpeak, setCanSpeak] = useState(false);
   const [shortcut, setShortcut] = useState(formatAccelerator(DEFAULT_CAPTURE_SHORTCUT));
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // The summons effect fires from outside React's render cycle, so it
+  // reads these rather than the captured values, which would be stale.
+  const phaseRef = useRef(phase);
+  const canSpeakRef = useRef(canSpeak);
+  phaseRef.current = phase;
+  canSpeakRef.current = canSpeak;
 
   useEffect(() => {
     speechAvailable().then(setCanSpeak);
@@ -57,15 +63,26 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
     getSettings().then((s) => setShortcut(formatAccelerator(s.capture_shortcut)));
   }, []);
 
-  // The global shortcut should always land on an empty field, whatever was
-  // on screen before. Skipped on first mount, where autoFocus already does
-  // the job.
+  // The shortcut *is* the record button: pressing it starts recording,
+  // pressing it again finishes. Speaking is the main path through this
+  // app, so the fastest gesture should reach it directly rather than open
+  // a window and wait for a second decision.
   useEffect(() => {
     if (summons === 0) return;
+
+    if (phaseRef.current === "recording") {
+      void finishRecording();
+      return;
+    }
+    if (phaseRef.current === "working") return;
+
     setSaved(null);
     setError(null);
     setText("");
-    inputRef.current?.focus();
+
+    if (canSpeakRef.current) void beginRecording();
+    else inputRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summons]);
 
   useEffect(() => {
@@ -216,27 +233,14 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
   }
 
   const working = phase === "working";
+  const desktop = runningInDesktopApp();
 
   return (
     <div className="capture-idle">
       <Mascot state={working ? "thinking" : "idle"} cell={9} />
       <h3>{working ? "keeping it…" : "ready when you are"}</h3>
-      <p className="dim">
-        {canSpeak ? (
-          <>Speak it or type it. </>
-        ) : (
-          <>
-            Press <strong>fn</strong> twice for macOS dictation.{" "}
-          </>
-        )}
-        <strong>⌘↵</strong> keeps it.
-        {runningInDesktopApp() && (
-          <>
-            {" "}
-            <strong>{shortcut}</strong> summons this from anywhere,{" "}
-            <strong>esc</strong> sends it away.
-          </>
-        )}
+      <p className="dim capture-lede">
+        {canSpeak ? "Speak it, or type it." : "Type it."}
       </p>
 
       <div className="panel transcript-panel">
@@ -280,6 +284,29 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
           [ {working ? "Keeping…" : "Keep It"} ]
         </span>
       </div>
+
+      <KeyHints
+        keys={[
+          ...(desktop && canSpeak ? [{ key: shortcut, does: "record, from anywhere" }] : []),
+          { key: "⌘↵", does: "keep it" },
+          ...(desktop ? [{ key: "esc", does: "hide" }] : []),
+        ]}
+      />
     </div>
+  );
+}
+
+/// One key per line. The previous version put two shortcuts in one
+/// sentence and nobody could tell where the first ended.
+function KeyHints({ keys }: { keys: { key: string; does: string }[] }) {
+  return (
+    <dl className="key-hints">
+      {keys.map((hint) => (
+        <div key={hint.key}>
+          <dt>{hint.key}</dt>
+          <dd>{hint.does}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

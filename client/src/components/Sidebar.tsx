@@ -5,6 +5,10 @@ interface NavItem {
   id: TabId;
   label: string;
   icon: React.ReactNode;
+  /// Shown, but not reachable. These screens exist as layout and nothing
+  /// else; leaving them clickable would mean showing invented data next
+  /// to real data, which teaches the wrong thing about the system.
+  pending?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -42,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "entities",
+    pending: "Entities are being extracted already — this view is not built yet",
     label: "Entities",
     icon: (
       <svg width="14" height="14" viewBox="0 0 15 15">
@@ -53,6 +58,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "relations",
+    pending: "Relations are being extracted already — this view is not built yet",
     label: "Relations",
     icon: (
       <svg width="14" height="14" viewBox="0 0 15 15">
@@ -66,6 +72,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "chat",
+    pending: "Not built yet",
     label: "Chat",
     icon: (
       <svg width="14" height="14" viewBox="0 0 15 15">
@@ -107,11 +114,15 @@ export function Sidebar({
         {NAV_ITEMS.map((item) => (
           <div
             key={item.id}
-            className={`sidebar-nav-item${activeTab === item.id ? " active" : ""}`}
-            onClick={() => onSelectTab(item.id)}
+            className={`sidebar-nav-item${activeTab === item.id ? " active" : ""}${
+              item.pending ? " pending" : ""
+            }`}
+            title={item.pending}
+            onClick={() => !item.pending && onSelectTab(item.id)}
           >
             {item.icon}
             <span>{item.label}</span>
+            {item.pending && <span className="sidebar-nav-soon">soon</span>}
           </div>
         ))}
       </nav>

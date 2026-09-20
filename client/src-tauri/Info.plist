@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Without this macOS cannot attribute a permission to us: it never
+	     asks, never shows the recording indicator, and silently feeds the
+	     input stream zeros. Tauri injects it for bundled builds, but the
+	     binary `tauri dev` runs is not bundled. -->
+	<key>CFBundleIdentifier</key>
+	<string>com.andreasbauer.hippocampus</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hippocampus records what you say so the original recording is kept alongside its transcript. Audio is transcribed on this Mac and never leaves it.</string>
 </dict>

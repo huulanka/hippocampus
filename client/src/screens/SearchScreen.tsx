@@ -79,11 +79,15 @@ export function SearchScreen() {
       {results && results.length === 0 && <p className="dim">No matches.</p>}
 
       <div className="card-stack">
-        {results?.map((r) => (
+        {results?.map((r, index) => (
           <div key={r.capture_event_id} className="panel timeline-card">
             <div className="timeline-card-meta">
               <span className="dim">// {new Date(r.occurred_at).toLocaleDateString()}</span>
-              <span className="dim">score {r.score.toFixed(2)}</span>
+              {/* The rank, not the score. The score is a reciprocal-rank
+                  fusion sum — 0.03 is a *good* hit, which reads as 3% to
+                  anyone who has ever seen a percentage. A number nobody
+                  can interpret is worse than no number. */}
+              <span className="dim">#{index + 1}</span>
             </div>
             <p className="timeline-transcript">{r.transcript_text}</p>
             {r.related_entities.length > 0 && (

@@ -6,6 +6,7 @@
 
 mod asr;
 mod capture;
+pub mod microphone;
 mod recorder;
 mod settings;
 
@@ -14,6 +15,13 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::ShortcutState;
 
 use settings::SettingsState;
+
+/// What macOS currently thinks about us and the microphone. Exposed so
+/// `cargo run --example microphone_status` can answer the one question
+/// that no retry inside the app can: has permission been refused?
+pub fn microphone_permission() -> microphone::Permission {
+    microphone::current()
+}
 
 /// Event the webview listens for to jump to a fresh capture field.
 const FOCUS_EVENT: &str = "hippocampus://focus-capture";

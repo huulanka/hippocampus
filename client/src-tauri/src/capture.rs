@@ -10,6 +10,7 @@ use contracts::CaptureAccepted;
 use serde::Serialize;
 
 use crate::asr::{self, Transcriber};
+use crate::microphone;
 use crate::recorder::{self, Recording, TARGET_RATE};
 
 /// Identifies where a capture came from, recorded as the event's source.
@@ -67,6 +68,14 @@ pub fn start_recording(state: tauri::State<'_, CaptureState>) -> Result<(), Stri
     // system must never produce.
     asr::model_dir().map_err(|err| err.to_string())?;
 
+    // Asked for, not assumed. An unauthorised microphone does not fail —
+    // it records silence, and the user only finds out once they have
+    // already said the thing.
+    let permission = microphone::request();
+    if permission.blocks_recording() {
+        return Err(microphone::explain(permission).to_string());
+    }
+
     *slot = Some(Recording::start().map_err(|err| err.to_string())?);
     Ok(())
 }
@@ -96,6 +105,12 @@ pub async fn stop_recording(state: tauri::State<'_, CaptureState>) -> Result<Voi
 
     if samples.is_empty() {
         return Err("the recording was empty".to_string());
+    }
+
+    // A real microphone in a silent room still has a noise floor, so
+    // sample-for-sample zero means no signal ever arrived.
+    if microphone::is_digital_silence(&samples) {
+        return Err(microphone::explain(microphone::Permission::Denied).to_string());
     }
 
     let transcriber = Arc::clone(&state.transcriber);
