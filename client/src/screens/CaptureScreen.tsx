@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Mascot } from "../mascot";
 import { createCapture, type EchoItem } from "../api";
 import {
-  CAPTURE_SHORTCUT_LABEL,
+  DEFAULT_CAPTURE_SHORTCUT,
   cancelRecording,
+  formatAccelerator,
+  getSettings,
   hideWindow,
   runningInDesktopApp,
   speechAvailable,
@@ -45,10 +47,14 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
   const [saved, setSaved] = useState<Saved | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [canSpeak, setCanSpeak] = useState(false);
+  const [shortcut, setShortcut] = useState(formatAccelerator(DEFAULT_CAPTURE_SHORTCUT));
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     speechAvailable().then(setCanSpeak);
+    // Read rather than assumed: the shortcut is configurable, and a hint
+    // naming the wrong keys is worse than no hint at all.
+    getSettings().then((s) => setShortcut(formatAccelerator(s.capture_shortcut)));
   }, []);
 
   // The global shortcut should always land on an empty field, whatever was
@@ -227,7 +233,7 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
         {runningInDesktopApp() && (
           <>
             {" "}
-            <strong>{CAPTURE_SHORTCUT_LABEL}</strong> summons this from anywhere,{" "}
+            <strong>{shortcut}</strong> summons this from anywhere,{" "}
             <strong>esc</strong> sends it away.
           </>
         )}

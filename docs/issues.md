@@ -44,8 +44,8 @@ deutsch/englisch. `client/src-tauri/src/lib.rs` ist derzeit noch das
 Template mit `greet()`.
 
 ### [P1] Globaler Hotkey und Push-to-talk
-**Teilweise erledigt** in #11: Shortcut holt das Fenster. Offen bleiben
-Tray-Icon, Autostart und ein frei konfigurierbarer Shortcut.
+**Teilweise erledigt** in #11 (Shortcut holt das Fenster) und #14 (frei
+konfigurierbar, persistiert). Offen bleiben Tray-Icon und Autostart.
 Tauri-Plugin für globale Shortcuts, Tray-Icon, Autostart. Vom Tastendruck
 bis „nimmt auf" unter 2 Sekunden. Sicht- oder hörbares Feedback, ohne dass
 ein Fenster in den Vordergrund springt.

@@ -7,19 +7,13 @@
 mod asr;
 mod capture;
 mod recorder;
+mod settings;
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::ShortcutState;
 
-/// The shortcut that summons the capture field.
-///
-/// Cmd+Shift+H, chosen because macOS leaves it alone: Cmd+Space and
-/// Cmd+Shift+Space are Spotlight and input-source switching, and Option
-/// combinations collide with text input on a German keyboard layout.
-fn capture_shortcut() -> Shortcut {
-    Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyH)
-}
+use settings::SettingsState;
 
 /// Event the webview listens for to jump to a fresh capture field.
 const FOCUS_EVENT: &str = "hippocampus://focus-capture";
@@ -54,7 +48,12 @@ pub fn run() {
                 .with_handler(|app, shortcut, event| {
                     // Fire on press only; the release event would otherwise
                     // summon the window a second time on every use.
-                    if shortcut == &capture_shortcut() && event.state() == ShortcutState::Pressed {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    // Compared against the current setting rather than
+                    // assumed: the user can change it while the app runs.
+                    if shortcut == &app.state::<SettingsState>().capture_shortcut() {
                         summon_capture(app);
                     }
                 })
@@ -66,11 +65,21 @@ pub fn run() {
             capture::start_recording,
             capture::stop_recording,
             capture::cancel_recording,
+            settings::get_settings,
+            settings::set_capture_shortcut,
         ])
         .setup(|app| {
+            // Settings are loaded before the shortcut is registered, and
+            // the handler reads them back out of managed state, so a
+            // shortcut changed at runtime takes effect without a restart.
+            let path = settings::settings_path(app.handle())?;
+            let state = SettingsState::load(path);
+            let shortcut = state.capture_shortcut();
+            app.manage(state);
+
             // A missing shortcut registration must not stop the app from
             // starting — the window still works, just without the hotkey.
-            if let Err(err) = app.global_shortcut().register(capture_shortcut()) {
+            if let Err(err) = app.global_shortcut().register(shortcut) {
                 eprintln!("could not register the capture shortcut: {err}");
             }
             Ok(())

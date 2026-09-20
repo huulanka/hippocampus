@@ -459,22 +459,22 @@ a:hover {
   gap: 10px;
   margin-bottom: 22px;
 }
-.hotkey-display,
-.storage-path {
+.hotkey-display {
   background: var(--hpo-input-bg);
   border: 1px solid var(--hpo-border);
   padding: 9px 14px;
   font-size: 13px;
+  min-width: 120px;
 }
-.storage-path {
-  flex: 1;
+.hotkey-capturing {
+  border-color: var(--hpo-accent);
+  color: var(--hpo-dim);
+  outline: none;
+  cursor: text;
 }
-.settings-checkbox,
-.settings-radio {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  margin-bottom: 8px;
-  cursor: pointer;
+.settings-note {
+  font-size: 12px;
+  margin: -14px 0 22px;
+  max-width: 62ch;
+  line-height: 1.5;
 }
