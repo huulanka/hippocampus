@@ -12,11 +12,13 @@ import { entityColor } from "../entityType";
 /// model's mistake rather than the user's memory.
 export function CaptureDetailScreen({
   eventId,
-  onOpen,
+  onOpenCapture,
+  onOpenEntity,
   onBack,
 }: {
   eventId: string;
-  onOpen: (eventId: string) => void;
+  onOpenCapture: (eventId: string) => void;
+  onOpenEntity: (id: string) => void;
   onBack: () => void;
 }) {
   const [detail, setDetail] = useState<CaptureDetail | null>(null);
@@ -171,7 +173,11 @@ export function CaptureDetailScreen({
         ) : (
           <div className="detail-entities">
             {detail.entities.map((entity) => (
-              <div key={`${entity.id}-${entity.observation}`} className="detail-entity">
+              <div
+                key={`${entity.id}-${entity.observation}`}
+                className="detail-entity detail-entity-link"
+                onClick={() => onOpenEntity(entity.id)}
+              >
                 <div className="entity-card-head">
                   <span
                     className="entity-dot"
@@ -189,9 +195,19 @@ export function CaptureDetailScreen({
           <div className="detail-relations">
             {detail.relations.map((relation) => (
               <div key={relation.id} className="detail-relation">
-                <span className="detail-relation-node">{relation.from_name}</span>
+                <span
+                  className="detail-relation-node link"
+                  onClick={() => onOpenEntity(relation.from_entity_id)}
+                >
+                  {relation.from_name}
+                </span>
                 <span className="dim detail-relation-type">──{relation.relation_type}──▶</span>
-                <span className="detail-relation-node">{relation.to_name}</span>
+                <span
+                  className="detail-relation-node link"
+                  onClick={() => onOpenEntity(relation.to_entity_id)}
+                >
+                  {relation.to_name}
+                </span>
               </div>
             ))}
           </div>
@@ -213,7 +229,7 @@ export function CaptureDetailScreen({
               <div
                 key={item.capture_event_id}
                 className="timeline-card clickable"
-                onClick={() => onOpen(item.capture_event_id)}
+                onClick={() => onOpenCapture(item.capture_event_id)}
               >
                 <div className="timeline-card-meta">
                   <span className="dim">// {shortStamp(item.occurred_at)}</span>

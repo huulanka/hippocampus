@@ -1,4 +1,5 @@
 pub mod captures;
+pub mod entities;
 pub mod search;
 
 use axum::Router;
@@ -32,6 +33,8 @@ pub fn router() -> Router<AppState> {
         )
         .route("/captures/{id}/echo", get(captures::echo_for))
         .route("/captures/{id}/audio", get(captures::audio_for))
+        .route("/entities", get(entities::list))
+        .route("/entities/{id}", get(entities::detail))
         .route("/entity-types", get(captures::entity_types))
         .route("/search", get(search::search))
 }

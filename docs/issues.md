@@ -80,6 +80,13 @@ liegt typisch bei 0,01–0,1, die Cosine-Werte von e5 bei 0,7–0,9 — der
 Volltextanteil ist numerisch wirkungslos und es gibt keine brauchbare
 Relevanzschwelle. Durch RRF über zwei getrennte Rangfolgen ersetzen.
 
+### [P1] Entitäts-Lesezugriff und Entitätsseiten
+**Erledigt** in #21. `GET /entities` (nach Häufigkeit sortiert, nach Typ und
+Namen filterbar) und `GET /entities/{id}` mit allen Beobachtungen, den
+Quell-Captures und den Kanten in beide Richtungen. Der Entitäten-Screen ist
+damit kein Mock mehr, und Capture-Detail, Suche und Entitätsseiten sind
+gegenseitig verlinkt: Wissen wird begehbar statt abfragbar.
+
 ### [P1] Suche: Zeitfilter und toter Parameter
 **Erledigt** in #9.
 `from`/`to` ergänzen — „wann" ist in einem Gedächtnissystem der wichtigste
@@ -138,6 +145,11 @@ verwerfen — sonst bleibt der Graph eine Menge unverbundener Sterne.
 Observation (Last-write-wins). Entweder entfernen und zur Lesezeit bilden
 oder echte Konsolidierung. Aktuell suggeriert es eine Verdichtung, die nicht
 stattfindet.
+
+Seit #21 steht es prominent auf der Entitätsseite — dort ist es deshalb als
+„most recently observed" beschriftet und nicht als Zusammenfassung. Sobald
+der Konsolidierungslauf echte Verdichtungen schreibt, wird daraus wieder
+eine Zusammenfassung und die Beschriftung ändert sich mit.
 
 ---
 

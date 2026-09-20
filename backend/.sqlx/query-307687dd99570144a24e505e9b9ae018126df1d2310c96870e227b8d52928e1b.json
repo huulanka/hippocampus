@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            o.source_event_id,\n            o.text as observation,\n            o.model,\n            cs.transcript as \"transcript?\",\n            cs.occurred_at as \"occurred_at?\",\n            o.created_at\n        from observations o\n        left join capture_search cs on cs.event_id = o.source_event_id\n        where o.entity_id = $1\n        order by coalesce(cs.occurred_at, o.created_at) desc\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source_event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "source_event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "observation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "text"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "model"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "transcript?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "transcript"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "occurred_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "307687dd99570144a24e505e9b9ae018126df1d2310c96870e227b8d52928e1b"
+}

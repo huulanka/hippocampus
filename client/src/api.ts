@@ -91,6 +91,43 @@ export interface EventRecord {
   payload: unknown;
 }
 
+export interface EntityListItem {
+  id: string;
+  entity_type: string;
+  name: string;
+  current_summary: string | null;
+  mention_count: number;
+  last_seen: string | null;
+}
+
+export interface EntityDetail {
+  id: string;
+  entity_type: string;
+  name: string;
+  current_summary: string | null;
+  created_at: string;
+  mentions: EntityCapture[];
+  relations: EntityEdge[];
+}
+
+export interface EntityCapture {
+  capture_event_id: string;
+  transcript_text: string;
+  occurred_at: string;
+  observation: string;
+  model: string;
+}
+
+export interface EntityEdge {
+  relation_type: string;
+  /// False when this entity is the target of the relation.
+  outgoing: boolean;
+  other_id: string;
+  other_name: string;
+  other_type: string;
+  source_event_id: string;
+}
+
 export interface SearchResult {
   capture_event_id: string;
   transcript_text: string;
@@ -160,6 +197,20 @@ export function correctTranscript(eventId: string, text: string): Promise<Transc
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ text }),
   });
+}
+
+export function listEntities(options: { entityType?: string; name?: string } = {}): Promise<
+  EntityListItem[]
+> {
+  const params = new URLSearchParams();
+  if (options.entityType) params.set("entity_type", options.entityType);
+  if (options.name) params.set("name", options.name);
+  const query = params.toString();
+  return request<EntityListItem[]>(`/entities${query ? `?${query}` : ""}`);
+}
+
+export function getEntity(id: string): Promise<EntityDetail> {
+  return request<EntityDetail>(`/entities/${id}`);
 }
 
 export function listEntityTypes(): Promise<EntityTypeCount[]> {

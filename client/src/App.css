@@ -712,3 +712,71 @@ a:hover {
 .detail-edit:focus {
   border-color: var(--hpo-accent);
 }
+
+/* — entities — */
+.entity-summary {
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  /* Three lines: enough to recognise the thing, not enough to read
+     instead of opening it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.entity-title {
+  font-size: 22px;
+  margin: 10px 0 0;
+}
+.entity-title-label {
+  font-size: 11px;
+  margin: 14px 0 0;
+}
+.entity-title-summary {
+  margin-top: 5px;
+  font-size: 13px;
+  max-width: 62ch;
+}
+.entity-edges {
+  border-top: none;
+  margin-top: 12px;
+  padding-top: 0;
+}
+.entity-edge-source {
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.detail-relation:hover .entity-edge-source {
+  opacity: 1;
+  color: var(--hpo-accent);
+}
+.entity-mentions {
+  margin-top: 14px;
+  max-width: none;
+}
+/* Each mention is its own card here — without a border three captures
+   run together into one wall of text. */
+.entity-mentions .timeline-card {
+  border: 1px solid var(--hpo-border);
+  padding: 13px;
+}
+.entity-mention-observation {
+  margin: 0 0 6px;
+}
+.entity-mention-verbatim {
+  margin: 0;
+  padding-left: 11px;
+  border-left: 2px solid var(--hpo-border);
+}
+.detail-entity-link {
+  cursor: pointer;
+}
+.detail-entity-link:hover {
+  border-left-color: var(--hpo-accent);
+}
+.detail-entity-link:hover .entity-name {
+  color: var(--hpo-accent);
+}

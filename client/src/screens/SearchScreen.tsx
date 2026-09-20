@@ -6,7 +6,13 @@ import { listEntityTypes, search, type EntityTypeCount, type SearchResult } from
 /// type would bury the handful that are actually useful as filters.
 const MAX_TYPE_CHIPS = 5;
 
-export function SearchScreen({ onOpenCapture }: { onOpenCapture: (eventId: string) => void }) {
+export function SearchScreen({
+  onOpenCapture,
+  onOpenEntity,
+}: {
+  onOpenCapture: (eventId: string) => void;
+  onOpenEntity: (id: string) => void;
+}) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +103,16 @@ export function SearchScreen({ onOpenCapture }: { onOpenCapture: (eventId: strin
             {r.related_entities.length > 0 && (
               <div className="timeline-card-actions">
                 {r.related_entities.map((e) => (
-                  <span key={e.id} className="dim">
+                  <span
+                    key={e.id}
+                    className="dim link"
+                    onClick={(event) => {
+                      // The card itself opens the capture; a chip is a
+                      // different destination and must not do both.
+                      event.stopPropagation();
+                      onOpenEntity(e.id);
+                    }}
+                  >
                     {e.name} <span className="entity-type-label">{e.entity_type}</span>
                   </span>
                 ))}

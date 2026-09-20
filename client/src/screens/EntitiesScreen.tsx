@@ -1,64 +1,114 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { listEntities, listEntityTypes, type EntityListItem, type EntityTypeCount } from "../api";
+import { entityColor } from "../entityType";
 
-// Preview only: there's no GET /entities endpoint yet, so this renders the
-// design's sample data rather than real captures. Swap in a real fetch once
-// that endpoint exists (structuring already writes to the `entities` table).
-const SAMPLE_ENTITIES = [
-  { id: "priya", name: "Priya", type: "person", count: 14, last: "Sep 18", related: ["Yesterday, 7:32pm — planning a weekend at Priya's in Lissabon", "Sep 12 — Priya recommended a book"] },
-  { id: "okafor", name: "Dr. Okafor", type: "person", count: 3, last: "Sep 10", related: ["Yesterday, 3:45pm — talked with Dr. Okafor, appointment postponed"] },
-  { id: "max", name: "Max (brother)", type: "person", count: 9, last: "Sep 15", related: [] },
-  { id: "lissabon", name: "Lissabon", type: "place", count: 6, last: "Sep 18", related: ["Yesterday, 7:32pm — planning a weekend at Priya's in Lissabon"] },
-  { id: "buero", name: "New Office", type: "place", count: 4, last: "Sep 16", related: ["Sep 16 — lease for a new office downtown", "Sep 9 — broken chair at the office"] },
-  { id: "homeoffice", name: "Home Office Idea", type: "topic", count: 11, last: "Sep 19", related: ["Today, 9:14am — idea for home office setup, second monitor"] },
-  { id: "laufen", name: "Running", type: "topic", count: 22, last: "Sep 19", related: ["Yesterday, 7:02am — morning run thoughts, new route along the river"] },
-];
+/// How many type chips to offer. The extraction prompt invents types
+/// freely, so the long tail is large and mostly one-off.
+const MAX_TYPE_CHIPS = 6;
 
-const TYPE_COLOR: Record<string, string> = { person: "#3f6e63", place: "#d6a94a", topic: "#8a4a5a" };
+/// The things the system has noticed, most-spoken-about first.
+///
+/// This is the half of retrieval that is not search: you arrive by
+/// recognising a name, not by guessing one. The ordering matters more
+/// than it looks — an entity mentioned once is noise, an entity mentioned
+/// nine times is a subject.
+export function EntitiesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => void }) {
+  const [entities, setEntities] = useState<EntityListItem[] | null>(null);
+  const [types, setTypes] = useState<EntityTypeCount[]>([]);
+  const [activeType, setActiveType] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-export function EntitiesScreen() {
-  const [selected, setSelected] = useState<string | null>(null);
-  const selectedEntity = SAMPLE_ENTITIES.find((e) => e.id === selected);
+  useEffect(() => {
+    listEntityTypes()
+      .then((all) => setTypes(all.slice(0, MAX_TYPE_CHIPS)))
+      .catch(() => setTypes([]));
+  }, []);
+
+  useEffect(() => {
+    let current = true;
+    listEntities({ entityType: activeType ?? undefined })
+      .then((all) => current && setEntities(all))
+      .catch((err) => current && setError(String(err)));
+    return () => {
+      current = false;
+    };
+  }, [activeType]);
+
+  if (error) return <p className="dim">Couldn't load entities: {error}</p>;
+  if (!entities) return <p className="dim">Loading…</p>;
+
+  const needle = filter.trim().toLowerCase();
+  const shown = needle
+    ? entities.filter((e) => e.name.toLowerCase().includes(needle))
+    : entities;
 
   return (
     <>
-      <p className="dim">
-        Preview data — wire this up once entities/relations get a read API (structuring already
-        writes them).
-      </p>
-      <div className="entity-grid">
-        {SAMPLE_ENTITIES.map((ent) => (
-          <div
-            key={ent.id}
-            className={`panel entity-card${selected === ent.id ? " active" : ""}`}
-            onClick={() => setSelected(ent.id)}
+      <div className="search-box">
+        <span className="kicker">&gt;</span>
+        <input
+          className="search-input"
+          value={filter}
+          placeholder="Narrow the list by name…"
+          onChange={(e) => setFilter(e.currentTarget.value)}
+        />
+      </div>
+      <div className="search-filters">
+        <span
+          className={`filter-chip${activeType === null ? " active" : ""}`}
+          onClick={() => setActiveType(null)}
+        >
+          [{activeType === null ? "x" : " "}] All
+        </span>
+        {types.map((t) => (
+          <span
+            key={t.entity_type}
+            className={`filter-chip${activeType === t.entity_type ? " active" : ""}`}
+            onClick={() => setActiveType(t.entity_type)}
           >
-            <div className="entity-card-head">
-              <span className="entity-dot" style={{ background: TYPE_COLOR[ent.type] }} />
-              <span className="dim entity-type-label">{ent.type.toUpperCase()}</span>
-            </div>
-            <div className="entity-name">{ent.name}</div>
-            <div className="dim entity-meta">
-              {ent.count} mentions · last {ent.last}
-            </div>
-          </div>
+            [{activeType === t.entity_type ? "x" : " "}] {t.entity_type}
+          </span>
         ))}
       </div>
-      {selectedEntity && (
-        <div className="panel linked-captures">
-          <div className="linked-captures-head">
-            <span className="kicker">[ LINKED CAPTURES — {selectedEntity.name} ]</span>
-          </div>
-          {selectedEntity.related.length === 0 ? (
-            <p className="dim">No linked captures.</p>
-          ) : (
-            selectedEntity.related.map((r) => (
-              <p key={r} className="timeline-transcript">
-                — {r}
-              </p>
-            ))
-          )}
+
+      {shown.length === 0 ? (
+        <p className="dim">
+          {entities.length === 0
+            ? "Nothing has been noticed yet. Entities appear once captures have been structured."
+            : "No entity by that name."}
+        </p>
+      ) : (
+        <div className="entity-grid">
+          {shown.map((entity) => (
+            <div
+              key={entity.id}
+              className="panel entity-card clickable"
+              onClick={() => onOpenEntity(entity.id)}
+            >
+              <div className="entity-card-head">
+                <span
+                  className="entity-dot"
+                  style={{ background: entityColor(entity.entity_type) }}
+                />
+                <span className="dim entity-type-label">{entity.entity_type.toUpperCase()}</span>
+              </div>
+              <div className="entity-name">{entity.name}</div>
+              <div className="dim entity-meta">
+                {entity.mention_count} {entity.mention_count === 1 ? "mention" : "mentions"}
+                {entity.last_seen && ` · last ${shortDate(entity.last_seen)}`}
+              </div>
+              {entity.current_summary && (
+                <p className="dim entity-summary">{entity.current_summary}</p>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </>
   );
+}
+
+function shortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }

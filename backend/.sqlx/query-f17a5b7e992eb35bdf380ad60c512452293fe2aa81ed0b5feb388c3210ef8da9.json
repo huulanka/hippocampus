@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            r.relation_type,\n            r.source_event_id,\n            (r.from_entity_id = $1) as \"outgoing!\",\n            other.id as other_id,\n            other.name as other_name,\n            other.entity_type as other_type\n        from relations r\n        join entities other\n            on other.id = case when r.from_entity_id = $1 then r.to_entity_id else r.from_entity_id end\n        where r.from_entity_id = $1 or r.to_entity_id = $1\n        order by r.created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "relation_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relations",
+            "name": "relation_type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "source_event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "relations",
+            "name": "source_event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "outgoing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "other_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "other_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "other_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "entity_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f17a5b7e992eb35bdf380ad60c512452293fe2aa81ed0b5feb388c3210ef8da9"
+}

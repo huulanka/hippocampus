@@ -146,6 +146,61 @@ pub struct EventRecord {
     pub payload: serde_json::Value,
 }
 
+/// One row of the entity index: a thing the system has noticed, with
+/// enough weight attached to tell a passing mention from a recurring
+/// subject.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityListItem {
+    pub id: Uuid,
+    pub entity_type: String,
+    pub name: String,
+    pub current_summary: Option<String>,
+    /// How many captures have said something about it.
+    pub mention_count: i64,
+    /// When it was last spoken about. `None` for an entity that exists
+    /// only as the far end of a relation.
+    pub last_seen: Option<DateTime<Utc>>,
+}
+
+/// An entity's own page: everything ever observed about it, and what it
+/// stands in relation to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityDetail {
+    pub id: Uuid,
+    pub entity_type: String,
+    pub name: String,
+    pub current_summary: Option<String>,
+    pub created_at: DateTime<Utc>,
+    /// Newest first: an entity is read from what was last said about it.
+    pub mentions: Vec<EntityCapture>,
+    pub relations: Vec<EntityEdge>,
+}
+
+/// A capture that said something about an entity, with the observation
+/// the model drew from it. Both are shown: the observation is the
+/// model's reading, the transcript is what was actually said.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityCapture {
+    pub capture_event_id: Uuid,
+    pub transcript_text: String,
+    pub occurred_at: DateTime<Utc>,
+    pub observation: String,
+    pub model: String,
+}
+
+/// An edge from this entity's point of view. `outgoing` is false when
+/// this entity is the target — the relation still reads the right way
+/// round, it just points the other way.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityEdge {
+    pub relation_type: String,
+    pub outgoing: bool,
+    pub other_id: Uuid,
+    pub other_name: String,
+    pub other_type: String,
+    pub source_event_id: Uuid,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub capture_event_id: Uuid,
