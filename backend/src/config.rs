@@ -13,6 +13,9 @@ pub struct Config {
     /// Route only to providers with a Zero Data Retention policy. See
     /// https://openrouter.ai/docs/features/provider-routing.
     pub openrouter_zdr: bool,
+    /// Where capture audio is kept. This is the archive of originals
+    /// (ADR 0004) — it must be on backed-up storage, not a scratch disk.
+    pub audio_dir: String,
     /// Minimum cosine similarity for a capture to be shown as an echo.
     /// Configurable because the right value depends on how the user
     /// actually speaks, and can only be found against real captures.
@@ -40,6 +43,7 @@ impl Config {
             openrouter_zdr: env_non_empty("OPENROUTER_ZDR")
                 .map(|v| v != "false")
                 .unwrap_or(true),
+            audio_dir: env_non_empty("AUDIO_DIR").unwrap_or_else(|| "../data/audio".to_string()),
             echo_min_similarity: env_non_empty("ECHO_MIN_SIMILARITY")
                 .map(|v| v.parse())
                 .transpose()

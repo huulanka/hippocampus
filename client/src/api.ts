@@ -5,6 +5,9 @@ export interface CaptureListItem {
   event_id: string;
   transcript_text: string;
   occurred_at: string;
+  /// "audio" when a recording exists to play back, "text" when the capture
+  /// was typed or dictated straight into the app.
+  origin: "audio" | "text";
 }
 
 export interface EntitySummary {
@@ -69,11 +72,7 @@ export function createCapture(transcriptText: string, device: string): Promise<C
   return request<CaptureAccepted>("/captures", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      transcript_text: transcriptText,
-      device,
-      audio_ref: null,
-    }),
+    body: JSON.stringify({ transcript_text: transcriptText, device }),
   });
 }
 

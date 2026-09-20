@@ -4,19 +4,16 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Body of `POST /captures` — a raw, verbatim capture from a client.
+/// Body of `POST /captures` — a typed or dictated capture.
 ///
-/// This is the only write path for original knowledge. Once accepted, a
-/// capture is never edited or deleted; corrections happen by adding new
-/// derived data, never by mutating this record.
+/// Here the text is the original: nothing derived it, so it is stored as
+/// capture content directly. Spoken captures go to `POST /captures/audio`
+/// instead, as multipart, because there the recording is the original and
+/// the transcript is already an interpretation of it (ADR 0004).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCaptureRequest {
     pub transcript_text: String,
     pub device: String,
-    /// Opaque reference to the audio file on the originating device/NAS,
-    /// if one exists (e.g. a content hash or storage path). Audio itself
-    /// is never uploaded to the backend.
-    pub audio_ref: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,7 +102,6 @@ mod tests {
         let req = CreateCaptureRequest {
             transcript_text: "test".into(),
             device: "unit-test".into(),
-            audio_ref: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         let back: CreateCaptureRequest = serde_json::from_str(&json).unwrap();

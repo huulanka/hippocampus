@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into capture_content (event_id, origin, audio_path, audio_mime, duration_ms)\n        values ($1, 'audio', $2, $3, $4)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7aa0b53de57a95cd6f3847caea938ae50aeef96487f4a9d94c54cbe58c2826d0"
+}

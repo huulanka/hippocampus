@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select event_id, transcript, occurred_at\n        from capture_search\n        order by occurred_at desc\n        limit 50\n        ",
+  "query": "\n        select cs.event_id, cs.transcript, cs.occurred_at, cc.origin as \"origin?\"\n        from capture_search cs\n        left join capture_content cc on cc.event_id = cs.event_id\n        order by cs.occurred_at desc\n        limit 50\n        ",
   "describe": {
     "columns": [
       {
@@ -35,6 +35,17 @@
             "name": "occurred_at"
           }
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "origin?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_content",
+            "name": "origin"
+          }
+        }
       }
     ],
     "parameters": {
@@ -43,8 +54,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "e61d1729567b469aa7954bbd1b8731a372964d7def471619400396cf3b4f5881"
+  "hash": "689d68f55764c7993fc76677ce682d96a3047c86d7a36cd437116754e8c86483"
 }

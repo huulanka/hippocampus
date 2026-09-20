@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into capture_content (event_id, origin, text) values ($1, 'text', $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4103fb821ad7b5c66a96c4f4b52f71e6ab73c5cbbd8a18f0550e10b289006af1"
+}

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into transcript_content (event_id, capture_event_id, text, model, language)\n        values ($1, $2, $3, $4, $5)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "215c6cf49921511c07d24e5be450a403fbbb7a5669475cde4b03eccf34495f78"
+}

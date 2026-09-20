@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into capture_search (event_id, transcript, occurred_at, embedding)\n        values ($1, $2, $3, $4)\n        on conflict (event_id) do update\n            set transcript = excluded.transcript, embedding = excluded.embedding\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz",
+        {
+          "Custom": {
+            "name": "vector",
+            "kind": "Simple"
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "39060af66b1a4d527fada8935791fce1390a0f1ddb1617763c0600f3a9085f3d"
+}

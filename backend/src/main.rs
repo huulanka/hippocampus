@@ -1,3 +1,4 @@
+mod audio;
 mod config;
 mod echo;
 mod embedding;
@@ -22,6 +23,7 @@ pub struct AppState {
     embedder: Embedder,
     openrouter: Option<Arc<OpenRouterClient>>,
     echo_min_similarity: f32,
+    audio_dir: std::path::PathBuf,
 }
 
 #[tokio::main]
@@ -42,6 +44,9 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     sqlx::migrate!().run(&pool).await?;
+
+    tokio::fs::create_dir_all(&config.audio_dir).await?;
+    tracing::info!(dir = %config.audio_dir, "audio archive ready");
 
     tracing::info!("loading local embedding model (first run downloads it)...");
     let embedder = Embedder::load(config.model_cache_dir.clone().into()).await?;
@@ -64,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         embedder,
         openrouter,
         echo_min_similarity: config.echo_min_similarity,
+        audio_dir: config.audio_dir.clone().into(),
     };
 
     let app = routes::router()
