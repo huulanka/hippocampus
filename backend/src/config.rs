@@ -13,6 +13,10 @@ pub struct Config {
     /// Route only to providers with a Zero Data Retention policy. See
     /// https://openrouter.ai/docs/features/provider-routing.
     pub openrouter_zdr: bool,
+    /// Minimum cosine similarity for a capture to be shown as an echo.
+    /// Configurable because the right value depends on how the user
+    /// actually speaks, and can only be found against real captures.
+    pub echo_min_similarity: f32,
 }
 
 /// Reads an env var, treating both "unset" and "set but empty" as absent —
@@ -36,6 +40,11 @@ impl Config {
             openrouter_zdr: env_non_empty("OPENROUTER_ZDR")
                 .map(|v| v != "false")
                 .unwrap_or(true),
+            echo_min_similarity: env_non_empty("ECHO_MIN_SIMILARITY")
+                .map(|v| v.parse())
+                .transpose()
+                .map_err(|err| anyhow::anyhow!("ECHO_MIN_SIMILARITY must be a number: {err}"))?
+                .unwrap_or(crate::echo::DEFAULT_MIN_SIMILARITY),
         })
     }
 }

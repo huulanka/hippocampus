@@ -10,5 +10,6 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/captures", post(captures::create).get(captures::list))
+        .route("/captures/{id}/echo", get(captures::echo_for))
         .route("/search", get(search::search))
 }

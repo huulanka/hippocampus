@@ -1,4 +1,5 @@
 mod config;
+mod echo;
 mod embedding;
 mod error;
 mod events;
@@ -20,6 +21,7 @@ pub struct AppState {
     pool: sqlx::PgPool,
     embedder: Embedder,
     openrouter: Option<Arc<OpenRouterClient>>,
+    echo_min_similarity: f32,
 }
 
 #[tokio::main]
@@ -61,6 +63,7 @@ async fn main() -> anyhow::Result<()> {
         pool,
         embedder,
         openrouter,
+        echo_min_similarity: config.echo_min_similarity,
     };
 
     let app = routes::router()

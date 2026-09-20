@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with filtered as (\n            select cs.event_id, cs.transcript, cs.occurred_at, cs.tsv, cs.embedding\n            from capture_search cs\n            where ($3::timestamptz is null or cs.occurred_at >= $3)\n              and ($4::timestamptz is null or cs.occurred_at <= $4)\n              and (\n                $5::text is null\n                or exists (\n                    select 1\n                    from observations o\n                    join entities e on e.id = o.entity_id\n                    where o.source_event_id = cs.event_id and e.entity_type = $5\n                )\n              )\n        ),\n        lexical as (\n            select event_id, row_number() over (\n                order by ts_rank(tsv, plainto_tsquery('german', $2)) desc, occurred_at desc\n            ) as rank\n            from filtered\n            where tsv @@ plainto_tsquery('german', $2)\n            limit $6\n        ),\n        semantic as (\n            select event_id, row_number() over (order by embedding <=> $1) as rank\n            from filtered\n            where embedding is not null\n            limit $6\n        ),\n        fused as (\n            select\n                coalesce(l.event_id, s.event_id) as event_id,\n                coalesce(1.0 / ($7::float8 + l.rank), 0.0)\n                + coalesce(1.0 / ($7::float8 + s.rank), 0.0) as score\n            from lexical l\n            full outer join semantic s on s.event_id = l.event_id\n        )\n        select\n            f.event_id as \"event_id!\",\n            fl.transcript as \"transcript!\",\n            fl.occurred_at as \"occurred_at!\",\n            f.score::real as \"score!\"\n        from fused f\n        join filtered fl on fl.event_id = f.event_id\n        order by f.score desc, fl.occurred_at desc\n        limit $8\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "transcript!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "transcript"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "occurred_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "score!",
+        "type_info": "Float4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "vector",
+            "kind": "Simple"
+          }
+        },
+        "Text",
+        "Timestamptz",
+        "Timestamptz",
+        "Text",
+        "Int8",
+        "Float8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "1a8774b13043ba2586c36ae7374dc0e6d2a85150698e962794fa81fbecc0d322"
+}

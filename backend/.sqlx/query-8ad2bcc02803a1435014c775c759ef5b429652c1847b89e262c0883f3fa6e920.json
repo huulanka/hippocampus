@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select embedding as \"embedding: pgvector::Vector\", occurred_at\n           from capture_search where event_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "embedding: pgvector::Vector",
+        "type_info": {
+          "Custom": {
+            "name": "vector",
+            "kind": "Simple"
+          }
+        },
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "embedding"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "occurred_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "occurred_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "8ad2bcc02803a1435014c775c759ef5b429652c1847b89e262c0883f3fa6e920"
+}

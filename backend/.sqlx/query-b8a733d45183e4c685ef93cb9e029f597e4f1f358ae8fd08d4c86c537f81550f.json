@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        with scored as (\n            select\n                event_id,\n                transcript,\n                occurred_at,\n                (\n                    (1 - (embedding <=> $1)) * 0.7\n                    + coalesce(ts_rank(tsv, plainto_tsquery('german', $2)), 0.0) * 0.3\n                ) as score\n            from capture_search\n            where embedding is not null\n        )\n        select event_id, transcript, occurred_at, score as \"score!\"\n        from scored\n        order by score desc\n        limit $3\n        ",
+  "query": "\n        select\n            event_id,\n            transcript,\n            occurred_at,\n            (1 - (embedding <=> $1))::real as \"similarity!\"\n        from capture_search\n        where embedding is not null\n          and occurred_at < $2\n          and ($3::uuid is null or event_id <> $3)\n          and (1 - (embedding <=> $1)) >= $4\n        order by embedding <=> $1\n        limit $5\n        ",
   "describe": {
     "columns": [
       {
@@ -38,8 +38,8 @@
       },
       {
         "ordinal": 3,
-        "name": "score!",
-        "type_info": "Float8",
+        "name": "similarity!",
+        "type_info": "Float4",
         "origin": "Expression"
       }
     ],
@@ -51,7 +51,9 @@
             "kind": "Simple"
           }
         },
-        "Text",
+        "Timestamptz",
+        "Uuid",
+        "Float8",
         "Int8"
       ]
     },
@@ -62,5 +64,5 @@
       null
     ]
   },
-  "hash": "a8ee4fdb00dd6826b28d4bfd0a1a40203438e03071771b58d135a7554817d148"
+  "hash": "b8a733d45183e4c685ef93cb9e029f597e4f1f358ae8fd08d4c86c537f81550f"
 }

@@ -1,10 +1,11 @@
 use axum::Json;
-use axum::extract::State;
-use contracts::{CaptureAccepted, CreateCaptureRequest};
+use axum::extract::{Path, Query, State};
+use contracts::{CaptureAccepted, CreateCaptureRequest, EchoItem};
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::AppState;
+use crate::echo;
 use crate::error::AppError;
 use crate::events;
 use crate::structuring;
@@ -60,9 +61,27 @@ pub async fn create(
         req.transcript_text.clone(),
     ));
 
+    // Echo is computed inline, unlike structuring: it is the one thing the
+    // user is waiting to see, it needs no network call, and a failure here
+    // must still not cost the capture — so it degrades to an empty list.
+    let echo = echo::for_embedding(
+        &state.pool,
+        &embedding,
+        stored.occurred_at,
+        Some(stored.id),
+        state.echo_min_similarity,
+        echo::DEFAULT_LIMIT,
+    )
+    .await
+    .unwrap_or_else(|err| {
+        tracing::warn!(?err, %stored.id, "echo lookup failed, returning capture without it");
+        Vec::new()
+    });
+
     Ok(Json(CaptureAccepted {
         event_id: stored.id,
         occurred_at: stored.occurred_at,
+        echo,
     }))
 }
 
@@ -96,4 +115,31 @@ pub async fn list(State(state): State<AppState>) -> Result<Json<Vec<CaptureListI
             })
             .collect(),
     ))
+}
+
+#[derive(serde::Deserialize)]
+pub struct EchoParams {
+    /// Override the configured similarity threshold, for tuning against
+    /// real captures without restarting the backend.
+    pub min_similarity: Option<f32>,
+    pub limit: Option<i64>,
+}
+
+/// Echoes for an existing capture. `POST /captures` already returns these
+/// inline; this endpoint exists so they can be re-viewed later from the
+/// timeline, and so the threshold can be tuned interactively.
+pub async fn echo_for(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<EchoParams>,
+) -> Result<Json<Vec<EchoItem>>, AppError> {
+    let items = echo::for_capture(
+        &state.pool,
+        id,
+        params.min_similarity.unwrap_or(state.echo_min_similarity),
+        params.limit.unwrap_or(echo::DEFAULT_LIMIT).clamp(1, 20),
+    )
+    .await?;
+
+    Ok(Json(items))
 }
