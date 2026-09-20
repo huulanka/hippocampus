@@ -26,6 +26,7 @@ pub struct AppState {
     openrouter: Option<Arc<OpenRouterClient>>,
     echo_min_similarity: f32,
     audio_dir: std::path::PathBuf,
+    timezone: chrono_tz::Tz,
 }
 
 #[tokio::main]
@@ -72,7 +73,13 @@ async fn main() -> anyhow::Result<()> {
         openrouter,
         echo_min_similarity: config.echo_min_similarity,
         audio_dir: config.audio_dir.clone().into(),
+        timezone: config.timezone,
     };
+
+    tracing::info!(
+        timezone = %config.timezone,
+        "relative times in captures resolve against this timezone unless the device names its own"
+    );
 
     let protected = routes::router().with_state(state.clone());
     let protected = match config.cf_access_aud.clone() {

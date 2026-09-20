@@ -13,6 +13,14 @@ use crate::asr::{self, Transcriber};
 use crate::microphone;
 use crate::recorder::{self, Recording, TARGET_RATE};
 
+/// The device's IANA timezone, or an empty string when the platform
+/// cannot say. The backend falls back to its own configured zone then,
+/// which is the right behaviour: a wrong guess here would silently date
+/// things to the wrong day.
+fn local_timezone() -> String {
+    iana_time_zone::get_timezone().unwrap_or_default()
+}
+
 /// Identifies where a capture came from, recorded as the event's source.
 const DEVICE: &str = "mac-desktop";
 
@@ -138,7 +146,11 @@ pub async fn stop_recording(state: tauri::State<'_, CaptureState>) -> Result<Voi
         .text("transcript", transcript.clone())
         .text("model", asr::MODEL_ID)
         .text("language", "auto")
-        .text("duration_ms", duration_ms.to_string());
+        .text("duration_ms", duration_ms.to_string())
+        // Where the speaker was standing, so the backend can turn
+        // "morgen" into a real date. Sent rather than assumed: the answer
+        // has to stay right after a flight.
+        .text("timezone", local_timezone());
 
     let response = state
         .http

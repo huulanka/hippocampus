@@ -552,6 +552,7 @@ dependencies = [
  "contracts",
  "cpal",
  "hound",
+ "iana-time-zone",
  "objc2",
  "objc2-av-foundation",
  "reqwest",

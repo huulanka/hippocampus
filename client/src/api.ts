@@ -71,6 +71,14 @@ export interface EntityMention {
   observation: string;
   model: string;
   confidence: number | null;
+  /// The day this observation is about, when it is about one — "morgen"
+  /// resolved against the moment the note was spoken. Not the same as
+  /// when it was said.
+  happened_on: string | null;
+  /// Only set when a time of day was actually named.
+  happened_at: string | null;
+  /// "time" | "day" | "week" | "month" | "year"
+  happened_precision: string | null;
 }
 
 export interface RelationMention {
@@ -116,6 +124,14 @@ export interface EntityCapture {
   occurred_at: string;
   observation: string;
   model: string;
+  /// The day this observation is about, when it is about one — "morgen"
+  /// resolved against the moment the note was spoken. Not the same as
+  /// when it was said.
+  happened_on: string | null;
+  /// Only set when a time of day was actually named.
+  happened_at: string | null;
+  /// "time" | "day" | "week" | "month" | "year"
+  happened_precision: string | null;
 }
 
 export interface EntityEdge {
@@ -168,7 +184,13 @@ export function createCapture(transcriptText: string, device: string): Promise<C
   return request<CaptureAccepted>("/captures", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ transcript_text: transcriptText, device }),
+    body: JSON.stringify({
+      transcript_text: transcriptText,
+      device,
+      // Where the note is being written, so the backend can turn
+      // "morgen" into a real date rather than guessing.
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
   });
 }
 

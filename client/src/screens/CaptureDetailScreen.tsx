@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { audioUrl, correctTranscript, getCapture, type CaptureDetail } from "../api";
 import { AudioPlayer } from "../components/AudioPlayer";
 import { entityColor } from "../entityType";
+import { whenLabel } from "../whenLabel";
 
 /// Everything known about one capture, on one page.
 ///
@@ -187,6 +188,7 @@ export function CaptureDetailScreen({
                   <span className="dim entity-type-label">{entity.entity_type.toUpperCase()}</span>
                 </div>
                 <p className="detail-observation">{entity.observation}</p>
+                <WhenBadge of={entity} />
               </div>
             ))}
           </div>
@@ -233,6 +235,7 @@ export function CaptureDetailScreen({
               >
                 <div className="timeline-card-meta">
                   <span className="dim">// {shortStamp(item.occurred_at)}</span>
+                  <span className="dim card-open-hint">[open]</span>
                 </div>
                 <p className="timeline-transcript">{item.transcript_text}</p>
               </div>
@@ -278,6 +281,15 @@ export function CaptureDetailScreen({
       </details>
     </div>
   );
+}
+
+/// The date an observation is *about*, shown only when there is one.
+/// Most observations are not about a point in time, and a badge on every
+/// card would train the eye to ignore it.
+function WhenBadge({ of }: { of: Parameters<typeof whenLabel>[0] }) {
+  const label = whenLabel(of);
+  if (!label) return null;
+  return <p className="when-badge">◷ {label}</p>;
 }
 
 function DetailFrame({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {

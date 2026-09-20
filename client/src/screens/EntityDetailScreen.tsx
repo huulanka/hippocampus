@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getEntity, type EntityDetail } from "../api";
 import { entityColor } from "../entityType";
+import { whenLabel } from "../whenLabel";
 
 /// One thing, and everything ever said about it.
 ///
@@ -146,11 +147,12 @@ export function EntityDetailScreen({
               >
                 <div className="timeline-card-meta">
                   <span className="dim">// {stamp(mention.occurred_at)}</span>
-                  <span className="dim">[open]</span>
+                  <span className="dim card-open-hint">[open]</span>
                 </div>
                 <p className="detail-observation entity-mention-observation">
                   {mention.observation}
                 </p>
+                {whenLabel(mention) && <p className="when-badge">◷ {whenLabel(mention)}</p>}
                 <p className="timeline-transcript entity-mention-verbatim">
                   {mention.transcript_text || "(the words were removed)"}
                 </p>

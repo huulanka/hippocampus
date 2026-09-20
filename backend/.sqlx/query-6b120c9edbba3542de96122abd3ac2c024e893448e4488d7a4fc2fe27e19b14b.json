@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select en.id, en.entity_type, en.name, o.text as observation, o.model, o.confidence\n        from observations o\n        join entities en on en.id = o.entity_id\n        where o.source_event_id = $1\n        order by o.created_at\n        ",
+  "query": "\n        select\n            en.id, en.entity_type, en.name,\n            o.text as observation, o.model, o.confidence,\n            o.happened_on, o.happened_at, o.happened_precision\n        from observations o\n        join entities en on en.id = o.entity_id\n        where o.source_event_id = $1\n        order by o.created_at\n        ",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,39 @@
             "name": "confidence"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "happened_on",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_on"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "happened_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "happened_precision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_precision"
+          }
+        }
       }
     ],
     "parameters": {
@@ -81,8 +114,11 @@
       false,
       false,
       false,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "926a6f4ca78109c31cf52a83ab6f97b99b81ba792557ba4270672c3781cb29b0"
+  "hash": "6b120c9edbba3542de96122abd3ac2c024e893448e4488d7a4fc2fe27e19b14b"
 }

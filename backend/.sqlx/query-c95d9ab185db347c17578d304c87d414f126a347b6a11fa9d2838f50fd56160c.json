@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select e.occurred_at, cc.redacted_at as \"redacted_at?\"\n        from events e\n        left join capture_content cc on cc.event_id = e.id\n        where e.id = $1 and e.event_type = 'capture.recorded'\n        ",
+  "query": "\n        select e.occurred_at, e.payload, cc.redacted_at as \"redacted_at?\"\n        from events e\n        left join capture_content cc on cc.event_id = e.id\n        where e.id = $1 and e.event_type = 'capture.recorded'\n        ",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,17 @@
       },
       {
         "ordinal": 1,
+        "name": "payload",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "redacted_at?",
         "type_info": "Timestamptz",
         "origin": {
@@ -33,8 +44,9 @@
     },
     "nullable": [
       false,
+      false,
       true
     ]
   },
-  "hash": "b351f44bc7db1805dcaad6268eb8c3d40ad373c87da322ed414655ffae3260c2"
+  "hash": "c95d9ab185db347c17578d304c87d414f126a347b6a11fa9d2838f50fd56160c"
 }

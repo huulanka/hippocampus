@@ -3,6 +3,8 @@
 //! leaves the machine — as text, never audio — and only to a provider
 //! routed with Zero Data Retention when `zdr` is enabled.
 
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -11,6 +13,44 @@ pub struct ExtractedEntity {
     pub name: String,
     pub entity_type: String,
     pub observation: String,
+    /// When the observation is *about*, resolved against the moment the
+    /// note was spoken. ISO 8601: a date, or a date and time when the
+    /// speaker named one. `None` when the observation is not about a
+    /// point in time at all, which is the common case.
+    #[serde(default)]
+    pub when: Option<String>,
+    /// How precise `when` really is. Stored because precision is part of
+    /// the fact: "next summer" is not a timestamp, and rounding it to one
+    /// would invent an accuracy the speaker never had.
+    #[serde(default)]
+    pub when_precision: Option<String>,
+}
+
+/// The moment a note was spoken, in the speaker's own timezone.
+///
+/// Without this the extraction has no way to turn "morgen" into a date —
+/// and a note that says "Dienstag" is unreadable three weeks later, which
+/// is exactly when a memory system gets read.
+#[derive(Debug, Clone, Copy)]
+pub struct SpokenAt {
+    pub utc: DateTime<Utc>,
+    pub timezone: Tz,
+}
+
+impl SpokenAt {
+    /// The line handed to the model. Spelled out rather than an ISO
+    /// stamp: a weekday name is what makes "nächsten Dienstag" resolvable
+    /// at all.
+    fn describe(&self) -> String {
+        let local = self.utc.with_timezone(&self.timezone);
+        format!(
+            "This note was spoken on {} ({}), local time, in timezone {}. Today is therefore {}.",
+            local.format("%A, %-d %B %Y at %H:%M"),
+            local.format("%Y-%m-%dT%H:%M%:z"),
+            self.timezone.name(),
+            local.format("%Y-%m-%d"),
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -36,8 +76,10 @@ For each entity, write a short first-person observation capturing what was just 
 
 Also list relations between entities mentioned in the same transcript. Each relation has EXACTLY these three keys: "from", "to", "relation_type" (never "entity_type" — that key belongs only to entities). Use the exact same `name` values as in your entities list for "from"/"to".
 
+Every entity may additionally carry "when" and "when_precision" when the observation is about a point in time. Resolve relative expressions ("morgen", "nächsten Dienstag", "letzte Woche", "im Sommer") against the moment given in the user message, and write the result as ISO 8601: "2026-09-22" for a day, "2026-09-22T19:00" only when a time of day was actually named. "when_precision" is one of "time", "day", "week", "month", "year" — use the coarsest one that is still honest. Omit both keys entirely when the observation is not about a point in time; most are not.
+
 Respond with ONLY a JSON object of this exact shape, no prose, no markdown fences:
-{"entities": [{"name": "...", "entity_type": "...", "observation": "..."}], "relations": [{"from": "...", "to": "...", "relation_type": "..."}]}
+{"entities": [{"name": "...", "entity_type": "...", "observation": "...", "when": "...", "when_precision": "..."}], "relations": [{"from": "...", "to": "...", "relation_type": "..."}]}
 
 If nothing is worth extracting, respond with {"entities": [], "relations": []}."#;
 
@@ -64,12 +106,16 @@ impl OpenRouterClient {
         &self.model
     }
 
-    pub async fn extract(&self, transcript: &str) -> anyhow::Result<ExtractionResult> {
+    pub async fn extract(
+        &self,
+        transcript: &str,
+        spoken_at: SpokenAt,
+    ) -> anyhow::Result<ExtractionResult> {
         let body = json!({
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": transcript},
+                {"role": "user", "content": format!("{}\n\nTranscript:\n{}", spoken_at.describe(), transcript)},
             ],
             "response_format": {"type": "json_object"},
             "provider": {"zdr": self.zdr},

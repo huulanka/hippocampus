@@ -29,6 +29,9 @@ pub struct Config {
     /// Origins the browser side is allowed to call from. Never a wildcard:
     /// this service answers with someone's entire memory.
     pub cors_allowed_origins: Vec<String>,
+    /// Fallback timezone for resolving "tomorrow" and friends, used only
+    /// when a capture did not say where it was recorded.
+    pub timezone: chrono_tz::Tz,
 }
 
 /// Where the desktop client calls from: `tauri://localhost` is the packaged
@@ -64,6 +67,14 @@ impl Config {
                 .unwrap_or(crate::echo::DEFAULT_MIN_SIMILARITY),
             cf_access_aud: env_non_empty("CF_ACCESS_AUD"),
             cf_access_team_domain: env_non_empty("CF_ACCESS_TEAM_DOMAIN"),
+            timezone: env_non_empty("HIPPOCAMPUS_TIMEZONE")
+                .map(|name| {
+                    name.parse::<chrono_tz::Tz>().map_err(|_| {
+                        anyhow::anyhow!("HIPPOCAMPUS_TIMEZONE is not an IANA timezone: {name}")
+                    })
+                })
+                .transpose()?
+                .unwrap_or(chrono_tz::Europe::Berlin),
             cors_allowed_origins: env_non_empty("CORS_ALLOWED_ORIGINS")
                 .unwrap_or_else(|| DEFAULT_ALLOWED_ORIGINS.to_string())
                 .split(',')

@@ -1,6 +1,6 @@
 //! Shared HTTP API types between `backend` and `client`.
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -14,6 +14,13 @@ use uuid::Uuid;
 pub struct CreateCaptureRequest {
     pub transcript_text: String,
     pub device: String,
+    /// IANA timezone of the device that recorded this, e.g.
+    /// `Europe/Berlin`. Sent by the client because "tomorrow" means a
+    /// different day depending on where the speaker was standing — and
+    /// the answer has to stay right after they fly somewhere. Falls back
+    /// to the server's configured timezone when absent.
+    #[serde(default)]
+    pub timezone: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,6 +127,15 @@ pub struct EntityMention {
     pub observation: String,
     pub model: String,
     pub confidence: Option<f32>,
+    /// The day this observation is *about*, when it is about one —
+    /// "morgen" resolved against the moment the note was spoken. Distinct
+    /// from `occurred_at`, which is when it was said.
+    pub happened_on: Option<NaiveDate>,
+    /// Only set when a time of day was actually named.
+    pub happened_at: Option<DateTime<Utc>>,
+    /// How precise the above really is: "time", "day", "week", "month"
+    /// or "year".
+    pub happened_precision: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +202,15 @@ pub struct EntityCapture {
     pub occurred_at: DateTime<Utc>,
     pub observation: String,
     pub model: String,
+    /// The day this observation is *about*, when it is about one —
+    /// "morgen" resolved against the moment the note was spoken. Distinct
+    /// from `occurred_at`, which is when it was said.
+    pub happened_on: Option<NaiveDate>,
+    /// Only set when a time of day was actually named.
+    pub happened_at: Option<DateTime<Utc>>,
+    /// How precise the above really is: "time", "day", "week", "month"
+    /// or "year".
+    pub happened_precision: Option<String>,
 }
 
 /// An edge from this entity's point of view. `outgoing` is false when
@@ -274,6 +299,7 @@ mod tests {
         let req = CreateCaptureRequest {
             transcript_text: "test".into(),
             device: "unit-test".into(),
+            timezone: Some("Europe/Berlin".into()),
         };
         let json = serde_json::to_string(&req).unwrap();
         let back: CreateCaptureRequest = serde_json::from_str(&json).unwrap();

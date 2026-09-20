@@ -60,7 +60,7 @@ export function TimelineScreen({ onOpenCapture }: { onOpenCapture: (eventId: str
                   <span className="dim">
                     // {timeLabel(item.occurred_at)} · {item.origin === "audio" ? "spoken" : "typed"}
                   </span>
-                  <span className="dim">[open]</span>
+                  <span className="dim card-open-hint">[open]</span>
                 </div>
                 <p className="timeline-transcript">{item.transcript_text}</p>
               </div>

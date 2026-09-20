@@ -40,6 +40,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 # from source and so would make cmake a hard build dependency for the whole
 # workspace, CI included. `ort` ships prebuilt binaries.
 transcribe-rs = { version = "0.3", features = ["onnx"] }
+iana-time-zone = "0.1"
 
 [profile.release]
 codegen-units = 1

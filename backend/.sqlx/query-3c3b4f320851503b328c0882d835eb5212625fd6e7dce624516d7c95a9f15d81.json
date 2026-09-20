@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select\n            o.source_event_id,\n            o.text as observation,\n            o.model,\n            cs.transcript as \"transcript?\",\n            cs.occurred_at as \"occurred_at?\",\n            o.created_at\n        from observations o\n        left join capture_search cs on cs.event_id = o.source_event_id\n        where o.entity_id = $1\n        order by coalesce(cs.occurred_at, o.created_at) desc\n        ",
+  "query": "\n        select\n            o.source_event_id,\n            o.text as observation,\n            o.model,\n            o.happened_on,\n            o.happened_at,\n            o.happened_precision,\n            cs.transcript as \"transcript?\",\n            cs.occurred_at as \"occurred_at?\",\n            o.created_at\n        from observations o\n        left join capture_search cs on cs.event_id = o.source_event_id\n        where o.entity_id = $1\n        order by coalesce(cs.occurred_at, o.created_at) desc\n        ",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,39 @@
       },
       {
         "ordinal": 3,
+        "name": "happened_on",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_on"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "happened_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "happened_precision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_precision"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
         "name": "transcript?",
         "type_info": "Text",
         "origin": {
@@ -48,7 +81,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 7,
         "name": "occurred_at?",
         "type_info": "Timestamptz",
         "origin": {
@@ -59,7 +92,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -79,10 +112,13 @@
       false,
       false,
       false,
+      true,
+      true,
+      true,
       false,
       false,
       false
     ]
   },
-  "hash": "307687dd99570144a24e505e9b9ae018126df1d2310c96870e227b8d52928e1b"
+  "hash": "3c3b4f320851503b328c0882d835eb5212625fd6e7dce624516d7c95a9f15d81"
 }

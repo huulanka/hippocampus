@@ -224,7 +224,11 @@ export function CaptureScreen({
                 >
                   <div className="timeline-card-meta">
                     <span className="dim">// {relativeDay(item.occurred_at)}</span>
-                    <span className="dim">{item.similarity.toFixed(2)}</span>
+                    {/* No similarity number. 0.89 is a *good* match here
+                        and reads as a bad one to anyone who has ever seen
+                        a percentage — the same reason the search results
+                        show a rank instead of a score. */}
+                    <span className="dim card-open-hint">[open]</span>
                   </div>
                   <p className="timeline-transcript">{item.transcript_text}</p>
                 </div>

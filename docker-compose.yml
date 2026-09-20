@@ -39,6 +39,7 @@ services:
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       ECHO_MIN_SIMILARITY: ${ECHO_MIN_SIMILARITY:-}
+      HIPPOCAMPUS_TIMEZONE: ${HIPPOCAMPUS_TIMEZONE:-}
     volumes:
       - ./data/models:/data/models
       - ./data/audio:/data/audio

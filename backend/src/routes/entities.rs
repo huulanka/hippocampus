@@ -95,6 +95,9 @@ pub async fn detail(
             o.source_event_id,
             o.text as observation,
             o.model,
+            o.happened_on,
+            o.happened_at,
+            o.happened_precision,
             cs.transcript as "transcript?",
             cs.occurred_at as "occurred_at?",
             o.created_at
@@ -144,6 +147,9 @@ pub async fn detail(
                 occurred_at: m.occurred_at.unwrap_or(m.created_at),
                 observation: m.observation,
                 model: m.model,
+                happened_on: m.happened_on,
+                happened_at: m.happened_at,
+                happened_precision: m.happened_precision,
             })
             .collect(),
         relations: relations

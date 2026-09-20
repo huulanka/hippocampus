@@ -533,12 +533,13 @@ a:hover {
   border-color: var(--hpo-accent);
 }
 /* The "[open]" marker only earns its space on hover; at rest the card is
-   just the words. */
-.timeline-card.clickable .timeline-card-meta > :last-child {
+   just the words. Keyed off its own class rather than :last-child — a
+   card whose meta row holds only a date would otherwise hide the date. */
+.card-open-hint {
   opacity: 0;
   transition: opacity 120ms ease;
 }
-.timeline-card.clickable:hover .timeline-card-meta > :last-child {
+.clickable:hover .card-open-hint {
   opacity: 1;
   color: var(--hpo-accent);
 }
@@ -779,4 +780,15 @@ a:hover {
 }
 .detail-entity-link:hover .entity-name {
   color: var(--hpo-accent);
+}
+
+/* — when an observation is about a moment other than the one it was said in — */
+.when-badge {
+  display: inline-block;
+  border: 1px solid var(--hpo-border);
+  color: var(--hpo-gold);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  margin: 8px 0 0;
+  padding: 2px 8px;
 }

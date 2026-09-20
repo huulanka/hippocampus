@@ -80,6 +80,18 @@ liegt typisch bei 0,01–0,1, die Cosine-Werte von e5 bei 0,7–0,9 — der
 Volltextanteil ist numerisch wirkungslos und es gibt keine brauchbare
 Relevanzschwelle. Durch RRF über zwei getrennte Rangfolgen ersetzen.
 
+### [P1] Zeitbewusstsein in der Extraktion
+**Erledigt** in #24. Der Extraktions-Prompt bekommt Aufnahmezeitpunkt,
+Wochentag und Zeitzone; das Modell löst „morgen" und „nächsten Dienstag"
+gegen diesen Moment auf und gibt `when` plus `when_precision` zurück.
+Gespeichert in `observations.happened_on` / `happened_at` /
+`happened_precision`, angezeigt als Badge an der Beobachtung.
+
+Die Zeitzone kommt vom Gerät (`timezone` im Capture), damit die Antwort
+auch nach einem Flug stimmt; `HIPPOCAMPUS_TIMEZONE` ist nur der Rückfall.
+Offen bleibt, die Zeitangaben auch abfragbar zu machen („was steht diese
+Woche an") — der Index dafür liegt schon.
+
 ### [P1] Entitäts-Lesezugriff und Entitätsseiten
 **Erledigt** in #21. `GET /entities` (nach Häufigkeit sortiert, nach Typ und
 Namen filterbar) und `GET /entities/{id}` mit allen Beobachtungen, den

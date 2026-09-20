@@ -14,7 +14,23 @@ use crate::audio;
 use crate::echo;
 use crate::error::AppError;
 use crate::events;
+use crate::openrouter::SpokenAt;
 use crate::structuring;
+
+/// Resolves which timezone a capture's relative time expressions should be
+/// read in: what the device said, or the server's fallback when the device
+/// said nothing or something unparseable.
+fn timezone_for(state: &AppState, claimed: Option<&str>) -> chrono_tz::Tz {
+    claimed
+        .and_then(|name| match name.parse::<chrono_tz::Tz>() {
+            Ok(tz) => Some(tz),
+            Err(_) => {
+                tracing::warn!(%name, "capture claimed an unknown timezone, using the server's");
+                None
+            }
+        })
+        .unwrap_or(state.timezone)
+}
 
 /// Records a typed or dictated capture. Here the text *is* the original —
 /// nothing derived it — so it is stored as capture content directly, with
@@ -28,6 +44,8 @@ pub async fn create(
         return Err(AppError::bad_request("a capture cannot be empty"));
     }
 
+    let timezone = timezone_for(&state, req.timezone.as_deref());
+
     let stored = events::append(
         &state.pool,
         Uuid::new_v4(),
@@ -36,7 +54,11 @@ pub async fn create(
         // The text itself deliberately does not go into the payload: the
         // event log is never modified, so anything written here could never
         // be redacted later (ADR 0005).
-        &json!({ "origin": "text", "device": req.device }),
+        &json!({
+            "origin": "text",
+            "device": req.device,
+            "timezone": timezone.name(),
+        }),
         &req.device,
     )
     .await?;
@@ -49,7 +71,17 @@ pub async fn create(
     .execute(&state.pool)
     .await?;
 
-    let echo = index_capture(&state, stored.id, stored.occurred_at, transcript).await?;
+    let echo = index_capture(
+        &state,
+        stored.id,
+        stored.occurred_at,
+        transcript,
+        SpokenAt {
+            utc: stored.occurred_at,
+            timezone,
+        },
+    )
+    .await?;
 
     Ok(Json(CaptureAccepted {
         event_id: stored.id,
@@ -76,6 +108,7 @@ pub async fn create_from_audio(
     let mut model = String::new();
     let mut language: Option<String> = None;
     let mut duration_ms: Option<i32> = None;
+    let mut timezone_name: Option<String> = None;
 
     while let Some(field) = multipart.next_field().await? {
         match field.name().unwrap_or_default() {
@@ -99,6 +132,7 @@ pub async fn create_from_audio(
             "model" => model = field.text().await?,
             "language" => language = Some(field.text().await?).filter(|l| !l.is_empty()),
             "duration_ms" => duration_ms = field.text().await?.parse().ok(),
+            "timezone" => timezone_name = Some(field.text().await?).filter(|t| !t.is_empty()),
             other => tracing::debug!(field = %other, "ignoring unexpected multipart field"),
         }
     }
@@ -121,6 +155,8 @@ pub async fn create_from_audio(
         device = "unknown".to_string();
     }
 
+    let timezone = timezone_for(&state, timezone_name.as_deref());
+
     // Written to disk before any row references it, so a failure here
     // cannot leave a capture pointing at audio that does not exist.
     let audio_path = audio::store(&state.audio_dir, &bytes, extension).await?;
@@ -136,6 +172,7 @@ pub async fn create_from_audio(
             "audio_path": audio_path,
             "audio_mime": audio_mime,
             "duration_ms": duration_ms,
+            "timezone": timezone.name(),
         }),
         &device,
     )
@@ -188,7 +225,17 @@ pub async fn create_from_audio(
     .execute(&state.pool)
     .await?;
 
-    let echo = index_capture(&state, stored.id, stored.occurred_at, &transcript).await?;
+    let echo = index_capture(
+        &state,
+        stored.id,
+        stored.occurred_at,
+        &transcript,
+        SpokenAt {
+            utc: stored.occurred_at,
+            timezone,
+        },
+    )
+    .await?;
 
     Ok(Json(CaptureAccepted {
         event_id: stored.id,
@@ -204,6 +251,7 @@ async fn index_capture(
     capture_event_id: Uuid,
     occurred_at: chrono::DateTime<chrono::Utc>,
     transcript: &str,
+    spoken_at: SpokenAt,
 ) -> Result<Vec<EchoItem>, AppError> {
     let embedding: pgvector::Vector = state.embedder.embed_passage(transcript).await?.into();
 
@@ -229,6 +277,7 @@ async fn index_capture(
         state.openrouter.clone(),
         capture_event_id,
         transcript.to_string(),
+        spoken_at,
     ));
 
     // Echo, by contrast, is computed inline: it is the one thing the user
@@ -453,7 +502,10 @@ pub async fn detail(
 
     let entities = sqlx::query!(
         r#"
-        select en.id, en.entity_type, en.name, o.text as observation, o.model, o.confidence
+        select
+            en.id, en.entity_type, en.name,
+            o.text as observation, o.model, o.confidence,
+            o.happened_on, o.happened_at, o.happened_precision
         from observations o
         join entities en on en.id = o.entity_id
         where o.source_event_id = $1
@@ -546,6 +598,9 @@ pub async fn detail(
                 observation: e.observation,
                 model: e.model,
                 confidence: e.confidence,
+                happened_on: e.happened_on,
+                happened_at: e.happened_at,
+                happened_precision: e.happened_precision,
             })
             .collect(),
         relations: relations
@@ -596,7 +651,7 @@ pub async fn correct_transcript(
 
     let capture = sqlx::query!(
         r#"
-        select e.occurred_at, cc.redacted_at as "redacted_at?"
+        select e.occurred_at, e.payload, cc.redacted_at as "redacted_at?"
         from events e
         left join capture_content cc on cc.event_id = e.id
         where e.id = $1 and e.event_type = 'capture.recorded'
@@ -673,7 +728,24 @@ pub async fn correct_transcript(
         );
     }
 
-    index_capture(&state, id, capture.occurred_at, &text).await?;
+    // The correction is read in the timezone the capture was *recorded*
+    // in, not the one the correction is typed in: "tomorrow" meant a day
+    // relative to when it was said.
+    let timezone = timezone_for(
+        &state,
+        capture.payload.get("timezone").and_then(|t| t.as_str()),
+    );
+    index_capture(
+        &state,
+        id,
+        capture.occurred_at,
+        &text,
+        SpokenAt {
+            utc: capture.occurred_at,
+            timezone,
+        },
+    )
+    .await?;
 
     Ok(Json(TranscriptVersion {
         event_id: stored.id,

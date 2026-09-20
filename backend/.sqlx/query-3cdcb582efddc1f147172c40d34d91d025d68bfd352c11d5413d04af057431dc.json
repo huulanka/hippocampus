@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into observations\n            (entity_id, source_event_id, text, model, happened_on, happened_at, happened_precision)\n        values ($1, $2, $3, $4, $5, $6, $7)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Date",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3cdcb582efddc1f147172c40d34d91d025d68bfd352c11d5413d04af057431dc"
+}
