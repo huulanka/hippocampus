@@ -234,6 +234,35 @@ a:hover {
   padding: 14px;
   margin-top: 16px;
 }
+.capture-input {
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: vertical;
+  color: var(--hpo-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.capture-input::placeholder {
+  color: var(--hpo-dim);
+}
+.capture-input:disabled {
+  opacity: 0.6;
+}
+.btn.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Echo entries sit inside a panel already, so they drop the card border
+   that free-standing timeline cards carry. */
+.transcript-panel .timeline-card {
+  border: none;
+  border-left: 2px solid var(--hpo-border);
+  padding: 4px 0 4px 12px;
+}
 .transcript-placeholder {
   margin: 8px 0 0;
   font-size: 14px;

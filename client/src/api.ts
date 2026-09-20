@@ -14,6 +14,21 @@ export interface EntitySummary {
   current_summary: string | null;
 }
 
+/// An earlier capture surfaced as an echo. Always the verbatim transcript,
+/// never a summary — see docs/adr/0006.
+export interface EchoItem {
+  capture_event_id: string;
+  transcript_text: string;
+  occurred_at: string;
+  similarity: number;
+}
+
+export interface CaptureAccepted {
+  event_id: string;
+  occurred_at: string;
+  echo: EchoItem[];
+}
+
 export interface SearchResult {
   capture_event_id: string;
   transcript_text: string;
@@ -22,10 +37,22 @@ export interface SearchResult {
   related_entities: EntitySummary[];
 }
 
+export interface EntityTypeCount {
+  entity_type: string;
+  count: number;
+}
+
+export interface SearchOptions {
+  limit?: number;
+  entityType?: string;
+  from?: string;
+  to?: string;
+}
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, init);
   if (!res.ok) {
     throw new Error(`${path} failed: ${res.status} ${res.statusText}`);
   }
@@ -33,10 +60,38 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 export function listCaptures(): Promise<CaptureListItem[]> {
-  return getJson<CaptureListItem[]>("/captures");
+  return request<CaptureListItem[]>("/captures");
 }
 
-export function search(query: string, limit = 20): Promise<SearchResult[]> {
-  const params = new URLSearchParams({ query, limit: String(limit) });
-  return getJson<SearchResult[]>(`/search?${params}`);
+/// Records a capture. The response carries its echoes inline, so the user
+/// sees them without a second round trip.
+export function createCapture(transcriptText: string, device: string): Promise<CaptureAccepted> {
+  return request<CaptureAccepted>("/captures", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      transcript_text: transcriptText,
+      device,
+      audio_ref: null,
+    }),
+  });
+}
+
+export function getEcho(captureEventId: string, minSimilarity?: number): Promise<EchoItem[]> {
+  const params = new URLSearchParams();
+  if (minSimilarity !== undefined) params.set("min_similarity", String(minSimilarity));
+  const query = params.toString();
+  return request<EchoItem[]>(`/captures/${captureEventId}/echo${query ? `?${query}` : ""}`);
+}
+
+export function listEntityTypes(): Promise<EntityTypeCount[]> {
+  return request<EntityTypeCount[]>("/entity-types");
+}
+
+export function search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {
+  const params = new URLSearchParams({ query, limit: String(options.limit ?? 20) });
+  if (options.entityType) params.set("entity_type", options.entityType);
+  if (options.from) params.set("from", options.from);
+  if (options.to) params.set("to", options.to);
+  return request<SearchResult[]>(`/search?${params}`);
 }

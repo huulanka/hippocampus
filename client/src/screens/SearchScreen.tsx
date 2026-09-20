@@ -1,13 +1,26 @@
-import { useState } from "react";
-import { search, type SearchResult } from "../api";
+import { useEffect, useState } from "react";
+import { listEntityTypes, search, type EntityTypeCount, type SearchResult } from "../api";
+
+/// How many type chips to offer. The extraction prompt invents types
+/// freely, so the long tail is large and mostly one-off — showing every
+/// type would bury the handful that are actually useful as filters.
+const MAX_TYPE_CHIPS = 5;
 
 export function SearchScreen() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [types, setTypes] = useState<EntityTypeCount[]>([]);
+  const [activeType, setActiveType] = useState<string | null>(null);
 
-  async function runSearch(q: string) {
+  useEffect(() => {
+    listEntityTypes()
+      .then((all) => setTypes(all.slice(0, MAX_TYPE_CHIPS)))
+      .catch(() => setTypes([]));
+  }, []);
+
+  async function runSearch(q: string, entityType: string | null = activeType) {
     if (!q.trim()) {
       setResults(null);
       return;
@@ -15,12 +28,17 @@ export function SearchScreen() {
     setLoading(true);
     setError(null);
     try {
-      setResults(await search(q));
+      setResults(await search(q, { entityType: entityType ?? undefined }));
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
+  }
+
+  function selectType(entityType: string | null) {
+    setActiveType(entityType);
+    runSearch(query, entityType);
   }
 
   return (
@@ -38,14 +56,22 @@ export function SearchScreen() {
           }}
         />
       </div>
-      {/* Entity-type filtering needs the /search related_entities join
-          (docs/adr backlog) — kept visible so the layout is ready, disabled
-          until that lands. */}
       <div className="search-filters">
-        <span className="filter-chip active">[x] All</span>
-        <span className="filter-chip disabled" title="Coming soon">[ ] People</span>
-        <span className="filter-chip disabled" title="Coming soon">[ ] Places</span>
-        <span className="filter-chip disabled" title="Coming soon">[ ] Topics</span>
+        <span
+          className={`filter-chip${activeType === null ? " active" : ""}`}
+          onClick={() => selectType(null)}
+        >
+          [{activeType === null ? "x" : " "}] All
+        </span>
+        {types.map((t) => (
+          <span
+            key={t.entity_type}
+            className={`filter-chip${activeType === t.entity_type ? " active" : ""}`}
+            onClick={() => selectType(t.entity_type)}
+          >
+            [{activeType === t.entity_type ? "x" : " "}] {t.entity_type}
+          </span>
+        ))}
       </div>
 
       {loading && <p className="dim">Searching…</p>}
@@ -60,6 +86,15 @@ export function SearchScreen() {
               <span className="dim">score {r.score.toFixed(2)}</span>
             </div>
             <p className="timeline-transcript">{r.transcript_text}</p>
+            {r.related_entities.length > 0 && (
+              <div className="timeline-card-actions">
+                {r.related_entities.map((e) => (
+                  <span key={e.id} className="dim">
+                    {e.name} <span className="entity-type-label">{e.entity_type}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>

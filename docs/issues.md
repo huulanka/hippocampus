@@ -123,3 +123,13 @@ mit lokalem Whisper. Setzt Phase 0 voraus.
 ### [P4] Wöchentliche Rückschau
 An den Review-Termin gekoppelt: was diese Woche erfasst wurde, welche
 Themen wiederkehren. Kein täglicher Brief.
+
+---
+
+### [P3] Ergebnis-Cutoff der Suche neu bewerten
+Bei kleinem Korpus liefert der semantische Retriever jeden Capture zurück,
+also erscheint hinter den echten Treffern ein Rauschschwanz („Rasenmäher"
+bei Suche nach „Kardamom"). Die Rangfolge stimmt, nur die Länge nicht.
+Bewusst nicht jetzt gelöst: Ein Schwellwert, der auf 13 Captures kalibriert
+wird, ist Overfitting — bei 500 Captures filtert `CANDIDATE_DEPTH` von
+selbst. Nach Phase 1 an echten Daten neu messen.

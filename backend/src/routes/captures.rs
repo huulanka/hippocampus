@@ -143,3 +143,36 @@ pub async fn echo_for(
 
     Ok(Json(items))
 }
+
+#[derive(serde::Serialize)]
+pub struct EntityTypeCount {
+    pub entity_type: String,
+    pub count: i64,
+}
+
+/// Entity types that actually occur, most common first. Drives the search
+/// filter chips: the type vocabulary is open (the extraction prompt invents
+/// types freely), so the client cannot hard-code a list.
+pub async fn entity_types(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<EntityTypeCount>>, AppError> {
+    let rows = sqlx::query!(
+        r#"
+        select entity_type, count(*) as "count!"
+        from entities
+        group by entity_type
+        order by count(*) desc, entity_type
+        "#
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| EntityTypeCount {
+                entity_type: r.entity_type,
+                count: r.count,
+            })
+            .collect(),
+    ))
+}
