@@ -1,22 +1,16 @@
 # Was geprüft ist — und was nicht
 
-Automatisierte Tests decken das meiste ab, aber nicht alles. Drei Dinge
-lassen sich von einem Agenten grundsätzlich nicht verifizieren: ein
-echtes Mikrofon, eine Berechtigung, die jemand anklickt, und ein Token,
-das Cloudflare erst ausstellt, wenn der Tunnel existiert. Diese Liste
-hält fest, was davon noch offen ist, damit es nicht in PR-Beschreibungen
-versickert.
+Automatisierte Tests decken das meiste ab, aber nicht alles. Manches
+lässt sich von einem Agenten grundsätzlich nicht verifizieren: ein Token,
+das Cloudflare erst ausstellt, wenn der Tunnel existiert, ein Shortcut,
+der aus einer fremden App heraus greifen muss, und alles, was sich erst
+im fertigen Fenster zeigt. Diese Liste hält fest, was davon offen ist,
+damit es nicht in PR-Beschreibungen versickert.
+
+Das Mikrofon stand lange hier und steht jetzt in der Tabelle darunter —
+der Nutzer hat es am 21.09.2026 selbst geprüft.
 
 ## Offen — braucht einen Menschen
-
-### Die Sprachaufnahme am echten Mikrofon
-Aufnehmen, sprechen, „Done" drücken. Erwartet: Transkript erscheint,
-darunter das Echo. Ungeprüft ist genau das Stück zwischen Mikrofon und
-Samples — alles davor und danach hat Tests, und der ASR-Pfad selbst ist
-vorab isoliert gemessen worden (0,7 s Modellladen, 0,25 s für 5,7 s
-deutsche Sprache).
-
-Beim ersten Mal fragt macOS nach der Mikrofon-Berechtigung.
 
 ### Der aufgezeichnete Shortcut
 In den Einstellungen `[ Change ]` drücken, eine Kombination tippen,
@@ -29,11 +23,27 @@ Die Signaturprüfung ist gegen selbst erzeugte Schlüsselpaare getestet
 Ungeprüft ist, ob ein von Cloudflare tatsächlich ausgestelltes Token
 durchgeht — das geht erst, wenn der Tunnel steht.
 
+### Die Korrektur am eigenen Text
+`[ fix a word ]` in der Detailansicht, Text ändern, speichern. Erwartet:
+die neue Fassung steht überall (Timeline, Suche, Entitäten), die alte
+darunter unter `[ HOW THE WORDS CHANGED ]`. Gegen die Entwicklungs-
+datenbank durchgespielt, aber nicht von einem Menschen in der App.
+
+### Die Audiowiedergabe in der echten App
+Der Player ist im Browser gegen den laufenden Dienst geprüft, nicht im
+Tauri-Webview.
+
 ## Geprüft — und wie
 
 | Was | Wie |
 | --- | --- |
-| Echo-Schwelle | An echten Captures gemessen: Rauschgrenze 0,877, echte Treffer ab 0,905. Schwelle 0,89. |
+| Die Sprachaufnahme am echten Mikrofon | Vom Nutzer am 21.09.2026 bestätigt: Dialog kam, Sprache wurde transkribiert. |
+| Echo-Schwelle (Kosinus) | An echten Captures gemessen: Rauschgrenze 0,877, echte Treffer ab 0,905. Schwelle 0,89 — gilt nur noch ohne Reranker. |
+| Echo-Schwelle (Cross-Encoder) | Über alle 38 Captures kalibriert. *Sauna ↔ Sauna* +0,02, *Sauna ↔ Aufguss* −2,03, *cardamom buns ↔ Sauna* −2,15. Schwelle −2,0 dazwischen; der Abstand ist mit 0,12 schmal. |
+| Reranker-Latenz | Zehn Kandidaten: Jina 178 ms, BGE 605 ms (`examples/rerank_latency.rs`). |
+| Zeitauflösung | Notiz um 00:24 Berlin: „morgen Abend um halb acht" → 2026‑09‑22 17:30 UTC, „nächsten Dienstag" → 2026‑09‑29. Beide richtig, inklusive der Feinheit, dass morgen schon Dienstag ist. |
+| Korrektur-Kette | Typ-Capture zweimal korrigiert: Versionen `you, typed` → `you, corrected` → `you, corrected`, Entitäten neu abgeleitet, `structuring.invalidated` geschrieben. |
+| Entitätsseiten | „Lena" führt drei Captures von verschiedenen Tagen und fünf Kanten auf einer Seite zusammen. |
 | Hybride Suche (RRF) | „HPortal" steht bei zwei Retrievern vorn (0,0328) vor Einzeltreffern (0,0161). |
 | Audio-Upload und -Ablage | Inhaltsadressiert, Dedup, Größenlimit, Formatprüfung — Unit-Tests plus curl gegen den laufenden Dienst. |
 | Fehlerantworten | 400 bei leerem Capture, falschem MIME-Typ, fehlendem Transkript; 404 bei unbekannter Capture. |
@@ -46,7 +56,13 @@ durchgeht — das geht erst, wenn der Tunnel steht.
 
 - In der Entwicklungsdatenbank liegen ein paar Test-Captures von mir
   („Hotkey-Test…", „Rasenmäher…"). Redaction ist noch nicht gebaut, sie
-  lassen sich also derzeit nicht entfernen.
+  lassen sich also derzeit nicht entfernen. Spätere Test-Captures sind
+  aus den Projektionen entfernt (Timeline, Suche, Entitäten sehen sie
+  nicht mehr); ihre Events stehen aus demselben Grund weiterhin im Log.
+- Die Beobachtungen aus der Zeit vor #24 haben kein aufgelöstes Datum.
+  Sie bekommen eins erst, wenn die Re-Derivation gebaut ist oder das
+  jeweilige Capture korrigiert wird — der Abschnitt „you said this was
+  coming" füllt sich also erst mit neuen Notizen.
 - Dependabot meldet `glib` 0.18.5 (unsound `Iterator`-Implementierung).
   Kommt über GTK aus Tauris Linux-Webview-Stack, wird auf macOS nicht
   kompiliert, und Tauri 2.11 lässt sich nicht auf `glib` 0.20 heben.
