@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::error::AppError;
 use crate::events;
+use crate::structuring;
 
 /// Accepts a raw capture and appends it to the event log, unmodified and
 /// forever. This is the only place original knowledge enters the system.
@@ -49,6 +50,15 @@ pub async fn create(
     )
     .execute(&state.pool)
     .await?;
+
+    // Structuring is best-effort and never blocks or fails the capture
+    // itself — the raw event above is already safely stored.
+    tokio::spawn(structuring::structure_capture_in_background(
+        state.pool.clone(),
+        state.openrouter.clone(),
+        stored.id,
+        req.transcript_text.clone(),
+    ));
 
     Ok(Json(CaptureAccepted {
         event_id: stored.id,

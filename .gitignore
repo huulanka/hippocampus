@@ -3,6 +3,11 @@
 # Local dev Postgres data
 /data/
 
+# HuggingFace/fastembed model cache — should always be redirected via
+# MODEL_CACHE_DIR into /data/, but ignore it everywhere as a safety net.
+models--*/
+.fastembed_cache/
+
 # Node / frontend
 node_modules/
 client/dist/
