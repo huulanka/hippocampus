@@ -1,4 +1,5 @@
 mod audio;
+mod auth;
 mod config;
 mod echo;
 mod embedding;
@@ -10,6 +11,7 @@ mod structuring;
 
 use std::sync::Arc;
 
+use axum::http::{HeaderValue, Method, header};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -72,14 +74,63 @@ async fn main() -> anyhow::Result<()> {
         audio_dir: config.audio_dir.clone().into(),
     };
 
-    let app = routes::router()
+    let protected = routes::router().with_state(state.clone());
+    let protected = match config.cf_access_aud.clone() {
+        Some(aud) => {
+            let team = config
+                .cf_access_team_domain
+                .clone()
+                .expect("config rejects an aud without a team domain");
+            tracing::info!(team = %team, "verifying Cloudflare Access tokens");
+            let verifier = Arc::new(auth::AccessVerifier::new(&team, aud));
+            protected.layer(axum::middleware::from_fn_with_state(
+                verifier,
+                auth::require_access,
+            ))
+        }
+        None => {
+            // Said plainly, because the difference between "local
+            // development" and "exposed with no front door" is one
+            // unset variable and nothing else.
+            tracing::warn!(
+                "CF_ACCESS_AUD not set — every request is trusted. Fine on localhost, \
+                 not fine anywhere reachable."
+            );
+            protected
+        }
+    };
+
+    let app = routes::public_router()
         .with_state(state)
+        .merge(protected)
         .layer(TraceLayer::new_for_http())
-        .layer(CorsLayer::permissive());
+        .layer(cors_layer(&config.cors_allowed_origins)?);
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;
     tracing::info!(addr = %config.bind_addr, "hippocampus backend listening");
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+/// Browser access, restricted to the origins the client actually uses.
+///
+/// Deliberately not `CorsLayer::permissive()`: any page in any tab could
+/// otherwise read every capture through a logged-in browser.
+fn cors_layer(origins: &[String]) -> anyhow::Result<CorsLayer> {
+    let parsed = origins
+        .iter()
+        .map(|origin| {
+            origin
+                .parse::<HeaderValue>()
+                .map_err(|_| anyhow::anyhow!("{origin} is not a usable origin"))
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    tracing::info!(origins = ?origins, "CORS restricted");
+
+    Ok(CorsLayer::new()
+        .allow_origin(parsed)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::CONTENT_TYPE]))
 }

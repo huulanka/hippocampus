@@ -26,6 +26,19 @@ impl AppError {
         }
     }
 
+    /// Rejects a request that did not prove who it is.
+    ///
+    /// The message deliberately says only that, never which part of the
+    /// token was wrong: a caller probing the edge should learn nothing
+    /// about what would have worked.
+    pub fn unauthorized(reason: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            source: anyhow::anyhow!(reason.into()),
+            message: Some("not authorised".to_string()),
+        }
+    }
+
     pub fn not_found(message: impl Into<String>) -> Self {
         let message = message.into();
         Self {

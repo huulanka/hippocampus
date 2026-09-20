@@ -20,7 +20,20 @@ pub struct Config {
     /// Configurable because the right value depends on how the user
     /// actually speaks, and can only be found against real captures.
     pub echo_min_similarity: f32,
+    /// Expected `aud` of the Cloudflare Access token. Unset means access
+    /// verification is switched off, which is how local development runs.
+    pub cf_access_aud: Option<String>,
+    /// Zero Trust team, as a name or a full hostname. Required whenever
+    /// `cf_access_aud` is set — it is where the signing keys come from.
+    pub cf_access_team_domain: Option<String>,
+    /// Origins the browser side is allowed to call from. Never a wildcard:
+    /// this service answers with someone's entire memory.
+    pub cors_allowed_origins: Vec<String>,
 }
+
+/// Where the desktop client calls from: `tauri://localhost` is the packaged
+/// app's origin on macOS, the other is `npm run tauri dev`.
+const DEFAULT_ALLOWED_ORIGINS: &str = "tauri://localhost,http://localhost:1420";
 
 /// Reads an env var, treating both "unset" and "set but empty" as absent —
 /// `.env.example` documents optional keys as blank (`KEY=`), and
@@ -31,7 +44,7 @@ fn env_non_empty(key: &str) -> Option<String> {
 
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
-        Ok(Self {
+        let config = Self {
             database_url: env_non_empty("DATABASE_URL")
                 .ok_or_else(|| anyhow::anyhow!("DATABASE_URL must be set"))?,
             bind_addr: env_non_empty("BIND_ADDR").unwrap_or_else(|| "0.0.0.0:8080".to_string()),
@@ -49,7 +62,31 @@ impl Config {
                 .transpose()
                 .map_err(|err| anyhow::anyhow!("ECHO_MIN_SIMILARITY must be a number: {err}"))?
                 .unwrap_or(crate::echo::DEFAULT_MIN_SIMILARITY),
-        })
+            cf_access_aud: env_non_empty("CF_ACCESS_AUD"),
+            cf_access_team_domain: env_non_empty("CF_ACCESS_TEAM_DOMAIN"),
+            cors_allowed_origins: env_non_empty("CORS_ALLOWED_ORIGINS")
+                .unwrap_or_else(|| DEFAULT_ALLOWED_ORIGINS.to_string())
+                .split(',')
+                .map(|origin| origin.trim().to_string())
+                .filter(|origin| !origin.is_empty())
+                .collect(),
+        };
+
+        // Half-configured access control is the worst of both worlds: it
+        // looks protected and is not. Refuse to start rather than fall
+        // back to letting everything through.
+        if config.cf_access_aud.is_some() && config.cf_access_team_domain.is_none() {
+            anyhow::bail!("CF_ACCESS_AUD is set but CF_ACCESS_TEAM_DOMAIN is not");
+        }
+
+        if config.cors_allowed_origins.iter().any(|o| o == "*") {
+            anyhow::bail!(
+                "CORS_ALLOWED_ORIGINS must name real origins; this service answers with \
+                 everything you have ever said"
+            );
+        }
+
+        Ok(config)
     }
 }
 

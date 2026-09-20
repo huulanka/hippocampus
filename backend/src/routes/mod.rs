@@ -8,9 +8,16 @@ use axum::routing::{get, post};
 use crate::AppState;
 use crate::audio;
 
+/// Reachable without a Cloudflare Access token, because the thing asking
+/// is a health check that has no way to obtain one.
+pub fn public_router() -> Router<AppState> {
+    Router::new().route("/health", get(|| async { "ok" }))
+}
+
+/// Everything that touches what the user has said. Behind access
+/// verification whenever it is configured.
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/health", get(|| async { "ok" }))
         .route("/captures", post(captures::create).get(captures::list))
         .route(
             "/captures/audio",

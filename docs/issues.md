@@ -7,6 +7,8 @@ umsetzbar und überprüfbar ist.
 ---
 
 ### [P0] Cloudflare-Access-JWT im Backend verifizieren
+**Erledigt** in #15. Aktiv, sobald `CF_ACCESS_AUD` gesetzt ist; ohne
+`CF_ACCESS_TEAM_DOMAIN` startet das Backend gar nicht erst.
 `CF_ACCESS_AUD` ist in `.env.example` dokumentiert, wird aber nirgends
 geprüft. Solange das fehlt, wäre das Backend hinter dem Tunnel offen.
 Middleware in `backend/src/`, die das `Cf-Access-Jwt-Assertion`-Header gegen
@@ -14,6 +16,7 @@ die Team-JWKS prüft, mit `aud`-Abgleich. Leeres `CF_ACCESS_AUD` = lokale
 Entwicklung, Prüfung übersprungen (Verhalten loggen).
 
 ### [P0] CORS einschränken
+**Erledigt** in #15, über `CORS_ALLOWED_ORIGINS`. Wildcard wird abgelehnt.
 `CorsLayer::permissive()` in `main.rs:69` durch eine konkrete Origin-Liste
 ersetzen.
 
