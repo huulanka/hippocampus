@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            r.id,\n            r.from_entity_id, ef.name as from_name,\n            r.to_entity_id, et.name as to_name,\n            r.relation_type, r.model\n        from relations r\n        join entities ef on ef.id = r.from_entity_id\n        join entities et on et.id = r.to_entity_id\n        where r.source_event_id = $1\n        order by r.created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "relations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "from_entity_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "relations",
+            "name": "from_entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "from_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "to_entity_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "relations",
+            "name": "to_entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "to_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "relation_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relations",
+            "name": "relation_type"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relations",
+            "name": "model"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c4d648df309d0631e2ffd95afa3b4426430b0d3abf5411260a2c4479efd4bad3"
+}

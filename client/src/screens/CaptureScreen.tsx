@@ -37,10 +37,16 @@ function relativeDay(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-type Saved = { transcript: string; echo: EchoItem[]; spoken: boolean };
+type Saved = { eventId: string; transcript: string; echo: EchoItem[]; spoken: boolean };
 type Phase = "idle" | "recording" | "working";
 
-export function CaptureScreen({ summons = 0 }: { summons?: number }) {
+export function CaptureScreen({
+  summons = 0,
+  onOpenCapture,
+}: {
+  summons?: number;
+  onOpenCapture: (eventId: string) => void;
+}) {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [elapsed, setElapsed] = useState(0);
@@ -106,7 +112,7 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
     setError(null);
     try {
       const accepted = await createCapture(transcript, DEVICE);
-      setSaved({ transcript, echo: accepted.echo, spoken: false });
+      setSaved({ eventId: accepted.event_id, transcript, echo: accepted.echo, spoken: false });
       setText("");
     } catch (err) {
       setError(String(err));
@@ -130,7 +136,12 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
     setPhase("working");
     try {
       const result = await stopRecording();
-      setSaved({ transcript: result.transcript, echo: result.capture.echo, spoken: true });
+      setSaved({
+        eventId: result.capture.event_id,
+        transcript: result.transcript,
+        echo: result.capture.echo,
+        spoken: true,
+      });
       setText("");
     } catch (err) {
       setError(String(err));
@@ -206,7 +217,11 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
             </div>
             <div className="card-stack">
               {saved.echo.map((item) => (
-                <div key={item.capture_event_id} className="timeline-card">
+                <div
+                  key={item.capture_event_id}
+                  className="timeline-card clickable"
+                  onClick={() => onOpenCapture(item.capture_event_id)}
+                >
                   <div className="timeline-card-meta">
                     <span className="dim">// {relativeDay(item.occurred_at)}</span>
                     <span className="dim">{item.similarity.toFixed(2)}</span>
@@ -226,6 +241,9 @@ export function CaptureScreen({ summons = 0 }: { summons?: number }) {
         <div className="capture-actions">
           <span className="btn btn-accent" onClick={startNext}>
             [ Capture Another ]
+          </span>
+          <span className="btn" onClick={() => onOpenCapture(saved.eventId)}>
+            [ See What It Made Of It ]
           </span>
         </div>
       </div>

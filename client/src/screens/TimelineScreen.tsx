@@ -28,8 +28,9 @@ function groupByDay(items: CaptureListItem[]): [string, CaptureListItem[]][] {
 
 // Deleting a raw capture isn't offered here on purpose: original transcripts
 // are append-only by design (see docs/adr/0003) — there's no "delete event"
-// yet, only a possible future redaction event. Export-only for now.
-export function TimelineScreen() {
+// yet, only a possible future redaction event. A card is a way in, not a
+// thing to act on: everything a capture can do lives on its detail page.
+export function TimelineScreen({ onOpenCapture }: { onOpenCapture: (eventId: string) => void }) {
   const [captures, setCaptures] = useState<CaptureListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,16 +51,18 @@ export function TimelineScreen() {
           <h4 className="section-label">{label}</h4>
           <div className="card-stack">
             {items.map((item) => (
-              <div key={item.event_id} className="panel timeline-card">
+              <div
+                key={item.event_id}
+                className="panel timeline-card clickable"
+                onClick={() => onOpenCapture(item.event_id)}
+              >
                 <div className="timeline-card-meta">
                   <span className="dim">
-                    // {timeLabel(item.occurred_at)} · verbatim
+                    // {timeLabel(item.occurred_at)} · {item.origin === "audio" ? "spoken" : "typed"}
                   </span>
+                  <span className="dim">[open]</span>
                 </div>
                 <p className="timeline-transcript">{item.transcript_text}</p>
-                <div className="timeline-card-actions">
-                  <span className="dim link">[Export]</span>
-                </div>
               </div>
             ))}
           </div>

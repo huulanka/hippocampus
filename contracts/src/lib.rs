@@ -48,6 +48,92 @@ pub struct EntitySummary {
     pub current_summary: Option<String>,
 }
 
+/// Everything known about a single capture, gathered for the detail view.
+///
+/// Deliberately includes the derived material (entities, relations, the
+/// event log) alongside the verbatim text: when the structuring gets
+/// something wrong, the only way to see *why* is to see what it produced.
+/// The one thing left out is the embedding — 384 floats tell a human
+/// nothing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureDetail {
+    pub event_id: Uuid,
+    pub occurred_at: DateTime<Utc>,
+    /// "audio" when a recording is the original, "text" when the typed
+    /// words are (ADR 0004).
+    pub origin: String,
+    pub device: String,
+    /// The transcript as it currently reads: the newest correction if one
+    /// exists, otherwise the original. `None` once the content has been
+    /// redacted — the capture's existence and time survive, its words do not.
+    pub text: Option<String>,
+    pub redacted: bool,
+    pub audio: Option<AudioDetail>,
+    /// Every transcript ever produced for this capture, oldest first.
+    /// Usually one; more than one means it was corrected.
+    pub transcripts: Vec<TranscriptVersion>,
+    pub entities: Vec<EntityMention>,
+    pub relations: Vec<RelationMention>,
+    pub echo: Vec<EchoItem>,
+    /// Everything this capture caused, in order — the capture event itself,
+    /// its transcripts, and the entity/relation events derived from it.
+    pub events: Vec<EventRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioDetail {
+    pub mime: String,
+    pub duration_ms: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TranscriptVersion {
+    pub event_id: Uuid,
+    pub text: String,
+    /// The ASR model that produced it, or "user" for a human correction.
+    pub model: String,
+    pub language: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub supersedes: Option<Uuid>,
+}
+
+/// An entity this capture spoke about, with the observation the model drew
+/// from it. The observation, not the entity name, is what makes a wrong
+/// extraction recognisable.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityMention {
+    pub id: Uuid,
+    pub entity_type: String,
+    pub name: String,
+    pub observation: String,
+    pub model: String,
+    pub confidence: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationMention {
+    pub id: Uuid,
+    pub from_entity_id: Uuid,
+    pub from_name: String,
+    pub to_entity_id: Uuid,
+    pub to_name: String,
+    pub relation_type: String,
+    pub model: String,
+}
+
+/// One row of the append-only log, passed through as stored. The payload
+/// stays untyped on purpose: the detail view shows it raw, and inventing a
+/// Rust enum over every event type would need changing every time a new
+/// one is appended.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventRecord {
+    pub id: Uuid,
+    pub event_type: String,
+    pub source: String,
+    pub occurred_at: DateTime<Utc>,
+    pub payload: serde_json::Value,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub capture_event_id: Uuid,
@@ -95,6 +181,25 @@ mod tests {
             serde_json::from_str(r#"{"query": "x", "from": "2026-01-01T00:00:00Z"}"#).unwrap();
         assert!(query.from.is_some());
         assert!(query.to.is_none());
+    }
+
+    /// The detail view's payload passes through untyped, which is the one
+    /// place a serde mistake would not be caught by the compiler.
+    #[test]
+    fn event_record_keeps_its_payload_verbatim() {
+        let record: EventRecord = serde_json::from_str(
+            r#"{
+                "id": "00000000-0000-0000-0000-000000000001",
+                "event_type": "relation.proposed",
+                "source": "gemini",
+                "occurred_at": "2026-01-01T00:00:00Z",
+                "payload": {"relation_type": "arbeitet_in", "nested": {"a": [1, 2]}}
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(record.payload["relation_type"], "arbeitet_in");
+        assert_eq!(record.payload["nested"]["a"][1], 2);
     }
 
     #[test]

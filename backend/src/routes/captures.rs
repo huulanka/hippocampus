@@ -2,7 +2,10 @@ use axum::Json;
 use axum::extract::{Multipart, Path as AxumPath, Query, State};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
-use contracts::{CaptureAccepted, CreateCaptureRequest, EchoItem};
+use contracts::{
+    AudioDetail, CaptureAccepted, CaptureDetail, CreateCaptureRequest, EchoItem, EntityMention,
+    EventRecord, RelationMention, TranscriptVersion,
+};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -368,4 +371,193 @@ pub async fn entity_types(
             })
             .collect(),
     ))
+}
+
+/// Everything known about one capture, in a single round trip.
+///
+/// The detail view is where a wrong extraction becomes visible, so this
+/// returns the derived material next to the verbatim text rather than a
+/// tidied-up summary of it. The embedding is the one thing left out.
+pub async fn detail(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<Uuid>,
+) -> Result<Json<CaptureDetail>, AppError> {
+    let head = sqlx::query!(
+        r#"
+        select
+            e.occurred_at,
+            e.payload,
+            cc.origin as "origin?",
+            cc.text as "text?",
+            cc.audio_mime as "audio_mime?",
+            cc.duration_ms as "duration_ms?",
+            cc.redacted_at as "redacted_at?"
+        from events e
+        left join capture_content cc on cc.event_id = e.id
+        where e.id = $1 and e.event_type = 'capture.recorded'
+        "#,
+        id,
+    )
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let Some(head) = head else {
+        return Err(AppError::not_found("no such capture"));
+    };
+
+    let transcripts = sqlx::query!(
+        r#"
+        select event_id, text, model, language, created_at, supersedes
+        from transcript_content
+        where capture_event_id = $1 and redacted_at is null
+        order by created_at
+        "#,
+        id,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let redacted = head.redacted_at.is_some();
+    // The newest transcript wins; with none, the typed text is the original
+    // and is itself the current reading (ADR 0004).
+    let text = if redacted {
+        None
+    } else {
+        transcripts
+            .last()
+            .map(|t| t.text.clone())
+            .or_else(|| head.text.clone())
+    };
+
+    let entities = sqlx::query!(
+        r#"
+        select en.id, en.entity_type, en.name, o.text as observation, o.model, o.confidence
+        from observations o
+        join entities en on en.id = o.entity_id
+        where o.source_event_id = $1
+        order by o.created_at
+        "#,
+        id,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let relations = sqlx::query!(
+        r#"
+        select
+            r.id,
+            r.from_entity_id, ef.name as from_name,
+            r.to_entity_id, et.name as to_name,
+            r.relation_type, r.model
+        from relations r
+        join entities ef on ef.id = r.from_entity_id
+        join entities et on et.id = r.to_entity_id
+        where r.source_event_id = $1
+        order by r.created_at
+        "#,
+        id,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    // Everything this capture caused: its own stream, the transcripts
+    // pointing at it, and the entity/relation events derived from it.
+    let events = sqlx::query!(
+        r#"
+        select id, event_type, source, occurred_at, payload
+        from events
+        where id = $1
+           -- Later events on the capture's own stream, e.g. a redaction.
+           -- The stream id is not the event id: `events::append` opens a
+           -- fresh stream and Postgres generates the row id separately.
+           or stream_id = (select stream_id from events where id = $1)
+           or payload ->> 'capture_event_id' = $1::text
+           or payload ->> 'source_event_id' = $1::text
+        order by occurred_at, version
+        "#,
+        id,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    let echo = echo::for_capture(
+        &state.pool,
+        id,
+        state.echo_min_similarity,
+        echo::DEFAULT_LIMIT,
+    )
+    .await
+    .unwrap_or_else(|err| {
+        tracing::warn!(?err, %id, "echo lookup failed for detail view");
+        Vec::new()
+    });
+
+    let origin = head.origin.unwrap_or_else(|| "text".to_string());
+    let audio = (origin == "audio" && !redacted).then(|| AudioDetail {
+        mime: head
+            .audio_mime
+            .clone()
+            .unwrap_or_else(|| "audio/wav".to_string()),
+        duration_ms: head.duration_ms,
+    });
+
+    Ok(Json(CaptureDetail {
+        event_id: id,
+        occurred_at: head.occurred_at,
+        origin,
+        device: head
+            .payload
+            .get("device")
+            .and_then(|d| d.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        text,
+        redacted,
+        audio,
+        transcripts: transcripts
+            .into_iter()
+            .map(|t| TranscriptVersion {
+                event_id: t.event_id,
+                text: t.text,
+                model: t.model,
+                language: t.language,
+                created_at: t.created_at,
+                supersedes: t.supersedes,
+            })
+            .collect(),
+        entities: entities
+            .into_iter()
+            .map(|e| EntityMention {
+                id: e.id,
+                entity_type: e.entity_type,
+                name: e.name,
+                observation: e.observation,
+                model: e.model,
+                confidence: e.confidence,
+            })
+            .collect(),
+        relations: relations
+            .into_iter()
+            .map(|r| RelationMention {
+                id: r.id,
+                from_entity_id: r.from_entity_id,
+                from_name: r.from_name,
+                to_entity_id: r.to_entity_id,
+                to_name: r.to_name,
+                relation_type: r.relation_type,
+                model: r.model,
+            })
+            .collect(),
+        echo,
+        events: events
+            .into_iter()
+            .map(|e| EventRecord {
+                id: e.id,
+                event_type: e.event_type,
+                source: e.source,
+                occurred_at: e.occurred_at,
+                payload: e.payload,
+            })
+            .collect(),
+    }))
 }

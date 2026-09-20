@@ -32,6 +32,65 @@ export interface CaptureAccepted {
   echo: EchoItem[];
 }
 
+/// Everything known about one capture. Mirrors `contracts::CaptureDetail`;
+/// the embedding is deliberately not part of it.
+export interface CaptureDetail {
+  event_id: string;
+  occurred_at: string;
+  origin: "audio" | "text";
+  device: string;
+  /// The transcript as it currently reads. `null` once redacted.
+  text: string | null;
+  redacted: boolean;
+  audio: AudioDetail | null;
+  transcripts: TranscriptVersion[];
+  entities: EntityMention[];
+  relations: RelationMention[];
+  echo: EchoItem[];
+  events: EventRecord[];
+}
+
+export interface AudioDetail {
+  mime: string;
+  duration_ms: number | null;
+}
+
+export interface TranscriptVersion {
+  event_id: string;
+  text: string;
+  model: string;
+  language: string | null;
+  created_at: string;
+  supersedes: string | null;
+}
+
+export interface EntityMention {
+  id: string;
+  entity_type: string;
+  name: string;
+  observation: string;
+  model: string;
+  confidence: number | null;
+}
+
+export interface RelationMention {
+  id: string;
+  from_entity_id: string;
+  from_name: string;
+  to_entity_id: string;
+  to_name: string;
+  relation_type: string;
+  model: string;
+}
+
+export interface EventRecord {
+  id: string;
+  event_type: string;
+  source: string;
+  occurred_at: string;
+  payload: unknown;
+}
+
 export interface SearchResult {
   capture_event_id: string;
   transcript_text: string;
@@ -81,6 +140,16 @@ export function getEcho(captureEventId: string, minSimilarity?: number): Promise
   if (minSimilarity !== undefined) params.set("min_similarity", String(minSimilarity));
   const query = params.toString();
   return request<EchoItem[]>(`/captures/${captureEventId}/echo${query ? `?${query}` : ""}`);
+}
+
+export function getCapture(eventId: string): Promise<CaptureDetail> {
+  return request<CaptureDetail>(`/captures/${eventId}`);
+}
+
+/// URL of the original recording. Used as an <audio> source rather than
+/// fetched, so the browser can stream and seek it itself.
+export function audioUrl(eventId: string): string {
+  return `${BASE_URL}/captures/${eventId}/audio`;
 }
 
 export function listEntityTypes(): Promise<EntityTypeCount[]> {

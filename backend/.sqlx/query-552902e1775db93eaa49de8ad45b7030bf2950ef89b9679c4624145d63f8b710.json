@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select id, event_type, source, occurred_at, payload\n        from events\n        where id = $1\n           -- Later events on the capture's own stream, e.g. a redaction.\n           -- The stream id is not the event id: `events::append` opens a\n           -- fresh stream and Postgres generates the row id separately.\n           or stream_id = (select stream_id from events where id = $1)\n           or payload ->> 'capture_event_id' = $1::text\n           or payload ->> 'source_event_id' = $1::text\n        order by occurred_at, version\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "occurred_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "payload",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "payload"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "552902e1775db93eaa49de8ad45b7030bf2950ef89b9679c4624145d63f8b710"
+}

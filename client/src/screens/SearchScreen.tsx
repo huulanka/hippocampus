@@ -6,7 +6,7 @@ import { listEntityTypes, search, type EntityTypeCount, type SearchResult } from
 /// type would bury the handful that are actually useful as filters.
 const MAX_TYPE_CHIPS = 5;
 
-export function SearchScreen() {
+export function SearchScreen({ onOpenCapture }: { onOpenCapture: (eventId: string) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +80,11 @@ export function SearchScreen() {
 
       <div className="card-stack">
         {results?.map((r, index) => (
-          <div key={r.capture_event_id} className="panel timeline-card">
+          <div
+            key={r.capture_event_id}
+            className="panel timeline-card clickable"
+            onClick={() => onOpenCapture(r.capture_event_id)}
+          >
             <div className="timeline-card-meta">
               <span className="dim">// {new Date(r.occurred_at).toLocaleDateString()}</span>
               {/* The rank, not the score. The score is a reciprocal-rank

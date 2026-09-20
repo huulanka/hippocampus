@@ -195,6 +195,11 @@ async fn record_relation(
             "from_entity_id": from_id,
             "to_entity_id": to_id,
             "relation_type": relation_type,
+            // Also on the payload, not only on the projection row: the
+            // capture detail view reads the log by this key, and a
+            // relation that cannot be traced back to the sentence that
+            // proposed it is not reviewable.
+            "source_event_id": source_event_id,
         }),
         model,
     )

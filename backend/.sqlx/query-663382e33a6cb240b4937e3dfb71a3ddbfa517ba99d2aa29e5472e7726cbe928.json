@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select event_id, text, model, language, created_at, supersedes\n        from transcript_content\n        where capture_event_id = $1 and redacted_at is null\n        order by created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transcript_content",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "text",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "transcript_content",
+            "name": "text"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "transcript_content",
+            "name": "model"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "language",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "transcript_content",
+            "name": "language"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "transcript_content",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "supersedes",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "transcript_content",
+            "name": "supersedes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "663382e33a6cb240b4937e3dfb71a3ddbfa517ba99d2aa29e5472e7726cbe928"
+}

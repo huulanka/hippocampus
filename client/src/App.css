@@ -11,6 +11,10 @@
   --hpo-dim: #8a7a68;
   --hpo-input-bg: #14100c;
   --hpo-sidebar-bg: #201810;
+  /* How light a generated entity-type colour is; see entityType.ts. On the
+     dark ground it has to out-glow the panel, on the light one it has to
+     stay legible against paper. */
+  --hpo-entity-lightness: 58%;
 }
 
 :root[data-theme="light"] {
@@ -23,6 +27,7 @@
   --hpo-dim: #7a6a52;
   --hpo-input-bg: #ffffff;
   --hpo-sidebar-bg: #e9ddc4;
+  --hpo-entity-lightness: 40%;
 }
 
 :root {
@@ -131,6 +136,9 @@ a:hover {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 24px;
+  /* Spoken captures run long; across a wide window the eye loses the line
+     on the way back. Roughly 90 monospace characters. */
+  max-width: 860px;
 }
 
 .btn {
@@ -514,4 +522,177 @@ a:hover {
   margin: -14px 0 22px;
   max-width: 62ch;
   line-height: 1.5;
+}
+
+/* — anything that leads somewhere — */
+.clickable {
+  cursor: pointer;
+  transition: border-color 120ms ease;
+}
+.clickable:hover {
+  border-color: var(--hpo-accent);
+}
+/* The "[open]" marker only earns its space on hover; at rest the card is
+   just the words. */
+.timeline-card.clickable .timeline-card-meta > :last-child {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.timeline-card.clickable:hover .timeline-card-meta > :last-child {
+  opacity: 1;
+  color: var(--hpo-accent);
+}
+
+/* — capture detail — */
+.detail {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 18px;
+  font-size: 12px;
+}
+.detail-stamp {
+  text-align: right;
+}
+.detail-panel {
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.detail-transcript {
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 12px 0 0;
+}
+.detail-note {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 12px 0 0;
+  max-width: 60ch;
+}
+/* Column flow, not a grid: observations differ wildly in length, and a
+   grid would align every row to its tallest cell — one four-line
+   observation leaving a hole beside a one-liner. */
+.detail-entities {
+  columns: 2 230px;
+  column-gap: 22px;
+  margin-top: 14px;
+}
+.detail-entity {
+  border-left: 2px solid var(--hpo-border);
+  break-inside: avoid;
+  padding-left: 11px;
+  margin-bottom: 14px;
+}
+.detail-entity-name {
+  margin-bottom: 0;
+  font-size: 13px;
+}
+.detail-observation {
+  color: var(--hpo-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 6px 0 0;
+}
+.detail-relations {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px dashed var(--hpo-border);
+}
+.detail-relation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.detail-relation-type {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.detail-echo {
+  margin: 14px 0 0;
+}
+.detail-version {
+  border-left: 2px solid var(--hpo-border);
+  padding: 2px 0 2px 12px;
+  margin-top: 13px;
+}
+.detail-raw > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.detail-raw > summary::-webkit-details-marker {
+  display: none;
+}
+.detail-raw > summary::before {
+  content: "▸ ";
+  color: var(--hpo-dim);
+}
+.detail-raw[open] > summary::before {
+  content: "▾ ";
+}
+.detail-event {
+  border-left: 2px solid var(--hpo-border);
+  padding-left: 12px;
+  margin-top: 14px;
+}
+.detail-event-type {
+  color: var(--hpo-teal);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+.detail-payload {
+  background: var(--hpo-input-bg);
+  border: 1px solid var(--hpo-border);
+  color: var(--hpo-dim);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 7px 0 0;
+  padding: 10px;
+  /* Wrap rather than scroll: a transcript inside a payload is longer than
+     any sensible panel, and a horizontal scrollbar per event is unusable. */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* — audio playback — */
+.audio-player {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 16px;
+}
+.audio-player-button {
+  color: var(--hpo-accent);
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+.audio-player-track {
+  flex: 1;
+  height: 6px;
+  background: var(--hpo-input-bg);
+  border: 1px solid var(--hpo-border);
+  cursor: pointer;
+}
+.audio-player-fill {
+  height: 100%;
+  background: var(--hpo-accent);
+}
+.audio-player-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.audio-player-note {
+  font-size: 12px;
+  margin-top: 14px;
 }
