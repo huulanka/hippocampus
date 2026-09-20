@@ -233,6 +233,48 @@ pub struct EntityEdge {
     pub source_event_id: Uuid,
 }
 
+/// What the system puts in front of you without being asked.
+///
+/// Everything else in the app answers a question. This answers none: it
+/// is the only surface where knowledge arrives rather than being
+/// retrieved, which is the difference between a memory and an archive.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Resurfaced {
+    /// Things you said were coming, that have not happened yet.
+    pub upcoming: Vec<UpcomingItem>,
+    /// Subjects you keep returning to across separate captures. Ordered
+    /// by when they were last spoken about, so a thread that has gone
+    /// quiet is visible as such.
+    pub threads: Vec<ThreadItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpcomingItem {
+    pub entity_id: Uuid,
+    pub entity_name: String,
+    pub entity_type: String,
+    pub observation: String,
+    pub happened_on: NaiveDate,
+    pub happened_at: Option<DateTime<Utc>>,
+    pub happened_precision: Option<String>,
+    pub capture_event_id: Uuid,
+    /// When you said it — as opposed to when it is about.
+    pub said_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadItem {
+    pub entity_id: Uuid,
+    pub entity_type: String,
+    pub name: String,
+    pub current_summary: Option<String>,
+    /// How many separate captures have touched it. Two is the threshold
+    /// for being a thread at all — one is just a note.
+    pub capture_count: i64,
+    pub first_seen: DateTime<Utc>,
+    pub last_seen: DateTime<Utc>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {
     pub capture_event_id: Uuid,

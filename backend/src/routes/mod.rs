@@ -1,5 +1,6 @@
 pub mod captures;
 pub mod entities;
+pub mod resurface;
 pub mod search;
 
 use axum::Router;
@@ -36,5 +37,6 @@ pub fn router() -> Router<AppState> {
         .route("/entities", get(entities::list))
         .route("/entities/{id}", get(entities::detail))
         .route("/entity-types", get(captures::entity_types))
+        .route("/resurface", get(resurface::resurface))
         .route("/search", get(search::search))
 }

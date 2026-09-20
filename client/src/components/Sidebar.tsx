@@ -24,6 +24,21 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "resurface",
+    label: "Resurface",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 15 15">
+        <path
+          d="M2 9.5 A5.5 5.5 0 1 1 4.2 12.6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+        <polyline points="1.2,6.2 2,9.8 5.4,8.8" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      </svg>
+    ),
+  },
+  {
     id: "timeline",
     label: "Timeline",
     icon: (

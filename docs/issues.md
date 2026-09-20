@@ -80,6 +80,15 @@ liegt typisch bei 0,01–0,1, die Cosine-Werte von e5 bei 0,7–0,9 — der
 Volltextanteil ist numerisch wirkungslos und es gibt keine brauchbare
 Relevanzschwelle. Durch RRF über zwei getrennte Rangfolgen ersetzen.
 
+### [P1] Eine Oberfläche, die von selbst etwas zeigt
+**Erledigt** in #26. `GET /resurface` plus der Screen „Resurface":
+was du angekündigt hast und noch bevorsteht (möglich erst seit der
+Zeitauflösung), und die Themen, die mehr als ein Capture berührt hat.
+
+Bewusst nur zwei Abschnitte. Eine Oberfläche, die alles zeigt, liest
+niemand. Offen bleibt „heute vor einem Jahr" — sinnvoll erst, wenn der
+Bestand alt genug dafür ist.
+
 ### [P1] Echo-Qualität: Cross-Encoder statt nur Embedding
 **Erledigt** in #25. Der Bi-Encoder sucht weiter die Kandidaten (Recall,
 Vektoren liegen schon in der Datenbank), ein Cross-Encoder sortiert die

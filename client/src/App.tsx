@@ -3,6 +3,7 @@ import "./App.css";
 import { ThemeProvider } from "./theme";
 import { Sidebar } from "./components/Sidebar";
 import { CaptureScreen } from "./screens/CaptureScreen";
+import { ResurfaceScreen } from "./screens/ResurfaceScreen";
 import { CaptureDetailScreen } from "./screens/CaptureDetailScreen";
 import { EntityDetailScreen } from "./screens/EntityDetailScreen";
 import { TimelineScreen } from "./screens/TimelineScreen";
@@ -13,7 +14,7 @@ import { ChatScreen } from "./screens/ChatScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { onSummonCapture } from "./desktop";
 
-export type TabId = "capture" | "timeline" | "search" | "entities" | "relations" | "chat" | "settings";
+export type TabId = "capture" | "resurface" | "timeline" | "search" | "entities" | "relations" | "chat" | "settings";
 
 /// A thing being looked at, layered over whichever tab you were on.
 /// Details are not tabs: you always arrive at one *from* somewhere, and
@@ -97,6 +98,8 @@ function Screen({
   switch (tab) {
     case "capture":
       return <CaptureScreen summons={summons} onOpenCapture={onOpenCapture} />;
+    case "resurface":
+      return <ResurfaceScreen onOpenCapture={onOpenCapture} onOpenEntity={onOpenEntity} />;
     case "timeline":
       return <TimelineScreen onOpenCapture={onOpenCapture} />;
     case "search":

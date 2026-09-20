@@ -147,6 +147,34 @@ export interface EntityEdge {
   source_event_id: string;
 }
 
+export interface Resurfaced {
+  upcoming: UpcomingItem[];
+  threads: ThreadItem[];
+}
+
+export interface UpcomingItem {
+  entity_id: string;
+  entity_name: string;
+  entity_type: string;
+  observation: string;
+  happened_on: string;
+  happened_at: string | null;
+  happened_precision: string | null;
+  capture_event_id: string;
+  /// When you said it — as opposed to when it is about.
+  said_at: string;
+}
+
+export interface ThreadItem {
+  entity_id: string;
+  entity_type: string;
+  name: string;
+  current_summary: string | null;
+  capture_count: number;
+  first_seen: string;
+  last_seen: string;
+}
+
 export interface SearchResult {
   capture_event_id: string;
   transcript_text: string;
@@ -236,6 +264,11 @@ export function listEntities(options: { entityType?: string; name?: string } = {
 
 export function getEntity(id: string): Promise<EntityDetail> {
   return request<EntityDetail>(`/entities/${id}`);
+}
+
+/// What the system has to say without being asked.
+export function getResurfaced(): Promise<Resurfaced> {
+  return request<Resurfaced>("/resurface");
 }
 
 export function listEntityTypes(): Promise<EntityTypeCount[]> {

@@ -792,3 +792,60 @@ a:hover {
   margin: 8px 0 0;
   padding: 2px 8px;
 }
+
+/* — resurface — */
+.upcoming {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+.upcoming-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.upcoming-when {
+  flex: none;
+  margin: 0;
+  min-width: 170px;
+  text-align: center;
+}
+.upcoming-body {
+  flex: 1;
+  min-width: 0;
+}
+.upcoming-observation {
+  margin: 0;
+  color: var(--hpo-text);
+  font-size: 13.5px;
+}
+.upcoming-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--hpo-muted);
+}
+.threads {
+  columns: 2 240px;
+}
+.thread-meta {
+  margin: 6px 0 0;
+}
+.thread-summary {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+@media (max-width: 620px) {
+  .upcoming-row {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .upcoming-when {
+    min-width: 0;
+    text-align: left;
+  }
+}
