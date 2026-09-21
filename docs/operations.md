@@ -103,3 +103,32 @@ erreichbar ist:
 `AUDIO_DIR` zeigt im Container auf ein gemountetes Volume. Ohne dieses
 Volume landete das Archiv der Originale im Container-Dateisystem und
 wäre beim nächsten `docker compose up --force-recreate` weg.
+
+## Deployment auf der NAS
+
+`backend/Dockerfile` baut das Image; `docker-compose.yml`s Build-Context
+ist bewusst das Repository-Root und nicht `backend/`, weil `backend` ein
+Workspace-Mitglied ist und die Root-`Cargo.toml`/`Cargo.lock` sowie die
+`contracts`-Crate daneben zum Bauen braucht (siehe
+[ADR 0007](adr/0007-separate-client-workspace.md) für die verwandte
+Begründung, warum der Client umgekehrt ein *eigener* Workspace ist).
+
+Getestet: `docker build --platform linux/amd64 -f backend/Dockerfile .`
+vom Repository-Root aus, per QEMU-Emulation auf einem Apple-Silicon-Mac,
+gegen eine laufende Postgres-Instanz — Migrationen, Embedding-Modell,
+Reranker und `/health`/`/version` funktionieren. `fastembed` ist auf
+`ort-download-binaries-rustls-tls` + `hf-hub-rustls-tls` statt der
+native-tls-Standardfeatures gepinnt (sonst fehlt im schlanken Debian-Image
+OpenSSL komplett), und die Runtime-Stage braucht Debian **Trixie**, nicht
+Bookworm — die von `ort` heruntergeladene ONNX-Runtime-Binary verlangt
+glibc/libstdc++-Symbole, die Bookworms glibc 2.36 noch nicht hat.
+
+Für die Synology DS220+ (x86_64) reicht das Image unverändert; ein
+`--platform`-Override ist nur für den lokalen Test auf Apple Silicon
+nötig, auf der NAS selbst baut Docker nativ für die richtige Architektur.
+
+**Noch offen, weil nicht von hier aus planbar:** die Anbindung an den auf
+der NAS bereits laufenden Cloudflare Tunnel (welches Docker-Netzwerk der
+Tunnel-Container nutzt, der Public-Hostname-Eintrag, die Access-Application
+und ein Service Token für die beiden Tauri-Clients) — das passiert live,
+zusammen, beim eigentlichen Deploy.

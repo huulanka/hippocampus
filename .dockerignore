@@ -1,0 +1,15 @@
+# Build context for backend/Dockerfile is the repo root (a workspace
+# member needs its siblings — see docs/adr/0007). Keep everything the
+# backend image does not need out of it.
+/target
+/client
+/data
+/docs
+/scripts
+/.github
+.git
+.env
+.env.*
+!.env.example
+node_modules
+*.log

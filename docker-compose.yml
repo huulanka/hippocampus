@@ -18,7 +18,11 @@ services:
 
   backend:
     build:
-      context: ./backend
+      # Root, not ./backend: `backend` is a workspace member and needs its
+      # siblings (root Cargo.toml/Cargo.lock, the `contracts` path
+      # dependency) to build at all.
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
