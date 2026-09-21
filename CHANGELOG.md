@@ -1,3 +1,15 @@
+# [1.3.0](https://github.com/huulanka/hippocampus/compare/v1.2.3...v1.3.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* the NAS container can configure the echo judge ([#38](https://github.com/huulanka/hippocampus/issues/38)) ([092c643](https://github.com/huulanka/hippocampus/commit/092c643ed06e90d844b45f3d539172b40fe192a3))
+
+
+### Features
+
+* echo is judged once, remembered, and judged off the NAS ([#37](https://github.com/huulanka/hippocampus/issues/37)) ([926c9f9](https://github.com/huulanka/hippocampus/commit/926c9f9b3776a1b2215e925c80547e5260375ce5))
+
 ## [1.2.3](https://github.com/huulanka/hippocampus/compare/v1.2.2...v1.2.3) (2026-09-21)
 
 
