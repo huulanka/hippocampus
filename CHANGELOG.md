@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/huulanka/hippocampus/compare/v1.4.0...v1.5.0) (2026-09-21)
+
+
+### Features
+
+* install it with brew ([#40](https://github.com/huulanka/hippocampus/issues/40)) ([17d3cec](https://github.com/huulanka/hippocampus/commit/17d3cec8d84805ed6ec91082a0a13b8aa332edfc))
+
 # [1.4.0](https://github.com/huulanka/hippocampus/compare/v1.3.0...v1.4.0) (2026-09-21)
 
 
