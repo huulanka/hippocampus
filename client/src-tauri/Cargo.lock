@@ -562,7 +562,7 @@ dependencies = [
 
 [[package]]
 name = "client"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "block2",
@@ -616,7 +616,7 @@ dependencies = [
 
 [[package]]
 name = "contracts"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "chrono",
  "serde",

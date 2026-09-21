@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/huulanka/hippocampus/compare/v1.2.0...v1.2.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* serialize the release job to stop it racing itself ([#34](https://github.com/huulanka/hippocampus/issues/34)) ([9c963f5](https://github.com/huulanka/hippocampus/commit/9c963f545043231353a42fa14f7c3cd6d93cc973)), closes [#30](https://github.com/huulanka/hippocampus/issues/30)
+
 # [1.2.0](https://github.com/huulanka/hippocampus/compare/v1.1.0...v1.2.0) (2026-09-21)
 
 
