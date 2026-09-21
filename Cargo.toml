@@ -6,7 +6,7 @@ resolver = "3"
 members = ["backend", "contracts"]
 
 [workspace.package]
-version = "1.2.2"
+version = "1.2.3"
 edition = "2024"
 
 [profile.release]

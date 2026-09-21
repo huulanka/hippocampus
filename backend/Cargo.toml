@@ -1,6 +1,6 @@
 [package]
 name = "backend"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2024"
 
 [dependencies]
@@ -8,7 +8,7 @@ anyhow = "1.0.104"
 axum = { version = "0.8.9", features = ["multipart"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 chrono-tz = "0.10"
-contracts = { version = "1.2.2", path = "../contracts" }
+contracts = { version = "1.2.3", path = "../contracts" }
 dotenvy = "0.15.7"
 # Pure-Rust inference (no prebuilt ONNX Runtime binary) — see
 # docs/adr/0008-candle-not-onnxruntime.md. The default (non-`mkl`/

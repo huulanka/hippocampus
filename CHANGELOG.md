@@ -1,3 +1,10 @@
+## [1.2.3](https://github.com/huulanka/hippocampus/compare/v1.2.2...v1.2.3) (2026-09-21)
+
+
+### Bug Fixes
+
+* the client reaches a backend behind Cloudflare Access ([#36](https://github.com/huulanka/hippocampus/issues/36)) ([3d3035a](https://github.com/huulanka/hippocampus/commit/3d3035a31281bb4715b04f6c07efbe6ffb538343))
+
 ## [1.2.2](https://github.com/huulanka/hippocampus/compare/v1.2.1...v1.2.2) (2026-09-21)
 
 
