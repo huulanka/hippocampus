@@ -65,6 +65,17 @@ jobs:
     needs: [rust, client, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
+    # Two pushes to main close together used to race here: one release job
+    # would check "is main behind?" before the other's push landed and
+    # proceed anyway, then lose the push itself with "rejected (fetch
+    # first)" once semantic-release/git tried it (seen for real on #31,
+    # merged 3 minutes after #30). cancel-in-progress: false queues the
+    # second run instead of racing it — it starts only once the first has
+    # fully finished, by which point main already has whatever the first
+    # one published.
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
