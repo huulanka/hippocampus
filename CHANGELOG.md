@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/huulanka/hippocampus/compare/v1.2.1...v1.2.2) (2026-09-21)
+
+
+### Bug Fixes
+
+* backend URL and Cloudflare Access checks validate together ([#35](https://github.com/huulanka/hippocampus/issues/35)) ([58a86a5](https://github.com/huulanka/hippocampus/commit/58a86a544a42f3c9d53497b3092c518d7530183c))
+
 ## [1.2.1](https://github.com/huulanka/hippocampus/compare/v1.2.0...v1.2.1) (2026-09-21)
 
 
