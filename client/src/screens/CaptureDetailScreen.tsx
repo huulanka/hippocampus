@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { correctTranscript, getCapture, type CaptureDetail } from "../api";
+import { correctTranscript, getCapture, redactCapture, type CaptureDetail } from "../api";
 import { AudioPlayer } from "../components/AudioPlayer";
 import { useEcho } from "../useEcho";
 import { entityColor } from "../entityType";
@@ -28,6 +28,11 @@ export function CaptureDetailScreen({
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /// Two-step, never a browser confirm(): a modal dialog inside a Tauri
+  /// webview blocks every subsequent event, and this is the one action
+  /// in the app that cannot be undone.
+  const [confirmRedact, setConfirmRedact] = useState(false);
+  const [redacting, setRedacting] = useState(false);
 
   /// A capture recorded before its echo was judged — or one whose
   /// judgement is still running — gets it filled in here rather than
@@ -73,6 +78,25 @@ export function CaptureDetailScreen({
       setSaveError(String(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  /// Takes the words back. Reloads rather than navigating away: the
+  /// capture still exists as a tombstone, and seeing it sit there empty
+  /// is a truer picture of what just happened than the timeline silently
+  /// being one shorter.
+  async function redact() {
+    if (redacting) return;
+    setRedacting(true);
+    setSaveError(null);
+    try {
+      await redactCapture(eventId);
+      await reload();
+      setConfirmRedact(false);
+    } catch (err) {
+      setSaveError(String(err));
+    } finally {
+      setRedacting(false);
     }
   }
 
@@ -140,6 +164,23 @@ export function CaptureDetailScreen({
               <span className="dim link" onClick={() => setDraft(detail.text ?? "")}>
                 [ fix a word ]
               </span>
+              {confirmRedact ? (
+                <>
+                  <span
+                    className={`btn${redacting ? " disabled" : ""}`}
+                    onClick={redacting ? undefined : redact}
+                  >
+                    [ {redacting ? "Taking it back…" : "Yes, take it back"} ]
+                  </span>
+                  <span className="dim link" onClick={() => setConfirmRedact(false)}>
+                    [ keep it ]
+                  </span>
+                </>
+              ) : (
+                <span className="dim link" onClick={() => setConfirmRedact(true)}>
+                  [ take this back ]
+                </span>
+              )}
             </div>
           ) : (
             <div className="detail-actions">
@@ -154,6 +195,15 @@ export function CaptureDetailScreen({
               </span>
             </div>
           ))}
+
+        {confirmRedact && !detail.redacted && (
+          <p className="dim detail-note">
+            This removes the words, the recording, and everything derived from them — and
+            the capture leaves the timeline, search and other captures' echoes. The event
+            that it happened stays. It cannot be undone, and backups made before now still
+            hold the original.
+          </p>
+        )}
 
         {saveError && <p className="dim detail-note">Couldn't save that: {saveError}</p>}
 

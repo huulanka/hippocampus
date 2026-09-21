@@ -346,6 +346,28 @@ export function releaseAudioSource(src: string): void {
   if (src.startsWith("blob:")) URL.revokeObjectURL(src);
 }
 
+/// What a redaction removed. Mirrors `contracts::Redacted`.
+export interface Redacted {
+  event_id: string;
+  redacted_at: string;
+  observations_removed: number;
+  relations_removed: number;
+  entities_removed: number;
+  audio_removed: boolean;
+}
+
+/// Takes a capture's words back.
+///
+/// The event log keeps the fact that something was recorded and when;
+/// everything else — the text, the recording, the entities and relations
+/// derived from it, its place in the search index and in other captures'
+/// echoes — is removed. The capture disappears from the timeline as a
+/// result. This cannot be undone, and older backups still hold the
+/// original.
+export function redactCapture(eventId: string): Promise<Redacted> {
+  return request<Redacted>(`/captures/${eventId}`, { method: "DELETE" });
+}
+
 /// Corrects a capture's text. The correction is appended as a new
 /// transcript; nothing is overwritten, and the original stays readable.
 export function correctTranscript(eventId: string, text: string): Promise<TranscriptVersion> {

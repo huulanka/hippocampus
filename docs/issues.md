@@ -146,9 +146,23 @@ beachten, sonst erweckt er die Lesart eines Satzes wieder, den es nicht
 mehr gibt.
 
 ### [P2] Redaktion mit Tombstone
-`DELETE /captures/{id}` leert Inhalte, entfernt abgeleitete Observations und
-Relations, hängt `capture.redacted` an. UI mit deutlicher Rückfrage und dem
-Hinweis, dass ältere Backups unberührt bleiben.
+**Erledigt.** `DELETE /captures/{id}` leert `capture_content`, setzt
+`redacted_at` auch auf den Transkripten, entfernt abgeleitete Observations
+und Relations samt verwaister Entitäten, löscht die Zeile aus
+`capture_search` und die gespeicherten Echos in beide Richtungen, entfernt
+die Audiodatei von der Platte und hängt `capture.redacted` an.
+
+Der Löschvorgang der `capture_search`-Zeile ist der Punkt, an dem es
+tatsächlich Redaktion wird: bliebe sie stehen, wäre der Wortlaut weiter
+über die Suche auffindbar. Die Folge ist, dass ein redigiertes Capture aus
+Timeline, Suche, Entitätsseiten und fremden Echos verschwindet; über seine
+ID geöffnet zeigt es weiterhin den Grabstein.
+
+Die Oberfläche fragt zweistufig zurück (`[ take this back ]` →
+`[ Yes, take it back ]`) und sagt vorher, was verschwindet und dass
+ältere Backups den Wortlaut weiterhin enthalten. Bewusst kein
+`confirm()`: ein modaler Dialog im Tauri-Webview blockiert alle
+folgenden Events.
 
 ### [P2] Re-Derivation über den gesamten Bestand
 CLI/Endpunkt, das alle Captures neu strukturiert — für Modellwechsel und

@@ -10,6 +10,7 @@ mod openrouter;
 mod reranker;
 mod routes;
 mod structuring;
+mod telemetry;
 
 use std::sync::Arc;
 
@@ -174,7 +175,32 @@ async fn main() -> anyhow::Result<()> {
     let app = routes::public_router()
         .with_state(state)
         .merge(protected)
-        .layer(TraceLayer::new_for_http())
+        // One INFO line per request, with how long it took. The default
+        // `TraceLayer` logs at DEBUG, which meant that in practice this
+        // service recorded nothing about its own behaviour — and the
+        // first operational question asked of it was "why is this slow?".
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(|request: &axum::http::Request<_>| {
+                    tracing::info_span!(
+                        "http",
+                        method = %request.method(),
+                        path = %request.uri().path(),
+                    )
+                })
+                .on_request(())
+                .on_response(
+                    |response: &axum::http::Response<_>,
+                     latency: std::time::Duration,
+                     _: &tracing::Span| {
+                        tracing::info!(
+                            status = response.status().as_u16(),
+                            ms = latency.as_millis(),
+                            "request finished"
+                        );
+                    },
+                ),
+        )
         .layer(cors_layer(&config.cors_allowed_origins)?);
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;
@@ -214,7 +240,10 @@ fn cors_layer(origins: &[String]) -> anyhow::Result<CorsLayer> {
 
     Ok(CorsLayer::new()
         .allow_origin(parsed)
-        .allow_methods([Method::GET, Method::POST])
+        // DELETE for redaction. Only the browser development build is
+        // affected — the desktop client makes its requests in Rust and
+        // never sends a preflight (ADR 0009).
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([
             header::CONTENT_TYPE,
             cf_access_client_id,

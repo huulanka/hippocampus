@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select audio_path, redacted_at from capture_content where event_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "audio_path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_content",
+            "name": "audio_path"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "redacted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_content",
+            "name": "redacted_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "e5123c97f7e52a9fb45eaaa641c9bd6b81eca21dc047b5e1c356574638226c9d"
+}

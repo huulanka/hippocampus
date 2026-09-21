@@ -121,16 +121,28 @@ impl OpenRouterClient {
             "provider": {"zdr": self.zdr},
         });
 
-        let response = self
+        let started = std::time::Instant::now();
+        let response = match self
             .http
             .post("https://openrouter.ai/api/v1/chat/completions")
             .bearer_auth(&self.api_key)
             .json(&body)
             .send()
-            .await?
-            .error_for_status()?
-            .json::<Value>()
-            .await?;
+            .await
+            .and_then(|r| r.error_for_status())
+        {
+            Ok(response) => response.json::<Value>().await?,
+            Err(err) => {
+                crate::telemetry::model_call_failed(
+                    "structuring",
+                    &self.model,
+                    started.elapsed(),
+                    &err,
+                );
+                return Err(err.into());
+            }
+        };
+        crate::telemetry::model_call("structuring", &self.model, &response, started.elapsed());
 
         let content = response["choices"][0]["message"]["content"]
             .as_str()

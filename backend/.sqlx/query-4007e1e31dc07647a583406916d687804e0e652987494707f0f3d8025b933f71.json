@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update capture_content\n        set text = null, audio_path = null, audio_mime = null, redacted_at = now()\n        where event_id = $1\n        returning redacted_at as \"redacted_at!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "redacted_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_content",
+            "name": "redacted_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "4007e1e31dc07647a583406916d687804e0e652987494707f0f3d8025b933f71"
+}

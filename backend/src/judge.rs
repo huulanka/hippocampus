@@ -30,6 +30,7 @@
 
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Instant;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -230,16 +231,41 @@ impl RemoteJudge {
             "provider": {"zdr": self.zdr},
         });
 
+        let started = Instant::now();
         let response = self
             .http
             .post("https://openrouter.ai/api/v1/chat/completions")
             .bearer_auth(&self.api_key)
             .json(&body)
             .send()
-            .await?
-            .error_for_status()?
-            .json::<Value>()
-            .await?;
+            .await
+            .and_then(|r| r.error_for_status());
+
+        let response = match response {
+            Ok(response) => response.json::<Value>().await,
+            Err(err) => {
+                crate::telemetry::model_call_failed(
+                    "echo-judge",
+                    &self.model,
+                    started.elapsed(),
+                    &err,
+                );
+                return Err(err.into());
+            }
+        };
+        let response = match response {
+            Ok(response) => response,
+            Err(err) => {
+                crate::telemetry::model_call_failed(
+                    "echo-judge",
+                    &self.model,
+                    started.elapsed(),
+                    &err,
+                );
+                return Err(err.into());
+            }
+        };
+        crate::telemetry::model_call("echo-judge", &self.model, &response, started.elapsed());
 
         let content = response["choices"][0]["message"]["content"]
             .as_str()

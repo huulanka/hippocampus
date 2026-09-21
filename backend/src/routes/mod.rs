@@ -34,7 +34,10 @@ pub fn router() -> Router<AppState> {
             // exceeds within seconds; the real bound lives in `audio`.
             post(captures::create_from_audio).layer(DefaultBodyLimit::max(audio::MAX_BYTES)),
         )
-        .route("/captures/{id}", get(captures::detail))
+        .route(
+            "/captures/{id}",
+            get(captures::detail).delete(captures::redact),
+        )
         .route(
             "/captures/{id}/transcript",
             post(captures::correct_transcript),

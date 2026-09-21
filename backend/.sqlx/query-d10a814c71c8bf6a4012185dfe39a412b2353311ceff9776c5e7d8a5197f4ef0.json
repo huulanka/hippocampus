@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update transcript_content set text = '', redacted_at = now()\n           where capture_event_id = $1 and redacted_at is null",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d10a814c71c8bf6a4012185dfe39a412b2353311ceff9776c5e7d8a5197f4ef0"
+}

@@ -4,7 +4,8 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use contracts::{
     AudioDetail, CaptureAccepted, CaptureDetail, CorrectTranscriptRequest, CreateCaptureRequest,
-    EchoItem, EchoResponse, EntityMention, EventRecord, RelationMention, TranscriptVersion,
+    EchoItem, EchoResponse, EntityMention, EventRecord, Redacted, RelationMention,
+    TranscriptVersion,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -313,12 +314,14 @@ fn spawn_judging(state: &AppState, capture_event_id: Uuid) {
     let pool = state.pool.clone();
     let judge = state.judge.clone();
     let in_flight = state.judging.clone();
-    let min_similarity = state.echo_min_similarity;
+    let thresholds = echo::Thresholds {
+        min_similarity: state.echo_min_similarity,
+        min_score: state.echo_min_rerank,
+    };
 
     tokio::spawn(async move {
         let result =
-            echo::judge_stored_capture(&pool, judge.as_deref(), capture_event_id, min_similarity)
-                .await;
+            echo::judge_stored_capture(&pool, judge.as_deref(), capture_event_id, thresholds).await;
         if let Err(err) = result {
             tracing::warn!(
                 ?err,
@@ -905,3 +908,181 @@ async fn invalidate_derived(
 
     Ok(())
 }
+
+/// Redacts a capture: the words go, the fact that something was said
+/// stays.
+///
+/// This is the one deletion this system has, and it is deliberately not a
+/// deletion of the event log. ADR 0003 and ADR 0005: the events are the
+/// record of what happened and are never rewritten, so what is removed
+/// here is everything *derived* from the capture plus the content itself.
+/// A `capture.redacted` event is appended saying so, which is what a
+/// future replay has to honour in order not to resurrect words that were
+/// deliberately taken back.
+///
+/// The `capture_search` row goes too. Leaving it would keep the full
+/// transcript in the search index — redaction that leaves the text
+/// findable is not redaction. The consequence is that a redacted capture
+/// disappears from the timeline, from search, from entity pages and from
+/// everyone else's echoes; opening it by id still shows the tombstone.
+///
+/// Older backups are untouched, by definition. The caller is expected to
+/// say so out loud before asking for this.
+pub async fn redact(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<Uuid>,
+) -> Result<Json<Redacted>, AppError> {
+    let content = sqlx::query!(
+        r#"select audio_path, redacted_at from capture_content where event_id = $1"#,
+        id,
+    )
+    .fetch_optional(&state.pool)
+    .await?;
+
+    let Some(content) = content else {
+        return Err(AppError::not_found("no such capture"));
+    };
+    if let Some(redacted_at) = content.redacted_at {
+        // Already gone. Reporting success rather than an error keeps a
+        // double click from looking like a failure — there is nothing
+        // left to do and nothing left to remove.
+        return Ok(Json(Redacted {
+            event_id: id,
+            redacted_at,
+            observations_removed: 0,
+            relations_removed: 0,
+            entities_removed: 0,
+            audio_removed: false,
+        }));
+    }
+
+    let mut tx = state.pool.begin().await?;
+
+    let redacted_at = sqlx::query_scalar!(
+        r#"
+        update capture_content
+        set text = null, audio_path = null, audio_mime = null, redacted_at = now()
+        where event_id = $1
+        returning redacted_at as "redacted_at!"
+        "#,
+        id,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    // `text` is NOT NULL here, so the words are replaced rather than
+    // nulled; every reader already filters on `redacted_at is null`, so
+    // the empty string is never shown to anyone.
+    sqlx::query!(
+        r#"update transcript_content set text = '', redacted_at = now()
+           where capture_event_id = $1 and redacted_at is null"#,
+        id,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query!(r#"delete from capture_search where event_id = $1"#, id)
+        .execute(&mut *tx)
+        .await?;
+
+    // Both directions: this capture's own judged echo, and its place in
+    // anybody else's.
+    sqlx::query!(
+        r#"delete from capture_echo where capture_event_id = $1 or echo_event_id = $1"#,
+        id,
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        r#"delete from capture_echo_judged where capture_event_id = $1"#,
+        id,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let relations_removed = sqlx::query!(r#"delete from relations where source_event_id = $1"#, id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected() as i64;
+
+    let observations_removed =
+        sqlx::query!(r#"delete from observations where source_event_id = $1"#, id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected() as i64;
+
+    // Only entities this capture was the last reason for. One mentioned
+    // anywhere else stays exactly as it was.
+    let orphaned = sqlx::query_scalar!(
+        r#"
+        delete from entities
+        where not exists (select 1 from observations o where o.entity_id = entities.id)
+          and not exists (
+              select 1 from relations r
+              where r.from_entity_id = entities.id or r.to_entity_id = entities.id
+          )
+        returning id
+        "#
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+
+    // After the commit, not inside it: a failed unlink must not roll back
+    // a redaction the database has already recorded. The row no longer
+    // points at the file either way, so the worst case is an orphaned
+    // blob on disk, and the log says which one.
+    let mut audio_removed = false;
+    if let Some(path) = content.audio_path.as_deref() {
+        match audio::resolve(&state.audio_dir, path) {
+            Ok(resolved) => match tokio::fs::remove_file(&resolved).await {
+                Ok(()) => audio_removed = true,
+                Err(err) => tracing::warn!(
+                    ?err, %id, file = %resolved.display(),
+                    "capture redacted but its recording could not be deleted"
+                ),
+            },
+            Err(err) => tracing::warn!(?err, %id, "redacted capture had an unusable audio path"),
+        }
+    }
+
+    events::append(
+        &state.pool,
+        Uuid::new_v4(),
+        1,
+        "capture.redacted",
+        &json!({
+            "capture_event_id": id,
+            "observations_removed": observations_removed,
+            "relations_removed": relations_removed,
+            "entities_removed": orphaned.len(),
+            "audio_removed": audio_removed,
+        }),
+        REDACTION_AUTHOR,
+    )
+    .await?;
+
+    tracing::info!(
+        %id,
+        observations_removed,
+        relations_removed,
+        entities_removed = orphaned.len(),
+        audio_removed,
+        "capture redacted"
+    );
+
+    Ok(Json(Redacted {
+        event_id: id,
+        redacted_at,
+        observations_removed,
+        relations_removed,
+        entities_removed: orphaned.len() as i64,
+        audio_removed,
+    }))
+}
+
+/// Recorded as the source of a redaction event, for the same reason
+/// `CORRECTION_AUTHOR` exists: a deletion a person asked for must be
+/// distinguishable from anything a model did.
+const REDACTION_AUTHOR: &str = "user";

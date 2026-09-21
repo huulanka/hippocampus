@@ -132,3 +132,66 @@ der NAS bereits laufenden Cloudflare Tunnel (welches Docker-Netzwerk der
 Tunnel-Container nutzt, der Public-Hostname-Eintrag, die Access-Application
 und ein Service Token für die beiden Tauri-Clients) — das passiert live,
 zusammen, beim eigentlichen Deploy.
+
+## Was das Backend über sich selbst sagt
+
+Die Logs rollen täglich nach `LOG_DIR` (im Container `/data/logs`, also
+unter `${HIPPOCAMPUS_DATA_DIR}/logs` auf der NAS) und gehen zusätzlich
+nach stdout, wo Portainer sie zeigt. Alles Folgende steht auf `INFO`, es
+braucht also kein `RUST_LOG`.
+
+Drei Zeilentypen sind im Alltag die interessanten.
+
+**Jede Anfrage, mit ihrer Dauer.**
+
+```
+INFO http{method=GET path=/captures/{id}}: request finished status=200 ms=124
+```
+
+Das ist der schnellste Weg zu „ist es das Backend oder die Leitung": die
+Zahl hier ist reine Serverzeit, ohne Tunnel und ohne Netz.
+
+**Jeder Aufruf eines gehosteten Modells.**
+
+```
+INFO model call finished purpose="echo-judge" model="mistralai/mistral-small-2603"
+     provider="Mistral" served_by="mistralai/mistral-small-2603" ms=11840
+     prompt_tokens=612 completion_tokens=88
+```
+
+`purpose` trennt die beiden Aufrufer — `structuring` und `echo-judge` —,
+weil sie verschiedene Modelle aus verschiedenen Gründen benutzen und ihre
+Laufzeiten nichts miteinander zu tun haben. `provider` ist der wichtigste
+Wert, wenn dasselbe Modell mal schnell und mal langsam ist: OpenRouter
+sucht unter ZDR-Routing aus den passenden Anbietern aus, und *welcher es
+war* ist die erste Frage. `served_by` weicht von `model` ab, wenn eine
+Route zurückgefallen ist. Die Token-Zahlen sind die Kostenbasis.
+
+Scheitert ein Aufruf, steht an derselben Stelle `model call failed` mit
+Dauer und Fehler — ein stiller Fehlschlag ist damit ausgeschlossen.
+
+**Jedes fertige Echo-Urteil.**
+
+```
+INFO echo judged and stored capture_event_id=… judged_by=mistralai/mistral-small-2603
+     candidates=5 ms=12310 best=Some(1.0) runner_up=Some(0.0) shown=1
+```
+
+`best` und `runner_up` zusammen sind der eigentliche Qualitätsindikator:
+liegen sie weit auseinander, trennt der Judge sauber; liegen sie dicht
+beieinander und um die Schwelle herum, rät er. Genau das muss die noch
+unkalibrierte Schwelle von 0,5 über die Zeit beantworten. `shown` ist,
+wie viele davon der Nutzer tatsächlich zu sehen bekommt.
+
+Ein paar Griffe, die sich bewährt haben:
+
+```sh
+# Wie lange dauern Urteile, und wer hat sie gefällt?
+grep "echo judged" backend.log
+
+# Nur die langsamen Anfragen
+grep "request finished" backend.log | awk -F'ms=' '$2 > 1000'
+
+# Was kosten die Modellaufrufe an einem Tag?
+grep "model call finished" backend.log | grep -o 'prompt_tokens=[0-9]*'
+```

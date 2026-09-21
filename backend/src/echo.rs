@@ -118,6 +118,21 @@ pub async fn for_embedding(
 /// Every candidate is stored, including ones the threshold would hide, so
 /// that retuning the threshold — or answering a calibration request —
 /// never costs a judgement again.
+/// The two thresholds a judgement is bounded by, carried together so a
+/// caller cannot pass one and forget the other.
+#[derive(Debug, Clone, Copy)]
+pub struct Thresholds {
+    /// Minimum cosine similarity for a capture to become a *candidate*.
+    /// A recall floor, not a quality bar: the judge decides what is
+    /// shown, so this should sit well below `DEFAULT_MIN_SIMILARITY`.
+    pub min_similarity: f32,
+    /// Minimum judge score for a candidate to be shown. Deliberately not
+    /// applied when storing — every candidate is kept with its score —
+    /// so this only decides what a read returns, and what the log says
+    /// the user would have seen.
+    pub min_score: f32,
+}
+
 pub async fn judge_and_store(
     pool: &PgPool,
     judge: Option<&Judge>,
@@ -125,14 +140,15 @@ pub async fn judge_and_store(
     embedding: &pgvector::Vector,
     text: &str,
     before: DateTime<Utc>,
-    min_similarity: f32,
+    thresholds: Thresholds,
 ) -> anyhow::Result<()> {
+    let started = std::time::Instant::now();
     let candidates = for_embedding(
         pool,
         embedding,
         before,
         Some(capture_event_id),
-        min_similarity,
+        thresholds.min_similarity,
         CANDIDATE_LIMIT,
     )
     .await?;
@@ -204,10 +220,23 @@ pub async fn judge_and_store(
 
     tx.commit().await?;
 
+    // The shape of the verdict, not just that there was one. `best` and
+    // `runner_up` together are the evidence for whether the judge is
+    // separating cleanly or guessing near the threshold — which is the
+    // question the 0.5 default still has to answer.
+    let best = scored.first().map(|(score, _)| *score);
+    let runner_up = scored.get(1).map(|(score, _)| *score);
     tracing::info!(
         %capture_event_id,
         judged_by = %judged_by,
         candidates = scored.len(),
+        ms = started.elapsed().as_millis(),
+        best = ?best,
+        runner_up = ?runner_up,
+        shown = scored
+            .iter()
+            .filter(|(score, _)| *score >= thresholds.min_score)
+            .count(),
         "echo judged and stored"
     );
     Ok(())
@@ -299,7 +328,7 @@ pub async fn judge_stored_capture(
     pool: &PgPool,
     judge: Option<&Judge>,
     capture_event_id: Uuid,
-    min_similarity: f32,
+    thresholds: Thresholds,
 ) -> anyhow::Result<()> {
     let target = sqlx::query!(
         r#"select transcript, embedding as "embedding: pgvector::Vector", occurred_at
@@ -325,7 +354,7 @@ pub async fn judge_stored_capture(
         &embedding,
         &target.transcript,
         target.occurred_at,
-        min_similarity,
+        thresholds,
     )
     .await
 }

@@ -63,6 +63,27 @@ pub struct EchoItem {
     pub rerank_score: Option<f32>,
 }
 
+/// What a redaction actually removed.
+///
+/// Returned so the confirmation can say something true rather than a
+/// generic "deleted" — a capture that had no entities derived from it and
+/// a capture that anchored half the graph are very different deletions,
+/// and the person doing it deserves to know which one just happened.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Redacted {
+    pub event_id: Uuid,
+    pub redacted_at: DateTime<Utc>,
+    /// Derived observations that went with it.
+    pub observations_removed: i64,
+    /// Derived relations that went with it.
+    pub relations_removed: i64,
+    /// Entities that existed only because of this capture and are now
+    /// gone too. Entities mentioned elsewhere are untouched.
+    pub entities_removed: i64,
+    /// Whether an original recording was deleted from disk.
+    pub audio_removed: bool,
+}
+
 /// A capture's echo, and whether it is final.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EchoResponse {
