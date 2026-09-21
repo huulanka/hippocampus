@@ -13,6 +13,11 @@ dmg="${2:?path to the built dmg required}"
 
 sha="$(shasum -a 256 "$dmg" | awk '{print $1}')"
 
+# Git does not track empty directories, so on a fresh checkout — which is
+# what the release workflow always has — `Casks/` does not exist until the
+# first cask is written into it.
+mkdir -p Casks
+
 cat > Casks/hippocampus.rb <<CASK
 cask "hippocampus" do
   version "${version}"
