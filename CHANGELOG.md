@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/huulanka/hippocampus/compare/v1.3.0...v1.4.0) (2026-09-21)
+
+
+### Features
+
+* the backend says what it is doing, and a capture can be taken back ([#39](https://github.com/huulanka/hippocampus/issues/39)) ([b42156d](https://github.com/huulanka/hippocampus/commit/b42156d5be4be14dff8f9ff873c22e5efa1b81a5))
+
 # [1.3.0](https://github.com/huulanka/hippocampus/compare/v1.2.3...v1.3.0) (2026-09-21)
 
 
