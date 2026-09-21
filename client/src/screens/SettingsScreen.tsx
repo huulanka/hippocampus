@@ -65,16 +65,32 @@ export function SettingsScreen() {
   /// Only committed once `/health` actually answers — a typo here would
   /// otherwise strand every other screen against a backend that cannot be
   /// reached, including this one.
+  ///
+  /// Checked with whatever Cloudflare Access credentials are currently
+  /// sitting in the other section's fields, saved or not — a backend that
+  /// was already behind Access before this screen ever loaded has no
+  /// working order to save these two independently in otherwise: the
+  /// backend-URL check would always fail Access with no token attached,
+  /// and the token check would always be validated against the wrong
+  /// (previous) backend.
   async function saveBackendUrl() {
     const wanted = backendUrlInput.trim();
     setBackendStatus("checking");
     setBackendError(null);
+
+    const pendingId = cfClientIdInput.trim();
+    const pendingSecret = cfClientSecretInput.trim();
+    const headers: HeadersInit =
+      pendingId && pendingSecret
+        ? { "CF-Access-Client-Id": pendingId, "CF-Access-Client-Secret": pendingSecret }
+        : {};
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
       const res = await fetch(`${wanted || getApiBaseUrl()}/health`, {
         signal: controller.signal,
+        headers,
       });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     } catch (err) {
@@ -117,10 +133,11 @@ export function SettingsScreen() {
 
     setCfStatus("checking");
     setCfError(null);
+    const pendingUrl = backendUrlInput.trim() || getApiBaseUrl();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await fetch(`${getApiBaseUrl()}/health`, {
+      const res = await fetch(`${pendingUrl}/health`, {
         signal: controller.signal,
         headers: { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret },
       });
