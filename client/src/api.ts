@@ -214,19 +214,38 @@ export function setApiBaseUrl(url: string | null | undefined): void {
   baseUrl = url && url.trim() ? url.trim() : DEFAULT_BASE_URL;
 }
 
-/// Loads the persisted backend URL, if the desktop app has one saved, and
-/// applies it before the first request goes out. Call once at startup and
-/// await it before rendering — the browser build and a fresh install both
-/// resolve to `DEFAULT_BASE_URL` either way.
+/// Cloudflare Access Service Token headers, sent on every request once
+/// both are set. `null` unless the backend sits behind Access — a plain
+/// local or LAN backend never needs these, and Access ignores extra
+/// headers it wasn't asked to check.
+let cfAccessClientId: string | null = null;
+let cfAccessClientSecret: string | null = null;
+
+export function setApiAuth(clientId: string | null | undefined, clientSecret: string | null | undefined): void {
+  cfAccessClientId = clientId || null;
+  cfAccessClientSecret = clientSecret || null;
+}
+
+/// Loads the persisted backend URL and Access credentials, if the desktop
+/// app has any saved, and applies them before the first request goes out.
+/// Call once at startup and await it before rendering — the browser build
+/// and a fresh install both resolve to the plain defaults either way.
 export async function initApiBaseUrl(): Promise<void> {
   const settings = await getSettings();
   setApiBaseUrl(settings.backend_url);
+  setApiAuth(settings.cf_access_client_id, settings.cf_access_client_secret);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (cfAccessClientId && cfAccessClientSecret) {
+    headers.set("CF-Access-Client-Id", cfAccessClientId);
+    headers.set("CF-Access-Client-Secret", cfAccessClientSecret);
+  }
+
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}${path}`, init);
+    res = await fetch(`${baseUrl}${path}`, { ...init, headers });
   } catch (err) {
     const message = `${path} failed to reach ${baseUrl}: ${String(err)}`;
     logError(message);
@@ -273,6 +292,14 @@ export function getCapture(eventId: string): Promise<CaptureDetail> {
 
 /// URL of the original recording. Used as an <audio> source rather than
 /// fetched, so the browser can stream and seek it itself.
+///
+/// KNOWN GAP once the backend sits behind Cloudflare Access: an <audio>
+/// element's `src` cannot carry the CF-Access-Client-Id/-Secret headers
+/// `request()` attaches, so remote audio playback would get an Access
+/// challenge page instead of the recording. Not fixed here — trades
+/// native streaming/seeking against fetching the whole file as a blob,
+/// worth deciding deliberately rather than silently, once this is
+/// actually reachable from outside localhost.
 export function audioUrl(eventId: string): string {
   return `${baseUrl}/captures/${eventId}/audio`;
 }

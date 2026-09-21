@@ -92,6 +92,7 @@ pub fn run() {
             settings::get_settings,
             settings::set_capture_shortcut,
             settings::set_backend_url,
+            settings::set_cf_access_credentials,
         ])
         .setup(|app| {
             // Settings are loaded before the shortcut is registered, and

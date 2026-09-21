@@ -139,12 +139,22 @@ export interface Settings {
   /// `null` means the built-in default (`http://localhost:8080`), not
   /// "no backend" — mirrors `settings::Settings::backend_url` in Rust.
   backend_url: string | null;
+  /// Cloudflare Access Service Token — always both or neither, see
+  /// `settings::set_cf_access_credentials` in Rust.
+  cf_access_client_id: string | null;
+  cf_access_client_secret: string | null;
 }
 
 /// Reads the persisted settings. In the browser there are none, so the
 /// defaults come back instead of an error.
 export async function getSettings(): Promise<Settings> {
-  if (!isTauri()) return { capture_shortcut: DEFAULT_CAPTURE_SHORTCUT, backend_url: null };
+  if (!isTauri())
+    return {
+      capture_shortcut: DEFAULT_CAPTURE_SHORTCUT,
+      backend_url: null,
+      cf_access_client_id: null,
+      cf_access_client_secret: null,
+    };
   return await invoke<Settings>("get_settings");
 }
 
@@ -161,6 +171,19 @@ export function setCaptureShortcut(accelerator: string): Promise<Settings> {
 /// `setApiBaseUrl` after this resolves, once they trust the value.
 export function setBackendUrl(url: string | null): Promise<Settings> {
   return invoke<Settings>("set_backend_url", { url });
+}
+
+/// Persists the Cloudflare Access Service Token. Pass `null` for either
+/// value to clear both. Same "caller applies it" pattern as
+/// `setBackendUrl` — see `setApiAuth` in `api.ts`.
+export function setCfAccessCredentials(
+  clientId: string | null,
+  clientSecret: string | null,
+): Promise<Settings> {
+  return invoke<Settings>("set_cf_access_credentials", {
+    clientId,
+    clientSecret,
+  });
 }
 
 const MODIFIER_SYMBOLS: Record<string, string> = {

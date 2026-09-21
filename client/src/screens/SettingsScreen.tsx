@@ -11,9 +11,10 @@ import {
   runningInDesktopApp,
   setBackendUrl,
   setCaptureShortcut,
+  setCfAccessCredentials,
   speechAvailable,
 } from "../desktop";
-import { getApiBaseUrl, getBackendVersion, setApiBaseUrl } from "../api";
+import { getApiBaseUrl, getBackendVersion, setApiAuth, setApiBaseUrl } from "../api";
 
 const GITHUB_URL = "https://github.com/huulanka/hippocampus";
 
@@ -42,10 +43,17 @@ export function SettingsScreen() {
   const [clientVersion, setClientVersion] = useState<string | null>(null);
   const [backendVersion, setBackendVersion] = useState<string | null>(null);
 
+  const [cfClientIdInput, setCfClientIdInput] = useState("");
+  const [cfClientSecretInput, setCfClientSecretInput] = useState("");
+  const [cfStatus, setCfStatus] = useState<"idle" | "checking" | "saved" | "error">("idle");
+  const [cfError, setCfError] = useState<string | null>(null);
+
   useEffect(() => {
     getSettings().then((settings) => {
       setShortcut(settings.capture_shortcut);
       setBackendUrlInput(settings.backend_url ?? getApiBaseUrl());
+      setCfClientIdInput(settings.cf_access_client_id ?? "");
+      setCfClientSecretInput(settings.cf_access_client_secret ?? "");
     });
     speechAvailable().then(setCanSpeak);
     if (runningInDesktopApp()) getVersion().then(setClientVersion);
@@ -85,6 +93,51 @@ export function SettingsScreen() {
     setApiBaseUrl(wanted);
     setBackendUrlInput(getApiBaseUrl());
     setBackendStatus("saved");
+  }
+
+  /// Same "prove it works before committing" shape as `saveBackendUrl`,
+  /// checked with the new credentials actually attached — a wrong secret
+  /// should surface here, not as a mysteriously blocked capture later.
+  async function saveCfAccessCredentials() {
+    const id = cfClientIdInput.trim();
+    const secret = cfClientSecretInput.trim();
+
+    if (!id && !secret) {
+      await setCfAccessCredentials(null, null);
+      setApiAuth(null, null);
+      setCfStatus("saved");
+      setCfError(null);
+      return;
+    }
+    if (!id || !secret) {
+      setCfStatus("error");
+      setCfError("need both Client ID and Client Secret, or neither");
+      return;
+    }
+
+    setCfStatus("checking");
+    setCfError(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/health`, {
+        signal: controller.signal,
+        headers: { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret },
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    } catch (err) {
+      setCfStatus("error");
+      setCfError(
+        err instanceof Error && err.name === "AbortError" ? "no answer within 5s" : String(err),
+      );
+      return;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    await setCfAccessCredentials(id, secret);
+    setApiAuth(id, secret);
+    setCfStatus("saved");
   }
 
   useEffect(() => {
@@ -194,6 +247,44 @@ export function SettingsScreen() {
         {backendStatus === "error" && `Not saved: ${backendError}`}
         {backendStatus === "idle" &&
           "Where captures go. Checked against /health before it is saved, so a typo cannot strand this screen."}
+      </p>
+
+      <h4 className="section-label">CLOUDFLARE ACCESS</h4>
+      <div className="settings-row">
+        <input
+          className="hotkey-display settings-input"
+          type="text"
+          value={cfClientIdInput}
+          placeholder="Client ID"
+          onChange={(e) => {
+            setCfClientIdInput(e.target.value);
+            setCfStatus("idle");
+          }}
+        />
+      </div>
+      <div className="settings-row">
+        <input
+          className="hotkey-display settings-input"
+          type="password"
+          value={cfClientSecretInput}
+          placeholder="Client Secret"
+          onChange={(e) => {
+            setCfClientSecretInput(e.target.value);
+            setCfStatus("idle");
+          }}
+        />
+        <span
+          className="btn"
+          onClick={cfStatus === "checking" ? undefined : saveCfAccessCredentials}
+        >
+          [ {cfStatus === "checking" ? "Checking…" : "Save"} ]
+        </span>
+      </div>
+      <p className="dim settings-note">
+        {cfStatus === "saved" && "Saved."}
+        {cfStatus === "error" && `Not saved: ${cfError}`}
+        {cfStatus === "idle" &&
+          "Only needed once the backend sits behind Cloudflare Access — a Zero Trust Service Token, not your own login. Leave both blank on a local or LAN backend."}
       </p>
 
       <h4 className="section-label">SPEECH RECOGNITION</h4>

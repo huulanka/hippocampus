@@ -3,9 +3,13 @@
 //! Which key summons the capture field, stored as a Tauri accelerator
 //! string ("Super+Shift+KeyH") rather than as a parsed shortcut, because
 //! that is the form both the plugin and a human editing the file by hand
-//! can read. And which backend the client talks to — `None` means the
+//! can read. Which backend the client talks to — `None` means the
 //! built-in default, so a fresh install needs no configuration to work
-//! against a locally-run backend.
+//! against a locally-run backend. And, once that backend sits behind
+//! Cloudflare Access rather than on localhost, the Service Token
+//! credentials that get it past Access without a browser login — plain
+//! JSON on disk, same trust boundary as everything else here: this Mac,
+//! this user.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -29,6 +33,15 @@ pub struct Settings {
     /// field) loading as if the user had never touched this.
     #[serde(default)]
     pub backend_url: Option<String>,
+    /// Cloudflare Access Service Token, sent as `CF-Access-Client-Id` /
+    /// `CF-Access-Client-Secret`. Both or neither — a Service Token is
+    /// only useful as a pair, and the API layer treats one set without
+    /// the other as absent rather than sending a half-authenticated
+    /// request.
+    #[serde(default)]
+    pub cf_access_client_id: Option<String>,
+    #[serde(default)]
+    pub cf_access_client_secret: Option<String>,
 }
 
 impl Default for Settings {
@@ -36,6 +49,8 @@ impl Default for Settings {
         Self {
             capture_shortcut: DEFAULT_CAPTURE_SHORTCUT.to_string(),
             backend_url: None,
+            cf_access_client_id: None,
+            cf_access_client_secret: None,
         }
     }
 }
@@ -178,6 +193,43 @@ pub fn set_backend_url(
     Ok(updated)
 }
 
+/// Sets or clears the Cloudflare Access Service Token. Pass `None` (or an
+/// empty string) for either field to clear both — a stored ID with no
+/// secret, or vice versa, is not a state the client should ever send.
+#[tauri::command]
+pub fn set_cf_access_credentials(
+    state: tauri::State<'_, SettingsState>,
+    client_id: Option<String>,
+    client_secret: Option<String>,
+) -> Result<Settings, String> {
+    let id = client_id
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let secret = client_secret
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let (id, secret) = match (id, secret) {
+        (Some(id), Some(secret)) => (Some(id), Some(secret)),
+        _ => (None, None),
+    };
+
+    let updated = {
+        let mut current = state
+            .current
+            .lock()
+            .map_err(|_| "settings lock poisoned".to_string())?;
+        current.cf_access_client_id = id;
+        current.cf_access_client_secret = secret;
+        current.clone()
+    };
+
+    if let Err(err) = state.persist(&updated) {
+        log::warn!("could not write settings: {err}");
+    }
+
+    Ok(updated)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,6 +303,42 @@ mod tests {
             reloaded.snapshot().backend_url,
             Some("https://hippocampus.example.com".to_string())
         );
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_saved_service_token_survives_a_reload() {
+        let dir = std::env::temp_dir().join("hippocampus-settings-test-cf-access-roundtrip");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+
+        let state = SettingsState::load(path.clone());
+        let mut settings = state.snapshot();
+        settings.cf_access_client_id = Some("abc123.access".to_string());
+        settings.cf_access_client_secret = Some("shh".to_string());
+        state.persist(&settings).unwrap();
+
+        let reloaded = SettingsState::load(path.clone()).snapshot();
+        assert_eq!(
+            reloaded.cf_access_client_id,
+            Some("abc123.access".to_string())
+        );
+        assert_eq!(reloaded.cf_access_client_secret, Some("shh".to_string()));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_settings_file_without_cf_access_fields_loads_as_the_default() {
+        let dir = std::env::temp_dir().join("hippocampus-settings-test-cf-access-absent");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        std::fs::write(&path, br#"{"capture_shortcut":"Super+Shift+KeyH"}"#).unwrap();
+
+        let settings = SettingsState::load(path.clone()).snapshot();
+        assert_eq!(settings.cf_access_client_id, None);
+        assert_eq!(settings.cf_access_client_secret, None);
 
         std::fs::remove_file(&path).ok();
     }
