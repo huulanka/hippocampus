@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/huulanka/hippocampus/compare/v1.0.0...v1.1.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* make the NAS data directory configurable ([#32](https://github.com/huulanka/hippocampus/issues/32)) ([fd61736](https://github.com/huulanka/hippocampus/commit/fd61736a3fe7bc3488afc82ee381208f0b9cd7d8))
+
+
+### Features
+
+* client sends Cloudflare Access Service Token headers ([#31](https://github.com/huulanka/hippocampus/issues/31)) ([5dc2c83](https://github.com/huulanka/hippocampus/commit/5dc2c8377cd3b3f4eb9f8ce34c58cbcd840a6117))
+
 # 1.0.0 (2026-09-21)
 
 
