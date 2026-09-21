@@ -59,7 +59,7 @@ impl Config {
         let reranker = env_non_empty("HIPPOCAMPUS_RERANKER")
             .map(|v| v.parse::<crate::reranker::Choice>())
             .transpose()?
-            .unwrap_or(crate::reranker::Choice::Jina);
+            .unwrap_or(crate::reranker::Choice::Bge);
 
         let config = Self {
             database_url: env_non_empty("DATABASE_URL")

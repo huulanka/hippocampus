@@ -119,13 +119,17 @@ each candidate **together** and decides which survive — a bi-encoder cannot,
 because it compares two vectors that have never met, and measurably ranked
 *cardamom buns* above *finnischer Aufguss* for a note about a sauna.
 
-The default reranker is `jina-reranker-v2-base-multilingual`: 178 ms for ten
-candidates, against 605 ms for `bge-reranker-v2-m3`. Echo runs inline, right
-after a capture, so the cheaper of two correct models wins. Set
+Both models run locally via [`candle`](https://github.com/huggingface/candle)
+(pure Rust, no prebuilt ONNX Runtime binary — see
+[`docs/adr/0008-candle-not-onnxruntime.md`](docs/adr/0008-candle-not-onnxruntime.md)
+for why that matters on a NAS). The reranker is `bge-reranker-v2-m3`:
+~1.3-1.5s for ten candidates on an M-series Mac. Echo runs inline, right
+after a capture, so that latency is felt — worth it over the alternative,
+which was a reranker that could not run on the target hardware at all. Set
 `HIPPOCAMPUS_RERANKER=off` to fall back to similarity alone.
 
 The model files are downloaded on first start into `MODEL_CACHE_DIR`
-(1.1 GB for the default reranker, on top of the 465 MB embedding model).
+(2.1 GB for the reranker, on top of the 465 MB embedding model).
 
 Run `cargo sqlx prepare` (from `backend/`, with `DATABASE_URL` set and
 migrations applied) after changing any `sqlx::query!` call, and commit the

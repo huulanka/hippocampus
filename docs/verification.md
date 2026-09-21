@@ -33,14 +33,27 @@ datenbank durchgespielt, aber nicht von einem Menschen in der App.
 Der Player ist im Browser gegen den laufenden Dienst geprüft, nicht im
 Tauri-Webview.
 
+### Der Wechsel auf candle, tatsächlich auf der Zielhardware
+`ort`s vorgebaute ONNX-Runtime-Binary hat auf der Synology DS220+ (Celeron
+J4025, kein AVX2) mit SIGILL abgestürzt, noch bevor die erste Log-Zeile
+geschrieben wurde. Der Umstieg auf `candle` (ADR 0008) ist lokal gebaut,
+getestet und gegen echte Captures verifiziert — auch per
+`docker build --platform linux/amd64`, das den Container-Build bestätigt.
+Was das lokale Docker-Build auf einem Apple-Silicon-Mac **nicht** prüfen
+kann: ob SIGILL auf der echten NAS-Hardware tatsächlich weg ist, weil die
+QEMU-Emulation dort nicht dieselben (fehlenden) CPU-Features nachbildet.
+Das entscheidet sich erst beim echten Redeploy auf der NAS.
+
 ## Geprüft — und wie
 
 | Was | Wie |
 | --- | --- |
 | Die Sprachaufnahme am echten Mikrofon | Vom Nutzer am 21.09.2026 bestätigt: Dialog kam, Sprache wurde transkribiert. |
 | Echo-Schwelle (Kosinus) | An echten Captures gemessen: Rauschgrenze 0,877, echte Treffer ab 0,905. Schwelle 0,89 — gilt nur noch ohne Reranker. |
-| Echo-Schwelle (Cross-Encoder) | Über alle 38 Captures kalibriert. *Sauna ↔ Sauna* +0,02, *Sauna ↔ Aufguss* −2,03, *cardamom buns ↔ Sauna* −2,15. Schwelle −2,0 dazwischen; der Abstand ist mit 0,12 schmal. |
-| Reranker-Latenz | Zehn Kandidaten: Jina 178 ms, BGE 605 ms (`examples/rerank_latency.rs`). |
+| Echo-Schwelle (Cross-Encoder, Jina — abgelöst 21.09.2026) | Über alle 38 Captures kalibriert. *Sauna ↔ Sauna* +0,02, *Sauna ↔ Aufguss* −2,03, *cardamom buns ↔ Sauna* −2,15. Schwelle −2,0 dazwischen; der Abstand ist mit 0,12 schmal. Gilt für ein Modell, das nicht mehr läuft (siehe ADR 0008). |
+| Echo-Schwelle (Cross-Encoder, BGE über candle) | Gegen zwei echte Captures über den laufenden Dienst gemessen: ein echter Treffer +0,193, fünf unpassende Kandidaten −8,37 bis −10,33. Schwelle −4,0 mittig in der Lücke — ein echter Treffer bisher, keine Korpus-Kalibrierung wie bei Jina. |
+| Reranker-Latenz (Jina — abgelöst 21.09.2026) | Zehn Kandidaten: Jina 178 ms, BGE (via `ort`) 605 ms (`examples/rerank_latency.rs`). |
+| Reranker-Latenz (BGE über candle) | Zehn Kandidaten auf diesem Mac: kalt 1,6s, warm 1,3s (`examples/rerank_latency.rs`, nach dem Umstieg auf candle — siehe ADR 0008). Langsamer als die `ort`-Version auf derselben Maschine; noch nicht auf der NAS gemessen. |
 | Zeitauflösung | Notiz um 00:24 Berlin: „morgen Abend um halb acht" → 2026‑09‑22 17:30 UTC, „nächsten Dienstag" → 2026‑09‑29. Beide richtig, inklusive der Feinheit, dass morgen schon Dienstag ist. |
 | Korrektur-Kette | Typ-Capture zweimal korrigiert: Versionen `you, typed` → `you, corrected` → `you, corrected`, Entitäten neu abgeleitet, `structuring.invalidated` geschrieben. |
 | Entitätsseiten | „Lena" führt drei Captures von verschiedenen Tagen und fünf Kanten auf einer Seite zusammen. |

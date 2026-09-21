@@ -18,12 +18,18 @@
 //! | JINARerankerV2BaseMultiligual | -2.156 | -3.513 | **+1.357** |
 //! | BGERerankerV2M3 | -6.529 | -8.338 | **+1.809** |
 //!
-//! Jina is the default rather than BGE because echo runs inline, right
-//! after a capture, and the user is waiting for it. Measured on this
-//! machine (`examples/rerank_latency.rs`), ten candidates:
-//! **Jina 178 ms, BGE 605 ms** — with model files of 1.1 GB and 2.1 GB.
-//! Both order the sentences correctly; only one of them is free enough to
-//! sit in the request path.
+//! **BGE is now the only cross-encoder, not by choice of quality or
+//! speed.** Jina was the default through 2026-09-21 — faster (178 ms vs
+//! BGE's 605 ms for ten candidates, `examples/rerank_latency.rs`), same
+//! order-correctness. It was dropped when the backend moved off `ort`
+//! (ONNX Runtime) onto `candle` (see docs/adr/0008), because
+//! jina-reranker-v2's architecture (custom modeling code, ALiBi-adjacent
+//! attention, `trust_remote_code`) has no candle implementation, while
+//! bge-reranker-v2-m3 is a plain `XLMRobertaForSequenceClassification` —
+//! directly supported. Slower echo, but it runs at all on hardware `ort`
+//! could not touch. Re-measure `examples/rerank_latency.rs` against the
+//! candle implementation before trusting the 605 ms figure going forward;
+//! it was measured against `ort`.
 //!
 //! Retrieval stays with the bi-encoder: it is cheap, it is already in the
 //! database, and recall is the one thing it is good at. The cross-encoder
@@ -34,13 +40,20 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use fastembed::{RerankInitOptions, RerankerModel, TextRerank};
+use candle_core::{DType, Device, Tensor};
+use candle_nn::VarBuilder;
+use candle_transformers::models::xlm_roberta::{
+    Config as XlmRobertaConfig, XLMRobertaForSequenceClassification,
+};
+use hf_hub::api::sync::ApiBuilder;
+use tokenizers::{PaddingParams, PaddingStrategy, Tokenizer};
 use tokio::sync::Mutex;
+
+const BGE_MODEL_ID: &str = "BAAI/bge-reranker-v2-m3";
 
 /// Which cross-encoder to load, or none at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
-    Jina,
     Bge,
     Off,
 }
@@ -50,32 +63,31 @@ impl FromStr for Choice {
 
     fn from_str(raw: &str) -> Result<Self, Self::Err> {
         match raw.trim().to_ascii_lowercase().as_str() {
-            "jina" => Ok(Self::Jina),
             "bge" => Ok(Self::Bge),
             "off" | "none" | "false" => Ok(Self::Off),
-            other => anyhow::bail!("unknown reranker {other}, expected jina, bge or off"),
-        }
-    }
-}
-
-impl Choice {
-    fn model(self) -> Option<RerankerModel> {
-        match self {
-            Self::Jina => Some(RerankerModel::JINARerankerV2BaseMultiligual),
-            Self::Bge => Some(RerankerModel::BGERerankerV2M3),
-            Self::Off => None,
+            "jina" => anyhow::bail!(
+                "jina is no longer available — its architecture has no candle implementation \
+                 (see docs/adr/0008-candle-not-onnxruntime.md); use bge or off"
+            ),
+            other => anyhow::bail!("unknown reranker {other}, expected bge or off"),
         }
     }
 }
 
 /// Score below which an echo is not worth showing.
 ///
-/// Raw logits, not probabilities, and not comparable between the two
-/// models — which is why each carries its own.
+/// Raw logits, not probabilities. Jina's calibration (below) is history —
+/// kept because it is the methodology, not because the number still
+/// applies to anything running today. Jina scored roughly -2 to +0.1 for a
+/// true match; BGE, measured against real captures after the candle
+/// migration, scores on a much wider, more positive scale. The two are
+/// not comparable, which is the whole reason this is a function of
+/// `Choice` rather than one constant.
 ///
-/// The Jina value is calibrated against the real 38-capture corpus, one
-/// echo lookup per capture (`?min_rerank=-99` on the echo endpoint prints
-/// the scores for exactly this purpose). The decisive pairs:
+/// **Jina, retired 2026-09-21** — calibrated against the real 38-capture
+/// corpus, one echo lookup per capture (`?min_rerank=-99` on the echo
+/// endpoint prints the scores for exactly this purpose). The decisive
+/// pairs:
 ///
 /// | pair | score | should show |
 /// | --- | --- | --- |
@@ -85,48 +97,97 @@ impl Choice {
 /// | "heute cardamom buns gemacht" ↔ "Heut Abend war ich in der Sauna" | -2.15 | **no** |
 /// | "finnischer Aufguss" ↔ "Rasenmäher muss zum Service" | -3.23 | no |
 ///
-/// -2.0 sits in the gap, and the gap is where the user's own complaint
+/// -2.0 sat in the gap, and the gap is where the user's own complaint
 /// lived: with cosine similarity, *cardamom buns ↔ sauna* (0.871) outranked
-/// *Aufguss ↔ sauna* (0.849). It no longer does.
+/// *Aufguss ↔ sauna* (0.849). It no longer did.
 ///
-/// The gap is 0.12 wide, which is not much. Some unrelated pairs still
-/// clear -2.0, so the honest claim is that the *ordering* is now
-/// trustworthy and the cut-off is approximately right — not that it is
-/// clean. `ECHO_MIN_RERANK_SCORE` overrides it per deployment and
-/// `?min_rerank=` per request, because the right value will drift as the
-/// corpus grows.
+/// **BGE, measured 2026-09-21** against real captures through the actual
+/// `/captures/{id}/echo?min_rerank=-99` endpoint, post-migration:
 ///
-/// The BGE value is **not** calibrated against real captures; it is scaled
-/// from the four-sentence comparison in `examples/embedding_compare.rs`.
-/// Re-measure before relying on it.
+/// | query | candidate | score | should show |
+/// | --- | --- | --- | --- |
+/// | "Heute war der Go Live des Northwind Abrechnungsprojektes..." | "Go live bei Northwind für das Abrechnungs Projekt war heute..." (same event, same day) | +0.193 | yes |
+/// | same query | "Ich muss morgen für Northwind das Mock Up machen..." (different topic, shares only the client name) | -9.321 | **no** |
+/// | same query | "Ich habe heute an dem Hippocampus Projekt gearbeitet..." (unrelated) | -10.329 | no |
+/// | a note about the weekend | "Go live bei Northwind..." (unrelated) | -8.373 | no |
+/// | same query | "Kardamom-Espresso probiert..." (unrelated) | -9.057 | no |
+/// | same query | "...Hippocampus Projekt gearbeitet..." (unrelated) | -9.412 | no |
+///
+/// One true match so far, not five — this is a start, not the corpus-wide
+/// calibration Jina got. But five false matches now cluster tightly in
+/// -8.4 to -10.3, against the one true match at +0.19: -4.0 sits in the
+/// middle of that gap with room either direction. Re-run this against more
+/// captures — especially more true matches — as they accumulate, the way
+/// -2.0 was tightened for Jina.
+///
+/// (Testing this locally: use `cargo run --release`, not plain `cargo
+/// run`. candle's matmul is compiled unoptimized in debug builds — a
+/// single ten-candidate rerank that takes ~1.3s in release took over
+/// three minutes in debug, indistinguishable from a hang from the
+/// outside. Not a bug; just don't chase it as one again.)
 pub fn default_min_score(choice: Choice) -> f32 {
     match choice {
-        Choice::Jina => -2.0,
-        Choice::Bge => -7.5,
+        Choice::Bge => -4.0,
         Choice::Off => f32::NEG_INFINITY,
     }
 }
 
+struct Loaded {
+    model: XLMRobertaForSequenceClassification,
+    tokenizer: Tokenizer,
+}
+
 #[derive(Clone)]
 pub struct Reranker {
-    model: Arc<Mutex<TextRerank>>,
+    state: Arc<Mutex<Loaded>>,
     choice: Choice,
 }
 
 impl Reranker {
     /// Loads the model, or returns `None` when reranking is switched off.
     pub async fn load(choice: Choice, cache_dir: PathBuf) -> anyhow::Result<Option<Self>> {
-        let Some(model) = choice.model() else {
+        if choice == Choice::Off {
             return Ok(None);
-        };
+        }
 
-        let model = tokio::task::spawn_blocking(move || {
-            TextRerank::try_new(RerankInitOptions::new(model).with_cache_dir(cache_dir))
+        let loaded = tokio::task::spawn_blocking(move || -> anyhow::Result<Loaded> {
+            let api = ApiBuilder::new().with_cache_dir(cache_dir).build()?;
+            let repo = api.model(BGE_MODEL_ID.to_string());
+
+            let config_path = repo.get("config.json")?;
+            let tokenizer_path = repo.get("tokenizer.json")?;
+            let weights_path = repo.get("model.safetensors")?;
+
+            let config: XlmRobertaConfig =
+                serde_json::from_str(&std::fs::read_to_string(config_path)?)?;
+            let mut tokenizer = Tokenizer::from_file(tokenizer_path)
+                .map_err(|err| anyhow::anyhow!("loading tokenizer: {err}"))?;
+            tokenizer
+                .with_padding(Some(PaddingParams {
+                    strategy: PaddingStrategy::BatchLongest,
+                    pad_id: config.pad_token_id,
+                    ..Default::default()
+                }))
+                .with_truncation(None)
+                .map_err(|err| anyhow::anyhow!("configuring tokenizer padding: {err}"))?;
+
+            let device = Device::Cpu;
+            // F32, matching the checkpoint's own `torch_dtype` — unlike
+            // candle's xlm-roberta example, which loads as F16 to halve
+            // memory. Keeping the model's native precision means one
+            // fewer thing to account for while re-deriving the
+            // calibration this reranker still needs.
+            let vb = unsafe {
+                VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)?
+            };
+            let model = XLMRobertaForSequenceClassification::new(1, &config, vb)?;
+
+            Ok(Loaded { model, tokenizer })
         })
         .await??;
 
         Ok(Some(Self {
-            model: Arc::new(Mutex::new(model)),
+            state: Arc::new(Mutex::new(loaded)),
             choice,
         }))
     }
@@ -137,35 +198,52 @@ impl Reranker {
 
     /// Scores every document against the query, returning one score per
     /// document **in the order they were given**.
-    ///
-    /// `fastembed` returns them sorted by score with the original index
-    /// attached; putting them back in input order here keeps the caller
-    /// from having to care, and makes a mis-indexed result impossible to
-    /// paper over.
     pub async fn score(&self, query: &str, documents: Vec<String>) -> anyhow::Result<Vec<f32>> {
         if documents.is_empty() {
             return Ok(Vec::new());
         }
 
-        let model = self.model.clone();
+        let state = self.state.clone();
         let query = query.to_string();
-        let count = documents.len();
 
-        let results = tokio::task::spawn_blocking(move || {
-            let mut model = model.blocking_lock();
-            model.rerank(query, &documents, false, None)
+        tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<f32>> {
+            let state = state.blocking_lock();
+            let device = Device::Cpu;
+
+            let pairs: Vec<(String, String)> = documents
+                .into_iter()
+                .map(|doc| (query.clone(), doc))
+                .collect();
+            let encodings = state
+                .tokenizer
+                .encode_batch(pairs, true)
+                .map_err(|err| anyhow::anyhow!("tokenizing: {err}"))?;
+
+            let input_ids = encodings
+                .iter()
+                .map(|e| Tensor::new(e.get_ids(), &device))
+                .collect::<candle_core::Result<Vec<_>>>()?;
+            let input_ids = Tensor::stack(&input_ids, 0)?;
+
+            let attention_mask = encodings
+                .iter()
+                .map(|e| Tensor::new(e.get_attention_mask(), &device))
+                .collect::<candle_core::Result<Vec<_>>>()?;
+            let attention_mask = Tensor::stack(&attention_mask, 0)?;
+
+            let token_type_ids = input_ids.zeros_like()?;
+
+            // One raw logit per pair — deliberately not passed through
+            // sigmoid, so it stays comparable to the thresholds this
+            // module has always used (see `default_min_score`).
+            let logits = state
+                .model
+                .forward(&input_ids, &attention_mask, &token_type_ids)?
+                .to_dtype(candle_core::DType::F32)?;
+
+            Ok(logits.squeeze(1)?.to_vec1::<f32>()?)
         })
-        .await??;
-
-        let mut scores = vec![f32::NEG_INFINITY; count];
-        for result in results {
-            let slot = scores
-                .get_mut(result.index)
-                .ok_or_else(|| anyhow::anyhow!("reranker returned an out-of-range index"))?;
-            *slot = result.score;
-        }
-
-        Ok(scores)
+        .await?
     }
 }
 
@@ -175,10 +253,15 @@ mod tests {
 
     #[test]
     fn parses_the_names_a_person_would_write() {
-        assert_eq!("jina".parse::<Choice>().unwrap(), Choice::Jina);
         assert_eq!("BGE".parse::<Choice>().unwrap(), Choice::Bge);
         assert_eq!(" off ".parse::<Choice>().unwrap(), Choice::Off);
         assert!("gpt".parse::<Choice>().is_err());
+    }
+
+    #[test]
+    fn jina_is_rejected_with_an_explanation_rather_than_silently_misread() {
+        let err = "jina".parse::<Choice>().unwrap_err().to_string();
+        assert!(err.contains("no longer available"), "{err}");
     }
 
     #[test]

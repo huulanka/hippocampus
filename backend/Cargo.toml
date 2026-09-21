@@ -10,17 +10,18 @@ chrono = { version = "0.4.45", features = ["serde"] }
 chrono-tz = "0.10"
 contracts = { version = "1.1.0", path = "../contracts" }
 dotenvy = "0.15.7"
-# Default features pull in native-tls (both for downloading the ONNX
-# Runtime binary and for Hugging Face model downloads), which drags in
-# openssl-sys — fine on macOS where Homebrew's OpenSSL is already on the
-# path, but the Docker build has no OpenSSL at all and everything else in
-# this crate is deliberately rustls-only. Swap both to their rustls
-# equivalents; `image-models` is kept as-is, it is unrelated to TLS.
-fastembed = { version = "7.0.1", default-features = false, features = [
-    "ort-download-binaries-rustls-tls",
-    "hf-hub-rustls-tls",
-    "image-models",
-] }
+# Pure-Rust inference (no prebuilt ONNX Runtime binary) — see
+# docs/adr/0008-candle-not-onnxruntime.md. The default (non-`mkl`/
+# `accelerate`/`cuda`) CPU backend goes through the `gemm` crate, which
+# does runtime CPU-feature detection rather than assuming AVX2 the way
+# `ort`'s prebuilt binary did.
+candle-core = "0.11.0"
+candle-nn = "0.11.0"
+candle-transformers = "0.11.0"
+# default-features = false: same reasoning as reqwest below — avoid
+# native-tls/openssl-sys, which is entirely absent from the Docker image.
+hf-hub = { version = "0.4", default-features = false, features = ["ureq"] }
+tokenizers = "0.23.2"
 # `rust_crypto` rather than `aws_lc_rs`: no C toolchain in the build, and
 # without one of the two, verification panics at the first request.
 jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }

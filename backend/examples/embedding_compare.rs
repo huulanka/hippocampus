@@ -1,16 +1,23 @@
-//! Compares embedding models against real sentences.
+//! Sanity check for the embedder: confirms the bi-encoder alone still
+//! cannot separate these four sentences correctly, the way `ort`'s
+//! multilingual-e5-small could not either — a regression check that the
+//! candle port behaves like its predecessor, not a new investigation.
 //!
 //! Exists because a threshold tuned on thirteen captures was wrong within
-//! an hour of meeting real ones. Before any model change, run this on
+//! an hour of meeting real ones. Before trusting a model, run this on
 //! sentences whose relatedness you already know, and look at the *order*
 //! rather than the numbers: a model that ranks a wrong pair above a right
 //! one cannot be rescued by a threshold.
 //!
-//!     cargo run --release --example embedding_compare -- small base large
+//!     cargo run --release --example embedding_compare
 
-use fastembed::{
-    EmbeddingModel, RerankInitOptions, RerankerModel, TextEmbedding, TextInitOptions, TextRerank,
-};
+use candle_core::{Device, Tensor};
+use candle_nn::VarBuilder;
+use candle_transformers::models::bert::{BertModel, Config, DTYPE};
+use hf_hub::api::sync::ApiBuilder;
+use tokenizers::{PaddingParams, PaddingStrategy, Tokenizer};
+
+const MODEL_ID: &str = "intfloat/multilingual-e5-small";
 
 /// Four captures from a real evening. The sauna pair is obvious, the
 /// Aufguss belongs with them without sharing a word, and the buns belong
@@ -33,108 +40,72 @@ const EXPECTED_ORDER: &[(&str, usize, usize)] = &[
 ];
 
 fn main() -> anyhow::Result<()> {
-    let wanted: Vec<String> = std::env::args().skip(1).collect();
-    let wanted = if wanted.is_empty() {
-        vec!["small".to_string()]
-    } else {
-        wanted
-    };
-
     let cache = std::env::var("MODEL_CACHE_DIR").unwrap_or_else(|_| "../data/models".to_string());
 
-    for name in &wanted {
-        let model = match name.as_str() {
-            "small" => EmbeddingModel::MultilingualE5Small,
-            "base" => EmbeddingModel::MultilingualE5Base,
-            "large" => EmbeddingModel::MultilingualE5Large,
-            // A different family: trained on paraphrase pairs rather than
-            // query/passage retrieval, which is what an echo actually is.
-            "paraphrase" => EmbeddingModel::ParaphraseMLMpnetBaseV2,
-            "bgem3" => EmbeddingModel::BGEM3,
-            "gemma" => EmbeddingModel::EmbeddingGemma300M,
-            // Cross-encoders read both texts together instead of comparing
-            // two vectors that never met.
-            "rerank-bge" => {
-                rerank(&cache, RerankerModel::BGERerankerV2M3, name)?;
-                continue;
-            }
-            "rerank-jina" => {
-                rerank(&cache, RerankerModel::JINARerankerV2BaseMultiligual, name)?;
-                continue;
-            }
-            other => anyhow::bail!(
-                "unknown model {other}; use small, base, large, paraphrase, bgem3, gemma, \
-                 rerank-bge or rerank-jina"
-            ),
-        };
-
-        eprintln!("loading {name} (first run downloads it)...");
-        let started = std::time::Instant::now();
-        let mut embedder = TextEmbedding::try_new(
-            TextInitOptions::new(model).with_cache_dir(cache.clone().into()),
-        )?;
-        eprintln!("loaded in {:.1}s", started.elapsed().as_secs_f32());
-
-        // E5 wants its prefixes; stored captures are passages.
-        let passages: Vec<String> = SENTENCES.iter().map(|s| format!("passage: {s}")).collect();
-        let vectors = embedder.embed(passages, None)?;
-
-        println!("\n=== {name} ({} dims) ===", vectors[0].len());
-        for (label, a, b) in EXPECTED_ORDER {
-            println!("{label}  {:.3}", cosine(&vectors[*a], &vectors[*b]));
-        }
-
-        let right = cosine(&vectors[1], &vectors[2]).min(cosine(&vectors[0], &vectors[2]));
-        let wrong = cosine(&vectors[1], &vectors[3]).max(cosine(&vectors[0], &vectors[3]));
-        println!(
-            "{}  worst true match {right:.3} vs best false match {wrong:.3}",
-            if right > wrong {
-                "ORDER OK  "
-            } else {
-                "ORDER WRONG"
-            }
-        );
-    }
-
-    Ok(())
-}
-
-/// Scores every sentence against the newest one, the way echo would.
-fn rerank(cache: &str, model: RerankerModel, name: &str) -> anyhow::Result<()> {
-    eprintln!("loading {name} (first run downloads it)...");
+    eprintln!("loading {MODEL_ID} (first run downloads it)...");
     let started = std::time::Instant::now();
-    let mut reranker = TextRerank::try_new(
-        RerankInitOptions::new(model).with_cache_dir(cache.to_string().into()),
-    )?;
+
+    let api = ApiBuilder::new().with_cache_dir(cache.into()).build()?;
+    let repo = api.model(MODEL_ID.to_string());
+    let config: Config = serde_json::from_str(&std::fs::read_to_string(repo.get("config.json")?)?)?;
+    let mut tokenizer =
+        Tokenizer::from_file(repo.get("tokenizer.json")?).map_err(anyhow::Error::msg)?;
+    tokenizer.with_padding(Some(PaddingParams {
+        strategy: PaddingStrategy::BatchLongest,
+        pad_id: config.pad_token_id as u32,
+        ..Default::default()
+    }));
+    let device = Device::Cpu;
+    let vb = unsafe {
+        VarBuilder::from_mmaped_safetensors(&[repo.get("model.safetensors")?], DTYPE, &device)?
+    };
+    let model = BertModel::load(vb, &config)?;
     eprintln!("loaded in {:.1}s", started.elapsed().as_secs_f32());
 
-    // SENTENCES[1] is the newest capture; the other three are what it
-    // would be compared against.
-    let query = SENTENCES[1];
-    let documents: Vec<&str> = vec![SENTENCES[0], SENTENCES[2], SENTENCES[3]];
-    let labels = ["sauna   (ja) ", "aufguss (ja) ", "buns    (nein)"];
+    // E5 wants its prefixes; stored captures are passages.
+    let passages: Vec<String> = SENTENCES.iter().map(|s| format!("passage: {s}")).collect();
+    let encodings = tokenizer
+        .encode_batch(passages, true)
+        .map_err(anyhow::Error::msg)?;
 
-    let results = reranker.rerank(query, &documents, false, None)?;
+    let token_ids = encodings
+        .iter()
+        .map(|e| Tensor::new(e.get_ids(), &device))
+        .collect::<candle_core::Result<Vec<_>>>()?;
+    let token_ids = Tensor::stack(&token_ids, 0)?;
+    let attention_mask = encodings
+        .iter()
+        .map(|e| Tensor::new(e.get_attention_mask(), &device))
+        .collect::<candle_core::Result<Vec<_>>>()?;
+    let attention_mask = Tensor::stack(&attention_mask, 0)?;
+    let token_type_ids = token_ids.zeros_like()?;
 
-    println!("\n=== {name} ===");
-    let mut scores = [0.0f32; 3];
-    for result in &results {
-        scores[result.index] = result.score;
+    let output = model.forward(&token_ids, &token_type_ids, Some(&attention_mask))?;
+    // Masked mean: several sentences are batched together now, so shorter
+    // ones are padded — including those padding embeddings in the mean
+    // would pull every vector toward whatever the pad token encodes as.
+    let mask_f32 = attention_mask.to_dtype(DTYPE)?.unsqueeze(2)?;
+    let sum_mask = mask_f32.sum(1)?;
+    let pooled = (output.broadcast_mul(&mask_f32)?.sum(1)?).broadcast_div(&sum_mask)?;
+    let normalized = pooled.broadcast_div(&pooled.sqr()?.sum_keepdim(1)?.sqrt()?)?;
+    let vectors = normalized.to_vec2::<f32>()?;
+
+    println!("\n=== e5-small via candle ({} dims) ===", vectors[0].len());
+    for (label, a, b) in EXPECTED_ORDER {
+        println!("{label}  {:.3}", cosine(&vectors[*a], &vectors[*b]));
     }
-    for (label, score) in labels.iter().zip(scores) {
-        println!("{label}  {score:+.3}");
-    }
 
-    let worst_true = scores[0].min(scores[1]);
+    let right = cosine(&vectors[1], &vectors[2]).min(cosine(&vectors[0], &vectors[2]));
+    let wrong = cosine(&vectors[1], &vectors[3]).max(cosine(&vectors[0], &vectors[3]));
     println!(
-        "{}  worst true match {worst_true:+.3} vs false match {:+.3}",
-        if worst_true > scores[2] {
+        "{}  worst true match {right:.3} vs best false match {wrong:.3}",
+        if right > wrong {
             "ORDER OK  "
         } else {
             "ORDER WRONG"
-        },
-        scores[2]
+        }
     );
+
     Ok(())
 }
 
