@@ -1,3 +1,11 @@
+# HIPPOCAMPUS_DATA_DIR: where the bind-mounted volumes below actually live
+# on the host. Defaults to ./data (relative to this file), which is fine
+# for local dev but not for a Portainer "deploy from Git repository" stack
+# — Portainer clones the repo into its own managed stack directory, and
+# ./data there is not a place a growing Postgres database, the audio
+# archive, or the model cache should sit unattended. Point this at real,
+# backed-up NAS storage instead (e.g. /volume1/docker/hippocampus/data on
+# a Synology) via the stack's environment variables.
 services:
   postgres:
     image: pgvector/pgvector:pg17
@@ -7,7 +15,7 @@ services:
       POSTGRES_PASSWORD: hippocampus
       POSTGRES_DB: hippocampus
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      - ${HIPPOCAMPUS_DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
@@ -48,8 +56,8 @@ services:
       ECHO_MIN_RERANK_SCORE: ${ECHO_MIN_RERANK_SCORE:-}
       HIPPOCAMPUS_TIMEZONE: ${HIPPOCAMPUS_TIMEZONE:-}
     volumes:
-      - ./data/models:/data/models
-      - ./data/audio:/data/audio
-      - ./data/logs:/data/logs
+      - ${HIPPOCAMPUS_DATA_DIR:-./data}/models:/data/models
+      - ${HIPPOCAMPUS_DATA_DIR:-./data}/audio:/data/audio
+      - ${HIPPOCAMPUS_DATA_DIR:-./data}/logs:/data/logs
     ports:
       - "8080:8080"
