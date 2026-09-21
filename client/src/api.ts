@@ -1,7 +1,7 @@
 // Mirrors the DTOs in the `contracts` Rust crate. Kept as plain types (not
 // generated) since the surface is small; if it grows, revisit codegen.
 
-import { getSettings, logError } from "./desktop";
+import { apiAudio, apiRequest, getSettings, logError, runningInDesktopApp } from "./desktop";
 
 export interface CaptureListItem {
   event_id: string;
@@ -214,38 +214,52 @@ export function setApiBaseUrl(url: string | null | undefined): void {
   baseUrl = url && url.trim() ? url.trim() : DEFAULT_BASE_URL;
 }
 
-/// Cloudflare Access Service Token headers, sent on every request once
-/// both are set. `null` unless the backend sits behind Access — a plain
-/// local or LAN backend never needs these, and Access ignores extra
-/// headers it wasn't asked to check.
-let cfAccessClientId: string | null = null;
-let cfAccessClientSecret: string | null = null;
-
-export function setApiAuth(clientId: string | null | undefined, clientSecret: string | null | undefined): void {
-  cfAccessClientId = clientId || null;
-  cfAccessClientSecret = clientSecret || null;
-}
-
-/// Loads the persisted backend URL and Access credentials, if the desktop
-/// app has any saved, and applies them before the first request goes out.
-/// Call once at startup and await it before rendering — the browser build
-/// and a fresh install both resolve to the plain defaults either way.
+/// Loads the persisted backend URL, if the desktop app has one saved, so
+/// this module can display it and the browser build can use it. Call once
+/// at startup and await it before rendering — the browser build and a
+/// fresh install both resolve to the plain default either way.
+///
+/// The Access credentials are deliberately not loaded here any more. In
+/// the desktop app the request is built in Rust, which reads them itself;
+/// the secret never crosses into the webview at all.
 export async function initApiBaseUrl(): Promise<void> {
   const settings = await getSettings();
   setApiBaseUrl(settings.backend_url);
-  setApiAuth(settings.cf_access_client_id, settings.cf_access_client_secret);
 }
 
+/// One request to the backend.
+///
+/// In the desktop app this goes through Rust: no origin, so no CORS
+/// preflight, which is what made every request fail with
+/// `TypeError: Load failed` the moment the backend moved behind
+/// Cloudflare Access. In the browser build — development against a local
+/// backend — there is no Rust side, so it stays a plain `fetch`, which is
+/// fine because a local backend has no Access in front of it.
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  if (cfAccessClientId && cfAccessClientSecret) {
-    headers.set("CF-Access-Client-Id", cfAccessClientId);
-    headers.set("CF-Access-Client-Secret", cfAccessClientSecret);
+  if (runningInDesktopApp()) {
+    let res: Awaited<ReturnType<typeof apiRequest>>;
+    try {
+      res = await apiRequest(
+        init?.method ?? "GET",
+        path,
+        typeof init?.body === "string" ? init.body : undefined,
+      );
+    } catch (err) {
+      const message = `${path} failed to reach ${baseUrl}: ${String(err)}`;
+      logError(message);
+      throw new Error(message);
+    }
+    if (res.status < 200 || res.status >= 300) {
+      const message = `${path} failed: ${res.status} ${res.status_text}`;
+      logError(message);
+      throw new Error(message);
+    }
+    return JSON.parse(res.body) as T;
   }
 
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}${path}`, { ...init, headers });
+    res = await fetch(`${baseUrl}${path}`, init);
   } catch (err) {
     const message = `${path} failed to reach ${baseUrl}: ${String(err)}`;
     logError(message);
@@ -290,18 +304,31 @@ export function getCapture(eventId: string): Promise<CaptureDetail> {
   return request<CaptureDetail>(`/captures/${eventId}`);
 }
 
-/// URL of the original recording. Used as an <audio> source rather than
-/// fetched, so the browser can stream and seek it itself.
+/// A source an <audio> element can play, for a capture's recording.
 ///
-/// KNOWN GAP once the backend sits behind Cloudflare Access: an <audio>
-/// element's `src` cannot carry the CF-Access-Client-Id/-Secret headers
-/// `request()` attaches, so remote audio playback would get an Access
-/// challenge page instead of the recording. Not fixed here — trades
-/// native streaming/seeking against fetching the whole file as a blob,
-/// worth deciding deliberately rather than silently, once this is
-/// actually reachable from outside localhost.
-export function audioUrl(eventId: string): string {
-  return `${baseUrl}/captures/${eventId}/audio`;
+/// An `<audio src>` cannot carry the Access headers a request needs, so
+/// behind Cloudflare Access the element would load a login page instead
+/// of a recording. In the desktop app the bytes are therefore fetched in
+/// Rust and handed over as a blob: playback works, at the cost of
+/// streaming and seeking into a file that has not finished loading.
+/// Captures are seconds long, so that cost is theoretical.
+///
+/// The returned URL must be handed to `releaseAudioSource` when the
+/// player is done with it, or the blob stays in memory for the lifetime
+/// of the window.
+/// `mime` comes from the capture's own `audio.mime` rather than being
+/// assumed: recordings from this app are WAV, but the backend accepts
+/// Opus, Ogg and m4a too, and a blob typed wrongly simply refuses to play.
+export async function audioSource(eventId: string, mime: string): Promise<string> {
+  if (!runningInDesktopApp()) return `${baseUrl}/captures/${eventId}/audio`;
+
+  const bytes = await apiAudio(eventId);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
+
+/// Frees a source from `audioSource`. A plain URL is left alone.
+export function releaseAudioSource(src: string): void {
+  if (src.startsWith("blob:")) URL.revokeObjectURL(src);
 }
 
 /// Corrects a capture's text. The correction is appended as a new

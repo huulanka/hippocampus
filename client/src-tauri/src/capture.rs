@@ -10,8 +10,10 @@ use contracts::CaptureAccepted;
 use serde::Serialize;
 
 use crate::asr::{self, Transcriber};
+use crate::backend::BackendClient;
 use crate::microphone;
 use crate::recorder::{self, Recording, TARGET_RATE};
+use crate::settings::SettingsState;
 
 /// The device's IANA timezone, or an empty string when the platform
 /// cannot say. The backend falls back to its own configured zone then,
@@ -27,23 +29,20 @@ const DEVICE: &str = "mac-desktop";
 pub struct CaptureState {
     recording: Mutex<Option<Recording>>,
     transcriber: Arc<Transcriber>,
-    http: reqwest::Client,
-    api_base: String,
 }
 
 impl CaptureState {
     pub fn new() -> Self {
-        let api_base = std::env::var("HIPPOCAMPUS_API_BASE_URL")
-            .ok()
-            .filter(|url| !url.is_empty())
-            .unwrap_or_else(|| "http://localhost:8080".to_string());
-
         Self {
             recording: Mutex::new(None),
             transcriber: Arc::new(Transcriber::default()),
-            http: reqwest::Client::new(),
-            api_base: api_base.trim_end_matches('/').to_string(),
         }
+    }
+}
+
+impl Default for CaptureState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -100,7 +99,19 @@ pub fn cancel_recording(state: tauri::State<'_, CaptureState>) -> Result<(), Str
 
 /// Stops recording, transcribes on-device, and stores audio and transcript.
 #[tauri::command]
-pub async fn stop_recording(state: tauri::State<'_, CaptureState>) -> Result<VoiceCapture, String> {
+pub async fn stop_recording(
+    state: tauri::State<'_, CaptureState>,
+    client: tauri::State<'_, BackendClient>,
+    settings: tauri::State<'_, SettingsState>,
+) -> Result<VoiceCapture, String> {
+    // Where this capture is going, and what it needs to get past
+    // Cloudflare Access — read from the same settings the rest of the app
+    // uses. This used to be an environment variable read once at startup,
+    // which meant the backend URL the user had configured in the settings
+    // screen applied to every screen *except* the one path that matters
+    // most: speaking a capture.
+    let api_base = settings.backend_base();
+    let credentials = settings.credentials();
     let recording = state
         .recording
         .lock()
@@ -152,16 +163,34 @@ pub async fn stop_recording(state: tauri::State<'_, CaptureState>) -> Result<Voi
         // has to stay right after a flight.
         .text("timezone", local_timezone());
 
-    let response = state
-        .http
-        .post(format!("{}/captures/audio", state.api_base))
-        .multipart(form)
+    let mut request = client
+        .http()
+        .post(format!("{api_base}/captures/audio"))
+        .multipart(form);
+    if let Some((id, secret)) = credentials {
+        request = request
+            .header("CF-Access-Client-Id", id)
+            .header("CF-Access-Client-Secret", secret);
+    }
+
+    let response = request
         .send()
         .await
-        .map_err(|err| format!("could not reach the backend: {err}"))?;
+        .map_err(|err| format!("could not reach the backend at {api_base}: {err}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+        // An Access challenge is a redirect, not a rejection by the
+        // backend — saying so beats printing a login page as if it were
+        // the backend's answer.
+        if let Some(explained) = crate::backend::describe_status(status, location.as_deref()) {
+            return Err(explained);
+        }
         let body = response.text().await.unwrap_or_default();
         return Err(format!("backend rejected the capture ({status}): {body}"));
     }

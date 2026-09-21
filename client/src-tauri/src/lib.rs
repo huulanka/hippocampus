@@ -5,7 +5,9 @@
 //! it away again. Everything else lives in the webview.
 
 mod asr;
+mod backend;
 mod capture;
+mod keychain;
 pub mod microphone;
 mod recorder;
 mod settings;
@@ -84,11 +86,15 @@ pub fn run() {
                 .build(),
         )
         .manage(capture::CaptureState::new())
+        .manage(backend::BackendClient::new())
         .invoke_handler(tauri::generate_handler![
             capture::speech_available,
             capture::start_recording,
             capture::stop_recording,
             capture::cancel_recording,
+            backend::api_request,
+            backend::api_audio,
+            backend::check_backend,
             settings::get_settings,
             settings::set_capture_shortcut,
             settings::set_backend_url,

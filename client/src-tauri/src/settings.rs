@@ -6,10 +6,15 @@
 //! can read. Which backend the client talks to — `None` means the
 //! built-in default, so a fresh install needs no configuration to work
 //! against a locally-run backend. And, once that backend sits behind
-//! Cloudflare Access rather than on localhost, the Service Token
-//! credentials that get it past Access without a browser login — plain
-//! JSON on disk, same trust boundary as everything else here: this Mac,
-//! this user.
+//! Cloudflare Access rather than on localhost, the Service Token that
+//! gets it past Access without a browser login.
+//!
+//! That token is split deliberately. The Client ID is an identifier and
+//! lives in `settings.json` with everything else; the Client Secret is a
+//! credential and lives in the Keychain ([`crate::keychain`]) — it is
+//! never written to disk here, and never handed to the webview, which has
+//! no use for it now that requests are built on this side
+//! ([`crate::backend`]).
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -18,74 +23,220 @@ use serde::{Deserialize, Serialize};
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
+use crate::keychain;
+
 /// Cmd+Shift+H, chosen because macOS leaves it alone: Cmd+Space and
 /// Cmd+Shift+Space are Spotlight and input-source switching, and Option
 /// combinations collide with text input on a German keyboard layout.
 pub const DEFAULT_CAPTURE_SHORTCUT: &str = "Super+Shift+KeyH";
 
+/// Where captures go when nothing else is configured. The environment
+/// variable is the development override; the settings file wins over
+/// both, because it is the one a user can actually reach.
+const DEFAULT_BACKEND_URL: &str = "http://localhost:8080";
+const BACKEND_URL_ENV: &str = "HIPPOCAMPUS_API_BASE_URL";
+
 const FILE_NAME: &str = "settings.json";
 
+/// What `settings.json` holds. Note what is *not* here: the Access Client
+/// Secret. See [`Stored::legacy_secret`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Settings {
+pub struct Stored {
     pub capture_shortcut: String,
     /// `None` means "use the built-in default", not "unset" — keeps a
-    /// fresh `settings.json` from an older version (which has no such
-    /// field) loading as if the user had never touched this.
+    /// `settings.json` from an older version (which has no such field)
+    /// loading as if the user had never touched this.
     #[serde(default)]
     pub backend_url: Option<String>,
-    /// Cloudflare Access Service Token, sent as `CF-Access-Client-Id` /
-    /// `CF-Access-Client-Secret`. Both or neither — a Service Token is
-    /// only useful as a pair, and the API layer treats one set without
-    /// the other as absent rather than sending a half-authenticated
-    /// request.
+    /// The Service Token's Client ID. Not a secret: it identifies the
+    /// token, it does not authenticate it, and Cloudflare shows it in the
+    /// dashboard next to the application.
     #[serde(default)]
     pub cf_access_client_id: Option<String>,
-    #[serde(default)]
-    pub cf_access_client_secret: Option<String>,
+    /// Only ever *read*, never written — `skip_serializing` is what makes
+    /// that true. Versions up to 1.2.0 stored the Client Secret here in
+    /// plain text; [`SettingsState::load`] moves any it finds into the
+    /// Keychain and rewrites the file without it, so the plaintext copy
+    /// disappears the first time this version starts.
+    #[serde(default, rename = "cf_access_client_secret", skip_serializing)]
+    pub legacy_secret: Option<String>,
 }
 
-impl Default for Settings {
+impl Default for Stored {
     fn default() -> Self {
         Self {
             capture_shortcut: DEFAULT_CAPTURE_SHORTCUT.to_string(),
             backend_url: None,
             cf_access_client_id: None,
-            cf_access_client_secret: None,
+            legacy_secret: None,
         }
     }
 }
 
+/// What the webview is told. The secret is represented by a single bool:
+/// enough to render "a secret is saved" and offer to replace it, useless
+/// to anything that might read the webview's memory or a log line.
+#[derive(Debug, Clone, Serialize)]
+pub struct SettingsView {
+    pub capture_shortcut: String,
+    pub backend_url: Option<String>,
+    pub cf_access_client_id: Option<String>,
+    pub cf_access_configured: bool,
+}
+
+/// The Keychain read is lazy, so a local or LAN install — which never
+/// needs a Service Token — never triggers a Keychain authorisation
+/// dialog at all.
+enum SecretCache {
+    Unread,
+    Known(Option<String>),
+}
+
 pub struct SettingsState {
-    current: Mutex<Settings>,
+    current: Mutex<Stored>,
+    secret: Mutex<SecretCache>,
     path: PathBuf,
 }
 
 impl SettingsState {
-    /// Reads the settings file, falling back to defaults.
+    /// Reads the settings file, falling back to defaults, and migrates a
+    /// plaintext secret left behind by an older version.
     ///
     /// A corrupt or unreadable file is reported and then ignored rather
     /// than being allowed to stop the app: losing a preference is a small
     /// annoyance, not being able to capture at all is not.
     pub fn load(path: PathBuf) -> Self {
-        let current = match std::fs::read_to_string(&path) {
-            Ok(raw) => serde_json::from_str(&raw).unwrap_or_else(|err| {
+        let stored = match std::fs::read_to_string(&path) {
+            Ok(raw) => serde_json::from_str::<Stored>(&raw).unwrap_or_else(|err| {
                 log::warn!("settings file at {} is unreadable: {err}", path.display());
-                Settings::default()
+                Stored::default()
             }),
-            Err(_) => Settings::default(),
+            Err(_) => Stored::default(),
         };
 
-        Self {
-            current: Mutex::new(current),
+        let state = Self {
+            current: Mutex::new(stored),
+            secret: Mutex::new(SecretCache::Unread),
             path,
-        }
+        };
+        state.migrate_plaintext_secret();
+        state
     }
 
-    pub fn snapshot(&self) -> Settings {
+    /// Moves a secret found in `settings.json` into the Keychain and
+    /// rewrites the file without it.
+    ///
+    /// If the Keychain refuses, the file is left exactly as it is and the
+    /// failure is logged as an error: throwing the only copy of a working
+    /// credential away would be worse than leaving it where it already
+    /// was, and the user is told loudly enough to act.
+    fn migrate_plaintext_secret(&self) {
+        let Some(secret) = self
+            .current
+            .lock()
+            .ok()
+            .and_then(|stored| stored.legacy_secret.clone())
+        else {
+            return;
+        };
+
+        if let Err(err) = keychain::store(&secret) {
+            log::error!(
+                "the Cloudflare Access secret is still in plain text in {}: \
+                 the Keychain could not be written ({err})",
+                self.path.display()
+            );
+            // Usable this session even so — the request path reads it
+            // through the same cache either way.
+            if let Ok(mut cache) = self.secret.lock() {
+                *cache = SecretCache::Known(Some(secret));
+            }
+            return;
+        }
+
+        let rewritten = {
+            let Ok(mut stored) = self.current.lock() else {
+                return;
+            };
+            stored.legacy_secret = None;
+            stored.clone()
+        };
+
+        if let Err(err) = self.persist(&rewritten) {
+            log::error!(
+                "the Cloudflare Access secret is now in the Keychain, but the \
+                 plaintext copy in {} could not be removed ({err}) — delete it by hand",
+                self.path.display()
+            );
+            return;
+        }
+
+        if let Ok(mut cache) = self.secret.lock() {
+            *cache = SecretCache::Known(Some(secret));
+        }
+        log::info!("moved the Cloudflare Access secret out of settings.json into the Keychain");
+    }
+
+    pub fn snapshot(&self) -> Stored {
         self.current
             .lock()
             .map(|settings| settings.clone())
             .unwrap_or_default()
+    }
+
+    pub fn view(&self) -> SettingsView {
+        let stored = self.snapshot();
+        SettingsView {
+            capture_shortcut: stored.capture_shortcut,
+            backend_url: stored.backend_url,
+            cf_access_client_id: stored.cf_access_client_id,
+            cf_access_configured: self.secret().is_some(),
+        }
+    }
+
+    /// The stored secret, read from the Keychain at most once per run.
+    pub fn secret(&self) -> Option<String> {
+        let mut cache = self.secret.lock().ok()?;
+        if let SecretCache::Unread = *cache {
+            let read = keychain::read().unwrap_or_else(|err| {
+                log::error!("could not read the Cloudflare Access secret: {err}");
+                None
+            });
+            *cache = SecretCache::Known(read);
+        }
+        match &*cache {
+            SecretCache::Known(secret) => secret.clone(),
+            SecretCache::Unread => None,
+        }
+    }
+
+    fn remember_secret(&self, secret: Option<String>) {
+        if let Ok(mut cache) = self.secret.lock() {
+            *cache = SecretCache::Known(secret);
+        }
+    }
+
+    /// The Service Token to send, or `None` when the backend is not
+    /// behind Access. Both halves or neither: a request carrying an ID
+    /// with no secret is not half-authenticated, it is unauthenticated
+    /// and misleading about it.
+    pub fn credentials(&self) -> Option<(String, String)> {
+        let id = self.snapshot().cf_access_client_id?;
+        Some((id, self.secret()?))
+    }
+
+    /// Which backend to talk to, without a trailing slash. Settings first,
+    /// then the environment override, then the built-in default.
+    pub fn backend_base(&self) -> String {
+        let configured = self.snapshot().backend_url.filter(|url| !url.is_empty());
+        let url = configured
+            .or_else(|| {
+                std::env::var(BACKEND_URL_ENV)
+                    .ok()
+                    .filter(|v| !v.is_empty())
+            })
+            .unwrap_or_else(|| DEFAULT_BACKEND_URL.to_string());
+        url.trim_end_matches('/').to_string()
     }
 
     /// The shortcut as the plugin wants it, or the default if what is
@@ -96,7 +247,7 @@ impl SettingsState {
         })
     }
 
-    fn persist(&self, settings: &Settings) -> anyhow::Result<()> {
+    fn persist(&self, settings: &Stored) -> anyhow::Result<()> {
         if let Some(parent) = self.path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -117,8 +268,8 @@ pub fn settings_path(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 }
 
 #[tauri::command]
-pub fn get_settings(state: tauri::State<'_, SettingsState>) -> Settings {
-    state.snapshot()
+pub fn get_settings(state: tauri::State<'_, SettingsState>) -> SettingsView {
+    state.view()
 }
 
 /// Registers a new capture shortcut and remembers it.
@@ -131,12 +282,12 @@ pub fn set_capture_shortcut(
     app: tauri::AppHandle,
     state: tauri::State<'_, SettingsState>,
     accelerator: String,
-) -> Result<Settings, String> {
+) -> Result<SettingsView, String> {
     let wanted = parse(&accelerator).map_err(|_| format!("{accelerator} is not a shortcut"))?;
     let previous = state.capture_shortcut();
 
     if wanted == previous {
-        return Ok(state.snapshot());
+        return Ok(state.view());
     }
 
     let shortcuts = app.global_shortcut();
@@ -147,7 +298,7 @@ pub fn set_capture_shortcut(
         log::warn!("could not release the previous shortcut: {err}");
     }
 
-    let updated = Settings {
+    let updated = Stored {
         capture_shortcut: wanted.into_string(),
         ..state.snapshot()
     };
@@ -161,20 +312,21 @@ pub fn set_capture_shortcut(
         log::warn!("could not write settings: {err}");
     }
 
-    Ok(updated)
+    Ok(state.view())
 }
 
 /// Points the client at a different backend, or back at the built-in
 /// default when given an empty string.
 ///
-/// No reachability check happens here — the caller does that against
-/// `/health` before committing to a value, so a typo does not lock the
-/// user out of the settings screen that would let them fix it.
+/// No reachability check happens here — the caller does that through
+/// `backend::check_backend` before committing to a value, so a typo does
+/// not lock the user out of the settings screen that would let them fix
+/// it.
 #[tauri::command]
 pub fn set_backend_url(
     state: tauri::State<'_, SettingsState>,
     url: Option<String>,
-) -> Result<Settings, String> {
+) -> Result<SettingsView, String> {
     let trimmed = url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
 
     let updated = {
@@ -190,49 +342,84 @@ pub fn set_backend_url(
         log::warn!("could not write settings: {err}");
     }
 
-    Ok(updated)
+    Ok(state.view())
 }
 
-/// Sets or clears the Cloudflare Access Service Token. Pass `None` (or an
-/// empty string) for either field to clear both — a stored ID with no
-/// secret, or vice versa, is not a state the client should ever send.
+/// Sets or clears the Cloudflare Access Service Token.
+///
+/// The ID goes to `settings.json`, the secret to the Keychain. An empty
+/// ID clears both — an ID with no secret is not a state the client should
+/// ever be in. An empty *secret* with an ID present means "keep the one
+/// already stored", which is what lets the settings screen show the ID
+/// without ever holding the secret it belongs to.
+///
+/// Unlike the preference writers above, a failure here is returned rather
+/// than logged: a credential the user believes is saved and is not would
+/// surface later as an unexplained 403.
 #[tauri::command]
 pub fn set_cf_access_credentials(
     state: tauri::State<'_, SettingsState>,
     client_id: Option<String>,
     client_secret: Option<String>,
-) -> Result<Settings, String> {
+) -> Result<SettingsView, String> {
     let id = client_id
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
     let secret = client_secret
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
-    let (id, secret) = match (id, secret) {
-        (Some(id), Some(secret)) => (Some(id), Some(secret)),
-        _ => (None, None),
+
+    let Some(id) = id else {
+        keychain::clear().map_err(|err| format!("could not clear the Keychain entry: {err}"))?;
+        state.remember_secret(None);
+        let updated = {
+            let mut current = state
+                .current
+                .lock()
+                .map_err(|_| "settings lock poisoned".to_string())?;
+            current.cf_access_client_id = None;
+            current.clone()
+        };
+        if let Err(err) = state.persist(&updated) {
+            log::warn!("could not write settings: {err}");
+        }
+        return Ok(state.view());
     };
+
+    match secret {
+        Some(secret) => {
+            keychain::store(&secret)
+                .map_err(|err| format!("could not write to the Keychain: {err}"))?;
+            state.remember_secret(Some(secret));
+        }
+        None if state.secret().is_some() => {}
+        None => return Err("need a Client Secret — none is stored yet".to_string()),
+    }
 
     let updated = {
         let mut current = state
             .current
             .lock()
             .map_err(|_| "settings lock poisoned".to_string())?;
-        current.cf_access_client_id = id;
-        current.cf_access_client_secret = secret;
+        current.cf_access_client_id = Some(id);
         current.clone()
     };
-
     if let Err(err) = state.persist(&updated) {
         log::warn!("could not write settings: {err}");
     }
 
-    Ok(updated)
+    Ok(state.view())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn temp_path(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("hippocampus-settings-test-{name}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("settings.json")
+    }
 
     #[test]
     fn the_default_shortcut_parses() {
@@ -254,9 +441,7 @@ mod tests {
 
     #[test]
     fn unreadable_settings_fall_back_to_the_default() {
-        let dir = std::env::temp_dir().join("hippocampus-settings-test");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("broken.json");
+        let path = temp_path("broken");
         std::fs::write(&path, b"{ not json").unwrap();
 
         let state = SettingsState::load(path.clone());
@@ -276,9 +461,7 @@ mod tests {
     /// on the field is for.
     #[test]
     fn a_settings_file_without_backend_url_loads_as_the_default() {
-        let dir = std::env::temp_dir().join("hippocampus-settings-test-backend-url-absent");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("settings.json");
+        let path = temp_path("backend-url-absent");
         std::fs::write(&path, br#"{"capture_shortcut":"Super+Shift+KeyH"}"#).unwrap();
 
         let state = SettingsState::load(path.clone());
@@ -289,9 +472,7 @@ mod tests {
 
     #[test]
     fn a_saved_backend_url_survives_a_reload() {
-        let dir = std::env::temp_dir().join("hippocampus-settings-test-backend-url-roundtrip");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("settings.json");
+        let path = temp_path("backend-url-roundtrip");
 
         let state = SettingsState::load(path.clone());
         let mut settings = state.snapshot();
@@ -307,16 +488,14 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// The Client ID is an identifier, so it stays in the file.
     #[test]
-    fn a_saved_service_token_survives_a_reload() {
-        let dir = std::env::temp_dir().join("hippocampus-settings-test-cf-access-roundtrip");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("settings.json");
+    fn the_client_id_survives_a_reload() {
+        let path = temp_path("cf-id-roundtrip");
 
         let state = SettingsState::load(path.clone());
         let mut settings = state.snapshot();
         settings.cf_access_client_id = Some("abc123.access".to_string());
-        settings.cf_access_client_secret = Some("shh".to_string());
         state.persist(&settings).unwrap();
 
         let reloaded = SettingsState::load(path.clone()).snapshot();
@@ -324,21 +503,94 @@ mod tests {
             reloaded.cf_access_client_id,
             Some("abc123.access".to_string())
         );
-        assert_eq!(reloaded.cf_access_client_secret, Some("shh".to_string()));
 
         std::fs::remove_file(&path).ok();
     }
 
+    /// The point of the split: whatever else `persist` writes, the secret
+    /// is not part of it. This is the regression test for the plaintext
+    /// storage this version removed.
+    #[test]
+    fn the_secret_is_never_written_to_the_settings_file() {
+        let path = temp_path("no-plaintext-secret");
+
+        let state = SettingsState::load(path.clone());
+        let settings = Stored {
+            cf_access_client_id: Some("abc123.access".to_string()),
+            // As if it had just been read from an older file.
+            legacy_secret: Some("super-secret-value".to_string()),
+            ..state.snapshot()
+        };
+        state.persist(&settings).unwrap();
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        assert!(!written.contains("super-secret-value"));
+        assert!(!written.contains("cf_access_client_secret"));
+        assert!(written.contains("abc123.access"));
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// An older file's plaintext secret is still *readable*, because that
+    /// is what the migration needs in order to move it.
+    #[test]
+    fn an_older_file_with_a_plaintext_secret_still_parses() {
+        let raw = br#"{"capture_shortcut":"Super+Shift+KeyH","cf_access_client_id":"abc","cf_access_client_secret":"shh"}"#;
+        let stored: Stored = serde_json::from_slice(raw).unwrap();
+        assert_eq!(stored.legacy_secret, Some("shh".to_string()));
+    }
+
     #[test]
     fn a_settings_file_without_cf_access_fields_loads_as_the_default() {
-        let dir = std::env::temp_dir().join("hippocampus-settings-test-cf-access-absent");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("settings.json");
+        let path = temp_path("cf-access-absent");
         std::fs::write(&path, br#"{"capture_shortcut":"Super+Shift+KeyH"}"#).unwrap();
 
         let settings = SettingsState::load(path.clone()).snapshot();
         assert_eq!(settings.cf_access_client_id, None);
-        assert_eq!(settings.cf_access_client_secret, None);
+        assert_eq!(settings.legacy_secret, None);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// Settings beat the environment; the environment beats the built-in
+    /// default. The trailing slash is dropped either way, because every
+    /// caller appends a path beginning with one.
+    #[test]
+    fn the_backend_base_prefers_the_setting_and_drops_a_trailing_slash() {
+        let path = temp_path("backend-base");
+        let state = SettingsState::load(path.clone());
+
+        assert_eq!(state.backend_base(), DEFAULT_BACKEND_URL);
+
+        let settings = Stored {
+            backend_url: Some("https://hippocampus.example.com/".to_string()),
+            ..state.snapshot()
+        };
+        *state.current.lock().unwrap() = settings;
+        assert_eq!(state.backend_base(), "https://hippocampus.example.com");
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// Without a Client ID there is nothing to authenticate with, no
+    /// matter what the Keychain holds — so the request goes out plain
+    /// rather than half-signed.
+    #[test]
+    fn credentials_need_both_halves() {
+        let path = temp_path("credentials-need-both");
+        let state = SettingsState::load(path.clone());
+        state.remember_secret(Some("shh".to_string()));
+
+        assert_eq!(state.credentials(), None);
+
+        *state.current.lock().unwrap() = Stored {
+            cf_access_client_id: Some("abc".to_string()),
+            ..state.snapshot()
+        };
+        assert_eq!(
+            state.credentials(),
+            Some(("abc".to_string(), "shh".to_string()))
+        );
 
         std::fs::remove_file(&path).ok();
     }

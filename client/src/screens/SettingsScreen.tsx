@@ -4,6 +4,7 @@ import { useTheme } from "../theme";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   acceleratorFromEvent,
+  checkBackend,
   formatAccelerator,
   getSettings,
   openExternalLink,
@@ -14,7 +15,7 @@ import {
   setCfAccessCredentials,
   speechAvailable,
 } from "../desktop";
-import { getApiBaseUrl, getBackendVersion, setApiAuth, setApiBaseUrl } from "../api";
+import { getApiBaseUrl, getBackendVersion, setApiBaseUrl } from "../api";
 
 const GITHUB_URL = "https://github.com/huulanka/hippocampus";
 
@@ -45,6 +46,10 @@ export function SettingsScreen() {
 
   const [cfClientIdInput, setCfClientIdInput] = useState("");
   const [cfClientSecretInput, setCfClientSecretInput] = useState("");
+  /// Whether a secret is in the Keychain. The secret itself never comes
+  /// here — the field below stays empty even when one is stored, and an
+  /// empty field on save means "keep the stored one".
+  const [cfConfigured, setCfConfigured] = useState(false);
   const [cfStatus, setCfStatus] = useState<"idle" | "checking" | "saved" | "error">("idle");
   const [cfError, setCfError] = useState<string | null>(null);
 
@@ -53,7 +58,7 @@ export function SettingsScreen() {
       setShortcut(settings.capture_shortcut);
       setBackendUrlInput(settings.backend_url ?? getApiBaseUrl());
       setCfClientIdInput(settings.cf_access_client_id ?? "");
-      setCfClientSecretInput(settings.cf_access_client_secret ?? "");
+      setCfConfigured(settings.cf_access_configured);
     });
     speechAvailable().then(setCanSpeak);
     if (runningInDesktopApp()) getVersion().then(setClientVersion);
@@ -66,43 +71,34 @@ export function SettingsScreen() {
   /// otherwise strand every other screen against a backend that cannot be
   /// reached, including this one.
   ///
-  /// Checked with whatever Cloudflare Access credentials are currently
-  /// sitting in the other section's fields, saved or not — a backend that
-  /// was already behind Access before this screen ever loaded has no
-  /// working order to save these two independently in otherwise: the
-  /// backend-URL check would always fail Access with no token attached,
-  /// and the token check would always be validated against the wrong
-  /// (previous) backend.
+  /// The check runs in Rust, not as a `fetch` from here. A browser
+  /// request carrying the Access headers needs a CORS preflight first,
+  /// and an `OPTIONS` with no credentials is exactly what Cloudflare
+  /// Access answers with a login redirect — which the webview can only
+  /// report as `TypeError: Load failed`, with no way to tell a wrong URL
+  /// from a wrong token from a backend that is simply down.
+  ///
+  /// Checked with whatever credentials are currently in the other
+  /// section's fields, saved or not — a backend that was already behind
+  /// Access before this screen loaded has no working order to save these
+  /// independently in otherwise: the URL check would always fail Access
+  /// with no token attached, and the token check would always be
+  /// validated against the wrong (previous) backend.
   async function saveBackendUrl() {
     const wanted = backendUrlInput.trim();
     setBackendStatus("checking");
     setBackendError(null);
 
-    const pendingId = cfClientIdInput.trim();
-    const pendingSecret = cfClientSecretInput.trim();
-    const headers: HeadersInit =
-      pendingId && pendingSecret
-        ? { "CF-Access-Client-Id": pendingId, "CF-Access-Client-Secret": pendingSecret }
-        : {};
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
     try {
-      const res = await fetch(`${wanted || getApiBaseUrl()}/health`, {
-        signal: controller.signal,
-        headers,
-      });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      await checkBackend(
+        wanted || null,
+        cfClientIdInput.trim() || null,
+        cfClientSecretInput.trim() || null,
+      );
     } catch (err) {
       setBackendStatus("error");
-      setBackendError(
-        err instanceof Error && err.name === "AbortError"
-          ? "no answer within 5s"
-          : String(err),
-      );
+      setBackendError(String(err));
       return;
-    } finally {
-      clearTimeout(timeout);
     }
 
     await setBackendUrl(wanted || null);
@@ -114,18 +110,33 @@ export function SettingsScreen() {
   /// Same "prove it works before committing" shape as `saveBackendUrl`,
   /// checked with the new credentials actually attached — a wrong secret
   /// should surface here, not as a mysteriously blocked capture later.
+  ///
+  /// An empty secret field with a Client ID present means "keep the one
+  /// in the Keychain", which is how this screen can show and change the
+  /// ID without ever holding the secret that belongs to it.
   async function saveCfAccessCredentials() {
     const id = cfClientIdInput.trim();
     const secret = cfClientSecretInput.trim();
 
     if (!id && !secret) {
-      await setCfAccessCredentials(null, null);
-      setApiAuth(null, null);
+      try {
+        await setCfAccessCredentials(null, null);
+      } catch (err) {
+        setCfStatus("error");
+        setCfError(String(err));
+        return;
+      }
+      setCfConfigured(false);
       setCfStatus("saved");
       setCfError(null);
       return;
     }
-    if (!id || !secret) {
+    if (!id) {
+      setCfStatus("error");
+      setCfError("need a Client ID as well — a secret on its own is not a token");
+      return;
+    }
+    if (!secret && !cfConfigured) {
       setCfStatus("error");
       setCfError("need both Client ID and Client Secret, or neither");
       return;
@@ -133,27 +144,26 @@ export function SettingsScreen() {
 
     setCfStatus("checking");
     setCfError(null);
-    const pendingUrl = backendUrlInput.trim() || getApiBaseUrl();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+
     try {
-      const res = await fetch(`${pendingUrl}/health`, {
-        signal: controller.signal,
-        headers: { "CF-Access-Client-Id": id, "CF-Access-Client-Secret": secret },
-      });
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      await checkBackend(backendUrlInput.trim() || null, id, secret || null);
     } catch (err) {
       setCfStatus("error");
-      setCfError(
-        err instanceof Error && err.name === "AbortError" ? "no answer within 5s" : String(err),
-      );
+      setCfError(String(err));
       return;
-    } finally {
-      clearTimeout(timeout);
     }
 
-    await setCfAccessCredentials(id, secret);
-    setApiAuth(id, secret);
+    try {
+      await setCfAccessCredentials(id, secret || null);
+    } catch (err) {
+      // Reaching here means the Keychain refused. Saying "saved" would
+      // be a lie the user only discovers on the next restart.
+      setCfStatus("error");
+      setCfError(String(err));
+      return;
+    }
+    setCfClientSecretInput("");
+    setCfConfigured(true);
     setCfStatus("saved");
   }
 
@@ -284,7 +294,7 @@ export function SettingsScreen() {
           className="hotkey-display settings-input"
           type="password"
           value={cfClientSecretInput}
-          placeholder="Client Secret"
+          placeholder={cfConfigured ? "Client Secret — saved in the Keychain" : "Client Secret"}
           onChange={(e) => {
             setCfClientSecretInput(e.target.value);
             setCfStatus("idle");
@@ -298,10 +308,12 @@ export function SettingsScreen() {
         </span>
       </div>
       <p className="dim settings-note">
-        {cfStatus === "saved" && "Saved."}
+        {cfStatus === "saved" && "Saved — the secret is in the macOS Keychain."}
         {cfStatus === "error" && `Not saved: ${cfError}`}
         {cfStatus === "idle" &&
-          "Only needed once the backend sits behind Cloudflare Access — a Zero Trust Service Token, not your own login. Leave both blank on a local or LAN backend."}
+          (cfConfigured
+            ? "A secret is saved in the macOS Keychain. Leave the field empty to keep it; type a new one to replace it; clear both fields and save to remove it."
+            : "Only needed once the backend sits behind Cloudflare Access — a Zero Trust Service Token, not your own login. Leave both blank on a local or LAN backend. The secret goes to the macOS Keychain, never to a file.")}
       </p>
 
       <h4 className="section-label">SPEECH RECOGNITION</h4>

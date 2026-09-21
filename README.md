@@ -101,10 +101,32 @@ runs and typed capture still works — the record button simply stays hidden.
 
 macOS asks for microphone permission the first time you record.
 
+## Talking to a backend that is not on this machine
+
+The desktop client's HTTP requests are made in Rust, not by the webview —
+see [`docs/adr/0009-the-webview-does-not-talk-to-the-backend.md`](docs/adr/0009-the-webview-does-not-talk-to-the-backend.md).
+The short version: a `fetch` carrying Cloudflare Access headers needs a
+CORS preflight, and Access answers an unauthenticated `OPTIONS` with a
+login redirect, so the request never leaves the window. A request made in
+Rust has no origin and no preflight.
+
+Point the client at a backend in **Settings → Backend**. It is checked
+against `/health` before it is saved, so a typo cannot strand the screen
+that would let you fix it.
+
+If that backend sits behind a Cloudflare Zero Trust Access application,
+add a **Service Token** (not your own login) under **Settings → Cloudflare
+Access**. The Client ID is stored in `settings.json`; the Client Secret is
+stored in the **macOS Keychain** and is never written to disk in readable
+form, never sent to the webview, and never logged. A secret left in
+`settings.json` by version 1.2.0 or earlier is moved into the Keychain the
+first time this version starts — rotate that token afterwards, since it
+was on disk in the clear until then.
+
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `HIPPOCAMPUS_ASR_MODEL_DIR` | app support dir | Where the speech model lives |
-| `HIPPOCAMPUS_API_BASE_URL` | `http://localhost:8080` | Backend the client talks to |
+| `HIPPOCAMPUS_API_BASE_URL` | `http://localhost:8080` | Backend the client talks to, when the settings screen has no value saved |
 
 ## Echo
 

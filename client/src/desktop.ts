@@ -137,12 +137,15 @@ export function cancelRecording(): Promise<void> {
 export interface Settings {
   capture_shortcut: string;
   /// `null` means the built-in default (`http://localhost:8080`), not
-  /// "no backend" — mirrors `settings::Settings::backend_url` in Rust.
+  /// "no backend" — mirrors `settings::Stored::backend_url` in Rust.
   backend_url: string | null;
-  /// Cloudflare Access Service Token — always both or neither, see
-  /// `settings::set_cf_access_credentials` in Rust.
+  /// The Cloudflare Access Service Token's Client ID. An identifier, not
+  /// a credential — the Client Secret lives in the macOS Keychain and is
+  /// deliberately never sent to this side.
   cf_access_client_id: string | null;
-  cf_access_client_secret: string | null;
+  /// Whether a Client Secret is stored. All the webview needs in order to
+  /// render "a secret is saved" and offer to replace it.
+  cf_access_configured: boolean;
 }
 
 /// Reads the persisted settings. In the browser there are none, so the
@@ -153,7 +156,7 @@ export async function getSettings(): Promise<Settings> {
       capture_shortcut: DEFAULT_CAPTURE_SHORTCUT,
       backend_url: null,
       cf_access_client_id: null,
-      cf_access_client_secret: null,
+      cf_access_configured: false,
     };
   return await invoke<Settings>("get_settings");
 }
@@ -173,9 +176,14 @@ export function setBackendUrl(url: string | null): Promise<Settings> {
   return invoke<Settings>("set_backend_url", { url });
 }
 
-/// Persists the Cloudflare Access Service Token. Pass `null` for either
-/// value to clear both. Same "caller applies it" pattern as
-/// `setBackendUrl` — see `setApiAuth` in `api.ts`.
+/// Persists the Cloudflare Access Service Token: the ID in the settings
+/// file, the secret in the Keychain.
+///
+/// A `null` Client ID clears both. A `null` Client Secret with an ID
+/// present keeps the secret already stored, which is how the settings
+/// screen can save a changed ID without ever having held the secret.
+/// Rejects when the Keychain refuses — a credential the user believes is
+/// saved and is not would surface much later as an unexplained 403.
 export function setCfAccessCredentials(
   clientId: string | null,
   clientSecret: string | null,
@@ -184,6 +192,44 @@ export function setCfAccessCredentials(
     clientId,
     clientSecret,
   });
+}
+
+/// One HTTP exchange with the backend, performed in Rust.
+export interface ApiResponse {
+  status: number;
+  status_text: string;
+  body: string;
+}
+
+/// Sends a request through the Rust side, which knows the backend URL and
+/// the Service Token. Rejects only when the request never completed; a
+/// non-2xx answer comes back as a value.
+export function apiRequest(
+  method: string,
+  path: string,
+  body?: string,
+): Promise<ApiResponse> {
+  return invoke<ApiResponse>("api_request", { method, path, body: body ?? null });
+}
+
+/// The bytes of a capture's recording, fetched with credentials attached.
+export function apiAudio(eventId: string): Promise<ArrayBuffer> {
+  return invoke<ArrayBuffer>("api_audio", { eventId });
+}
+
+/// Asks a backend whether it answers, using credentials that have not
+/// been saved yet. Resolves with the normalised URL that answered.
+///
+/// Pass `null` for the secret to check against the one already in the
+/// Keychain. Rejects with a sentence worth showing the user — including
+/// the case Cloudflare Access produces most often, a login redirect,
+/// which is otherwise indistinguishable from a broken backend.
+export function checkBackend(
+  url: string | null,
+  clientId: string | null,
+  clientSecret: string | null,
+): Promise<string> {
+  return invoke<string>("check_backend", { url, clientId, clientSecret });
 }
 
 const MODIFIER_SYMBOLS: Record<string, string> = {

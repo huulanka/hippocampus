@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { audioSource, releaseAudioSource } from "../api";
 
 /// Plays back a capture's original recording.
 ///
@@ -7,8 +8,14 @@ import { useEffect, useRef, useState } from "react";
 /// system, and this app is a terminal. It also lets the duration come from
 /// the file itself, which matters because early captures were stored
 /// without one.
-export function AudioPlayer({ src }: { src: string }) {
+///
+/// Takes a capture id rather than a URL because in the desktop app the
+/// recording has to be fetched with credentials the element itself cannot
+/// carry — see `audioSource`. The blob that produces is released when
+/// this player goes away.
+export function AudioPlayer({ eventId, mime }: { eventId: string; mime: string }) {
   const audio = useRef<HTMLAudioElement | null>(null);
+  const [src, setSrc] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState<number | null>(null);
@@ -22,7 +29,31 @@ export function AudioPlayer({ src }: { src: string }) {
     setPosition(0);
     setDuration(null);
     setFailed(false);
-  }, [src]);
+    setSrc(null);
+
+    // Guards against the answers arriving out of order when the user
+    // moves between captures faster than the recordings load.
+    let current = true;
+    let loaded: string | null = null;
+
+    audioSource(eventId, mime)
+      .then((url) => {
+        if (!current) {
+          releaseAudioSource(url);
+          return;
+        }
+        loaded = url;
+        setSrc(url);
+      })
+      .catch(() => {
+        if (current) setFailed(true);
+      });
+
+    return () => {
+      current = false;
+      if (loaded) releaseAudioSource(loaded);
+    };
+  }, [eventId, mime]);
 
   function toggle() {
     const el = audio.current;
@@ -57,7 +88,7 @@ export function AudioPlayer({ src }: { src: string }) {
       </span>
       <audio
         ref={audio}
-        src={src}
+        src={src ?? undefined}
         preload="metadata"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}

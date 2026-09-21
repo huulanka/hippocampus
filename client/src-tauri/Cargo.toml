@@ -54,3 +54,9 @@ strip = true
 block2 = "0.6"
 objc2 = "0.6"
 objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["AVCaptureDevice", "AVMediaFormat", "block2"] }
+# `v1` is the feature that exposes keyring's actual Entry API (not just
+# "pull in extra backends" — the crate won't compile without it). The
+# windows/zbus backends it also nominally enables are harmless here: each
+# is gated behind its own `[target.'cfg(...)']` in keyring's manifest, so
+# only apple-native-keyring-store actually gets compiled on macOS.
+keyring = { version = "4", default-features = false, features = ["v1"] }

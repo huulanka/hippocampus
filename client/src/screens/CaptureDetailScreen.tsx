@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { audioUrl, correctTranscript, getCapture, type CaptureDetail } from "../api";
+import { correctTranscript, getCapture, type CaptureDetail } from "../api";
 import { AudioPlayer } from "../components/AudioPlayer";
 import { entityColor } from "../entityType";
 import { whenLabel } from "../whenLabel";
@@ -121,7 +121,7 @@ export function CaptureDetailScreen({
           />
         )}
 
-        {detail.audio && <AudioPlayer src={audioUrl(detail.event_id)} />}
+        {detail.audio && <AudioPlayer eventId={detail.event_id} mime={detail.audio.mime} />}
 
         {!detail.redacted &&
           (draft === null ? (

@@ -17,6 +17,14 @@ In den Einstellungen `[ Change ]` drücken, eine Kombination tippen,
 danach aus einer anderen App heraus auslösen. Erwartet: greift sofort,
 ohne Neustart, und überlebt einen Neustart.
 
+### Die Verbindung zur NAS aus der fertigen App
+Backend-URL und Service Token in den Einstellungen eintragen, speichern,
+danach erfassen, suchen und eine Aufnahme abspielen. Erwartet: „Saved —
+checked reachable just now.", und alle Screens sprechen mit der NAS statt
+mit localhost. Gegen echte Sockets getestet ist, wie der Client auf 200,
+302 und 403 reagiert und dass die Header tatsächlich auf der Leitung
+liegen (`backend.rs`); ungeprüft ist der Weg durch den echten Tunnel.
+
 ### Ein echtes Cloudflare-Access-Token
 Die Signaturprüfung ist gegen selbst erzeugte Schlüsselpaare getestet
 (gültig, fremde `aud`, fremdes Team, abgelaufen, gefälscht, `alg: none`).
@@ -31,7 +39,10 @@ datenbank durchgespielt, aber nicht von einem Menschen in der App.
 
 ### Die Audiowiedergabe in der echten App
 Der Player ist im Browser gegen den laufenden Dienst geprüft, nicht im
-Tauri-Webview.
+Tauri-Webview — und er holt die Aufnahme seit ADR 0009 nicht mehr über
+`<audio src>`, sondern als Blob über Rust, weil ein `src` die
+Access-Header nicht tragen kann. Beides gehört in der fertigen App
+einmal angehört.
 
 ### Der Wechsel auf candle, tatsächlich auf der Zielhardware
 `ort`s vorgebaute ONNX-Runtime-Binary hat auf der Synology DS220+ (Celeron
@@ -64,6 +75,9 @@ Das entscheidet sich erst beim echten Redeploy auf der NAS.
 | Backup und Restore | Einmal vollständig zurückgespielt, siehe `operations.md`. |
 | Resampling, Mono-Mischung, WAV | Unit-Tests im Client. |
 | Einstellungen | Default parst, Accelerator round-trippt, Unsinn wird abgelehnt, kaputte Datei fällt auf den Default zurück. |
+| Secret in der Keychain | Schreiben, Lesen, Löschen und nochmals Löschen gegen die echte macOS-Keychain durchgespielt (`cargo test --lib -- --ignored`, 21.09.2026). Ein Unit-Test hält zusätzlich fest, dass `persist` das Secret nie in `settings.json` schreibt. |
+| Access-Fehler sind unterscheidbar | Gegen echte Sockets: 200 wird akzeptiert, ein 302 auf die Cloudflare-Login-Seite wird als abgelehnter Service Token gemeldet statt als gesunder Backend, ein 403 nennt die Access-Policy, eine URL ohne Schema sagt das. |
+| Service-Token-Header auf der Leitung | Gegen einen echten Socket geprüft: mit Credentials stehen `cf-access-client-id` und `cf-access-client-secret` im Request, ohne Credentials steht keiner der beiden drin (statt leerer Header). |
 
 ## Bekannter Zustand
 
@@ -76,6 +90,9 @@ Das entscheidet sich erst beim echten Redeploy auf der NAS.
   Sie bekommen eins erst, wenn die Re-Derivation gebaut ist oder das
   jeweilige Capture korrigiert wird — der Abschnitt „you said this was
   coming" füllt sich also erst mit neuen Notizen.
+- Der Client spricht seit ADR 0009 nicht mehr aus dem Webview mit dem
+  Backend, sondern aus Rust. Die CORS-Konfiguration des Backends betrifft
+  damit nur noch den Browser-Entwicklungsbuild.
 - Dependabot meldet `glib` 0.18.5 (unsound `Iterator`-Implementierung).
   Kommt über GTK aus Tauris Linux-Webview-Stack, wird auf macOS nicht
   kompiliert, und Tauri 2.11 lässt sich nicht auf `glib` 0.20 heben.

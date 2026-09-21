@@ -12,7 +12,7 @@ mod structuring;
 
 use std::sync::Arc;
 
-use axum::http::{HeaderValue, Method, header};
+use axum::http::{HeaderName, HeaderValue, Method, header};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -181,8 +181,24 @@ fn cors_layer(origins: &[String]) -> anyhow::Result<CorsLayer> {
 
     tracing::info!(origins = ?origins, "CORS restricted");
 
+    // The Cloudflare Access Service Token headers: a preflight that does
+    // not list them here comes back without them in
+    // `Access-Control-Allow-Headers`, so the browser refuses to send the
+    // real request with those headers attached.
+    //
+    // Only the browser development build needs this. The desktop client
+    // makes its requests in Rust, which has no origin and therefore no
+    // preflight at all — see ADR 0009, and note that a preflight would
+    // not have survived Cloudflare Access in front of the backend anyway.
+    let cf_access_client_id = HeaderName::from_static("cf-access-client-id");
+    let cf_access_client_secret = HeaderName::from_static("cf-access-client-secret");
+
     Ok(CorsLayer::new()
         .allow_origin(parsed)
         .allow_methods([Method::GET, Method::POST])
-        .allow_headers([header::CONTENT_TYPE]))
+        .allow_headers([
+            header::CONTENT_TYPE,
+            cf_access_client_id,
+            cf_access_client_secret,
+        ]))
 }
