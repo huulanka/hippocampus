@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/huulanka/hippocampus/compare/v1.5.0...v1.5.1) (2026-09-21)
+
+
+### Bug Fixes
+
+* the cask directory has to be created before writing into it ([#41](https://github.com/huulanka/hippocampus/issues/41)) ([dabe0d7](https://github.com/huulanka/hippocampus/commit/dabe0d77d30901d410a5608f803b4398a54ea03e))
+
 # [1.5.0](https://github.com/huulanka/hippocampus/compare/v1.4.0...v1.5.0) (2026-09-21)
 
 
