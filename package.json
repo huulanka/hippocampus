@@ -1,0 +1,17 @@
+{
+  "name": "hippocampus-release-tooling",
+  "private": true,
+  "description": "Not the app — semantic-release and its plugins for the repo as a whole. See scripts/bump-version.sh and .releaserc.json.",
+  "scripts": {
+    "release:dry-run": "semantic-release --dry-run --no-ci"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^11.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "semantic-release": "^25.0.8"
+  }
+}

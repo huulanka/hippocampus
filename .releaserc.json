@@ -1,0 +1,32 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md" }],
+    [
+      "@semantic-release/exec",
+      { "prepareCmd": "./scripts/bump-version.sh ${nextRelease.version}" }
+    ],
+    [
+      "@semantic-release/git",
+      {
+        "assets": [
+          "Cargo.toml",
+          "Cargo.lock",
+          "backend/Cargo.toml",
+          "contracts/Cargo.toml",
+          "client/package.json",
+          "client/package-lock.json",
+          "client/src-tauri/Cargo.toml",
+          "client/src-tauri/Cargo.lock",
+          "client/src-tauri/tauri.conf.json",
+          "CHANGELOG.md"
+        ],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ],
+    "@semantic-release/github"
+  ]
+}

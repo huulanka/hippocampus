@@ -5,6 +5,12 @@
 # Cargo/npm packages, plus Tauri's own tauri.conf.json), with no shared
 # source between them, so they are only ever consistent because something
 # set them all together. This is that something.
+#
+# Called two ways: by semantic-release's `exec` plugin during the release
+# job (see .releaserc.json — prepareCmd, before the `git` plugin commits
+# and tags), and directly by hand when you just want to see what a version
+# would touch. `sed -i ''` is macOS syntax on purpose: local dev and the
+# release job both run on macos-latest, same as the rest of this repo's CI.
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -61,6 +67,6 @@ cargo check --workspace --quiet
 (cd client && npm install --package-lock-only --silent)
 
 echo
-echo "Done. Review with 'git diff', then commit and tag:"
-echo "  git add -A && git commit -m \"chore: bump version to $VERSION\""
-echo "  git tag v$VERSION && git push && git push --tags"
+echo "Done. semantic-release commits, tags and pushes this automatically as"
+echo "part of the release job — nothing further to do there. Running this by"
+echo "hand instead: review with 'git diff', it does not commit anything itself."

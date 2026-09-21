@@ -63,6 +63,29 @@ cargo run -p backend
 cd client && npm install && npm run tauri dev
 ```
 
+## Releases
+
+Versioning is [semantic-release](https://semantic-release.org/), driven by
+PR titles — every PR is squash-merged, so the PR title becomes the commit
+header on `main`, and that header is what decides the next version. It
+must follow [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat: ...`, `fix: ...`, `chore: ...`); a PR-title-lint check enforces
+this before merge. `feat` bumps minor, `fix` bumps patch, a `BREAKING
+CHANGE:` footer bumps major — anything else (`chore`, `docs`, `ci`, ...)
+does not release at all.
+
+On every push to `main` that passes CI, the release job in
+`.github/workflows/ci.yml` runs `semantic-release`, which sets the version
+in every place it is duplicated (via `scripts/bump-version.sh`), updates
+`CHANGELOG.md`, commits, tags, and creates a GitHub Release — no manual
+version bump or tag, ever. Preview what a release would do without
+publishing anything:
+
+```sh
+npm install   # once, at the repo root — this is release tooling, not the app
+npm run release:dry-run
+```
+
 ## Voice capture
 
 Speech recognition runs on this machine, never on the server: audio is the

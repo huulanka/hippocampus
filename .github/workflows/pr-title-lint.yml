@@ -1,0 +1,43 @@
+name: PR Title Lint
+
+# Lints the PR title against the same commitlint rules semantic-release will
+# apply to the eventual squash-merge commit header ("<PR title> (#<PR
+# number>)") — that header is what semantic-release actually reads to decide
+# the next version. Catching a bad title here, before merge, is cheaper than
+# finding out on main that a release silently didn't happen.
+#
+# `edited` is included because the title can change without a new commit.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches:
+      - main
+
+jobs:
+  lint-pr-title:
+    name: Prospective squash-merge commit header
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint prospective squash-merge commit header
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: echo "${PR_TITLE} (#${PR_NUMBER})" | npx commitlint --config ./commitlint.config.mjs
