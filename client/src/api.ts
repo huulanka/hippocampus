@@ -1,6 +1,8 @@
 // Mirrors the DTOs in the `contracts` Rust crate. Kept as plain types (not
 // generated) since the surface is small; if it grows, revisit codegen.
 
+import { getSettings, logError } from "./desktop";
+
 export interface CaptureListItem {
   event_id: string;
   transcript_text: string;
@@ -195,12 +197,45 @@ export interface SearchOptions {
   to?: string;
 }
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+
+/// Which backend requests go to. Mutable so a value read from persisted
+/// settings (desktop app) or set from the Settings screen can take effect
+/// without a restart — see `initApiBaseUrl` and `setApiBaseUrl`.
+let baseUrl = DEFAULT_BASE_URL;
+
+export function getApiBaseUrl(): string {
+  return baseUrl;
+}
+
+/// Points every subsequent request at a different backend. An empty value
+/// falls back to `DEFAULT_BASE_URL`.
+export function setApiBaseUrl(url: string | null | undefined): void {
+  baseUrl = url && url.trim() ? url.trim() : DEFAULT_BASE_URL;
+}
+
+/// Loads the persisted backend URL, if the desktop app has one saved, and
+/// applies it before the first request goes out. Call once at startup and
+/// await it before rendering — the browser build and a fresh install both
+/// resolve to `DEFAULT_BASE_URL` either way.
+export async function initApiBaseUrl(): Promise<void> {
+  const settings = await getSettings();
+  setApiBaseUrl(settings.backend_url);
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, init);
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}${path}`, init);
+  } catch (err) {
+    const message = `${path} failed to reach ${baseUrl}: ${String(err)}`;
+    logError(message);
+    throw new Error(message);
+  }
   if (!res.ok) {
-    throw new Error(`${path} failed: ${res.status} ${res.statusText}`);
+    const message = `${path} failed: ${res.status} ${res.statusText}`;
+    logError(message);
+    throw new Error(message);
   }
   return (await res.json()) as T;
 }
@@ -239,7 +274,7 @@ export function getCapture(eventId: string): Promise<CaptureDetail> {
 /// URL of the original recording. Used as an <audio> source rather than
 /// fetched, so the browser can stream and seek it itself.
 export function audioUrl(eventId: string): string {
-  return `${BASE_URL}/captures/${eventId}/audio`;
+  return `${baseUrl}/captures/${eventId}/audio`;
 }
 
 /// Corrects a capture's text. The correction is appended as a new
@@ -273,6 +308,13 @@ export function getResurfaced(): Promise<Resurfaced> {
 
 export function listEntityTypes(): Promise<EntityTypeCount[]> {
   return request<EntityTypeCount[]>("/entity-types");
+}
+
+/// The crate version the connected backend is actually running — useful
+/// once two Macs share one NAS-hosted backend and "which build is live"
+/// stops being obvious from being the one who deployed it.
+export function getBackendVersion(): Promise<string> {
+  return request<string>("/version");
 }
 
 export function search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {

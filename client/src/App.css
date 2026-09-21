@@ -487,6 +487,12 @@ a:hover {
   font-size: 13px;
   min-width: 120px;
 }
+.settings-input {
+  flex: 1;
+  outline: none;
+  color: inherit;
+  font-family: inherit;
+}
 .hotkey-capturing {
   border-color: var(--hpo-accent);
   color: var(--hpo-dim);

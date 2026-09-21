@@ -59,7 +59,7 @@ impl Recording {
                     }
                 },
                 move |err| {
-                    eprintln!("input stream error: {err}");
+                    log::error!("input stream error: {err}");
                     error_flag.store(true, Ordering::Relaxed);
                 },
                 None,

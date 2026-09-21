@@ -1,9 +1,11 @@
 //! Settings that outlive a single run of the app.
 //!
-//! Only one thing lives here so far: which key summons the capture field.
-//! It is stored as a Tauri accelerator string ("Super+Shift+KeyH") rather
-//! than as a parsed shortcut, because that is the form both the plugin and
-//! a human editing the file by hand can read.
+//! Which key summons the capture field, stored as a Tauri accelerator
+//! string ("Super+Shift+KeyH") rather than as a parsed shortcut, because
+//! that is the form both the plugin and a human editing the file by hand
+//! can read. And which backend the client talks to — `None` means the
+//! built-in default, so a fresh install needs no configuration to work
+//! against a locally-run backend.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -22,12 +24,18 @@ const FILE_NAME: &str = "settings.json";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub capture_shortcut: String,
+    /// `None` means "use the built-in default", not "unset" — keeps a
+    /// fresh `settings.json` from an older version (which has no such
+    /// field) loading as if the user had never touched this.
+    #[serde(default)]
+    pub backend_url: Option<String>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             capture_shortcut: DEFAULT_CAPTURE_SHORTCUT.to_string(),
+            backend_url: None,
         }
     }
 }
@@ -46,7 +54,7 @@ impl SettingsState {
     pub fn load(path: PathBuf) -> Self {
         let current = match std::fs::read_to_string(&path) {
             Ok(raw) => serde_json::from_str(&raw).unwrap_or_else(|err| {
-                eprintln!("settings file at {} is unreadable: {err}", path.display());
+                log::warn!("settings file at {} is unreadable: {err}", path.display());
                 Settings::default()
             }),
             Err(_) => Settings::default(),
@@ -121,11 +129,12 @@ pub fn set_capture_shortcut(
         format!("that combination could not be registered — something else may own it ({err})")
     })?;
     if let Err(err) = shortcuts.unregister(previous) {
-        eprintln!("could not release the previous shortcut: {err}");
+        log::warn!("could not release the previous shortcut: {err}");
     }
 
     let updated = Settings {
         capture_shortcut: wanted.into_string(),
+        ..state.snapshot()
     };
 
     if let Ok(mut current) = state.current.lock() {
@@ -134,7 +143,36 @@ pub fn set_capture_shortcut(
     if let Err(err) = state.persist(&updated) {
         // The shortcut works right now; it just will not survive a restart.
         // Worth saying, not worth undoing a change the user asked for.
-        eprintln!("could not write settings: {err}");
+        log::warn!("could not write settings: {err}");
+    }
+
+    Ok(updated)
+}
+
+/// Points the client at a different backend, or back at the built-in
+/// default when given an empty string.
+///
+/// No reachability check happens here — the caller does that against
+/// `/health` before committing to a value, so a typo does not lock the
+/// user out of the settings screen that would let them fix it.
+#[tauri::command]
+pub fn set_backend_url(
+    state: tauri::State<'_, SettingsState>,
+    url: Option<String>,
+) -> Result<Settings, String> {
+    let trimmed = url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
+
+    let updated = {
+        let mut current = state
+            .current
+            .lock()
+            .map_err(|_| "settings lock poisoned".to_string())?;
+        current.backend_url = trimmed;
+        current.clone()
+    };
+
+    if let Err(err) = state.persist(&updated) {
+        log::warn!("could not write settings: {err}");
     }
 
     Ok(updated)
@@ -179,5 +217,41 @@ mod tests {
     fn a_missing_file_is_not_an_error() {
         let state = SettingsState::load(PathBuf::from("/nonexistent/hippocampus/settings.json"));
         assert_eq!(state.snapshot().capture_shortcut, DEFAULT_CAPTURE_SHORTCUT);
+    }
+
+    /// A `settings.json` written by a version of the app that predates
+    /// `backend_url` must still load — that is what `#[serde(default)]`
+    /// on the field is for.
+    #[test]
+    fn a_settings_file_without_backend_url_loads_as_the_default() {
+        let dir = std::env::temp_dir().join("hippocampus-settings-test-backend-url-absent");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+        std::fs::write(&path, br#"{"capture_shortcut":"Super+Shift+KeyH"}"#).unwrap();
+
+        let state = SettingsState::load(path.clone());
+        assert_eq!(state.snapshot().backend_url, None);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn a_saved_backend_url_survives_a_reload() {
+        let dir = std::env::temp_dir().join("hippocampus-settings-test-backend-url-roundtrip");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.json");
+
+        let state = SettingsState::load(path.clone());
+        let mut settings = state.snapshot();
+        settings.backend_url = Some("https://hippocampus.example.com".to_string());
+        state.persist(&settings).unwrap();
+
+        let reloaded = SettingsState::load(path.clone());
+        assert_eq!(
+            reloaded.snapshot().backend_url,
+            Some("https://hippocampus.example.com".to_string())
+        );
+
+        std::fs::remove_file(&path).ok();
     }
 }

@@ -3,6 +3,7 @@ pub mod entities;
 pub mod resurface;
 pub mod search;
 
+use axum::Json;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
@@ -11,9 +12,15 @@ use crate::AppState;
 use crate::audio;
 
 /// Reachable without a Cloudflare Access token, because the thing asking
-/// is a health check that has no way to obtain one.
+/// is a health check (or the client's About screen, before it necessarily
+/// has one configured) that has no way to obtain one.
 pub fn public_router() -> Router<AppState> {
-    Router::new().route("/health", get(|| async { "ok" }))
+    Router::new()
+        .route("/health", get(|| async { "ok" }))
+        .route(
+            "/version",
+            get(|| async { Json(env!("CARGO_PKG_VERSION")) }),
+        )
 }
 
 /// Everything that touches what the user has said. Behind access

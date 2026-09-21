@@ -13,6 +13,7 @@ mod settings;
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_global_shortcut::ShortcutState;
+use tauri_plugin_log::{Target, TargetKind};
 
 use settings::SettingsState;
 
@@ -32,24 +33,39 @@ const FOCUS_EVENT: &str = "hippocampus://focus-capture";
 /// app with it.
 fn summon_capture(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
-        eprintln!("global shortcut fired but the main window is gone");
+        log::warn!("global shortcut fired but the main window is gone");
         return;
     };
 
     if let Err(err) = window.show() {
-        eprintln!("could not show window: {err}");
+        log::warn!("could not show window: {err}");
     }
     if let Err(err) = window.set_focus() {
-        eprintln!("could not focus window: {err}");
+        log::warn!("could not focus window: {err}");
     }
     if let Err(err) = app.emit(FOCUS_EVENT, ()) {
-        eprintln!("could not notify webview: {err}");
+        log::warn!("could not notify webview: {err}");
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Registered first so nothing logged during setup is lost. Writes
+        // to stdout (visible under `tauri dev`) and to a rolling file
+        // under the OS log dir, which is what the Settings screen's "Open
+        // Logs" button points at — the same fix as the backend's, for the
+        // same reason: this stops being a terminal session once it leaves
+        // this machine.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                ])
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -75,6 +91,7 @@ pub fn run() {
             capture::cancel_recording,
             settings::get_settings,
             settings::set_capture_shortcut,
+            settings::set_backend_url,
         ])
         .setup(|app| {
             // Settings are loaded before the shortcut is registered, and
@@ -88,7 +105,7 @@ pub fn run() {
             // A missing shortcut registration must not stop the app from
             // starting — the window still works, just without the hotkey.
             if let Err(err) = app.global_shortcut().register(shortcut) {
-                eprintln!("could not register the capture shortcut: {err}");
+                log::warn!("could not register the capture shortcut: {err}");
             }
             Ok(())
         })

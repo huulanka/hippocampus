@@ -1,21 +1,29 @@
 import { useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useTheme } from "../theme";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   acceleratorFromEvent,
   formatAccelerator,
   getSettings,
+  openExternalLink,
+  openLogDirectory,
   runningInDesktopApp,
+  setBackendUrl,
   setCaptureShortcut,
   speechAvailable,
 } from "../desktop";
+import { getApiBaseUrl, getBackendVersion, setApiBaseUrl } from "../api";
 
-/// Only the hotkey is real so far. Everything else this screen used to
-/// offer — a tray icon, a cloud transcription mode, a storage path, a
-/// "delete audio after transcription" switch — was a mock, and two of
-/// those switches contradicted decisions the project has already made.
-/// A setting that does nothing is worse than a missing one: it invites
-/// you to believe something about the system that is not true.
+const GITHUB_URL = "https://github.com/huulanka/hippocampus";
+
+/// Only the hotkey, the backend URL and the theme are real so far.
+/// Everything else this screen used to offer — a tray icon, a cloud
+/// transcription mode, a storage path, a "delete audio after
+/// transcription" switch — was a mock, and two of those switches
+/// contradicted decisions the project has already made. A setting that
+/// does nothing is worse than a missing one: it invites you to believe
+/// something about the system that is not true.
 export function SettingsScreen() {
   const { theme, setTheme } = useTheme();
   const [shortcut, setShortcut] = useState(DEFAULT_CAPTURE_SHORTCUT);
@@ -25,10 +33,59 @@ export function SettingsScreen() {
   const [canSpeak, setCanSpeak] = useState(false);
   const captureRef = useRef<HTMLDivElement>(null);
 
+  const [backendUrlInput, setBackendUrlInput] = useState(getApiBaseUrl());
+  const [backendStatus, setBackendStatus] = useState<"idle" | "checking" | "saved" | "error">(
+    "idle",
+  );
+  const [backendError, setBackendError] = useState<string | null>(null);
+
+  const [clientVersion, setClientVersion] = useState<string | null>(null);
+  const [backendVersion, setBackendVersion] = useState<string | null>(null);
+
   useEffect(() => {
-    getSettings().then((settings) => setShortcut(settings.capture_shortcut));
+    getSettings().then((settings) => {
+      setShortcut(settings.capture_shortcut);
+      setBackendUrlInput(settings.backend_url ?? getApiBaseUrl());
+    });
     speechAvailable().then(setCanSpeak);
+    if (runningInDesktopApp()) getVersion().then(setClientVersion);
+    getBackendVersion()
+      .then(setBackendVersion)
+      .catch(() => setBackendVersion(null));
   }, []);
+
+  /// Only committed once `/health` actually answers — a typo here would
+  /// otherwise strand every other screen against a backend that cannot be
+  /// reached, including this one.
+  async function saveBackendUrl() {
+    const wanted = backendUrlInput.trim();
+    setBackendStatus("checking");
+    setBackendError(null);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`${wanted || getApiBaseUrl()}/health`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    } catch (err) {
+      setBackendStatus("error");
+      setBackendError(
+        err instanceof Error && err.name === "AbortError"
+          ? "no answer within 5s"
+          : String(err),
+      );
+      return;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    await setBackendUrl(wanted || null);
+    setApiBaseUrl(wanted);
+    setBackendUrlInput(getApiBaseUrl());
+    setBackendStatus("saved");
+  }
 
   useEffect(() => {
     if (capturing) captureRef.current?.focus();
@@ -113,6 +170,32 @@ export function SettingsScreen() {
       </p>
       {error && <p className="dim settings-note">{error}</p>}
 
+      <h4 className="section-label">BACKEND</h4>
+      <div className="settings-row">
+        <input
+          className="hotkey-display settings-input"
+          type="text"
+          value={backendUrlInput}
+          placeholder="http://localhost:8080"
+          onChange={(e) => {
+            setBackendUrlInput(e.target.value);
+            setBackendStatus("idle");
+          }}
+        />
+        <span
+          className="btn"
+          onClick={backendStatus === "checking" ? undefined : saveBackendUrl}
+        >
+          [ {backendStatus === "checking" ? "Checking…" : "Save"} ]
+        </span>
+      </div>
+      <p className="dim settings-note">
+        {backendStatus === "saved" && "Saved — checked reachable just now."}
+        {backendStatus === "error" && `Not saved: ${backendError}`}
+        {backendStatus === "idle" &&
+          "Where captures go. Checked against /health before it is saved, so a typo cannot strand this screen."}
+      </p>
+
       <h4 className="section-label">SPEECH RECOGNITION</h4>
       <p className="dim settings-note">
         {canSpeak
@@ -125,6 +208,30 @@ export function SettingsScreen() {
         Recordings are kept for good, alongside their transcripts — the recording is the
         original, the transcript is one reading of it. Nothing here deletes anything yet.
       </p>
+
+      <h4 className="section-label">LOGS</h4>
+      <div className="settings-row">
+        <span className="btn" onClick={runningInDesktopApp() ? openLogDirectory : undefined}>
+          [ Open Log Folder ]
+        </span>
+      </div>
+      <p className="dim settings-note">
+        {runningInDesktopApp()
+          ? "Everything this app writes down about itself, in case something needs debugging without a terminal."
+          : "Only the desktop app keeps a log file — this is the browser build."}
+      </p>
+
+      <h4 className="section-label">ABOUT</h4>
+      <p className="dim settings-note">
+        {runningInDesktopApp() ? `App v${clientVersion ?? "…"}` : "Browser build"}
+        {" — "}
+        {backendVersion ? `Backend v${backendVersion}` : "backend unreachable"}
+      </p>
+      <div className="settings-row">
+        <span className="btn" onClick={() => openExternalLink(GITHUB_URL)}>
+          [ GitHub ]
+        </span>
+      </div>
     </>
   );
 }

@@ -31,6 +31,7 @@ services:
       # would be written inside the container and lost on the next
       # `--force-recreate`.
       AUDIO_DIR: /data/audio
+      LOG_DIR: /data/logs
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
       # Both or neither: the backend refuses to start with only one, and
@@ -45,5 +46,6 @@ services:
     volumes:
       - ./data/models:/data/models
       - ./data/audio:/data/audio
+      - ./data/logs:/data/logs
     ports:
       - "8080:8080"

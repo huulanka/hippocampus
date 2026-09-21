@@ -16,6 +16,8 @@ use axum::http::{HeaderValue, Method, header};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use embedding::Embedder;
 use openrouter::OpenRouterClient;
@@ -38,9 +40,37 @@ async fn main() -> anyhow::Result<()> {
     // (e.g. via the Portainer stack), so a missing .env here is fine.
     dotenvy::dotenv().ok();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    // Read directly rather than through `Config`: logging has to be up
+    // before `Config::from_env()` runs, so a bad env var still ends up
+    // somewhere readable instead of only on a terminal that may already be
+    // gone by the time anyone looks (this runs as a Portainer stack, not a
+    // foreground process, once it leaves this machine).
+    let log_dir = std::env::var("LOG_DIR")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "../data/logs".to_string());
+    tokio::fs::create_dir_all(&log_dir).await?;
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "backend.log");
+    let (file_writer, _log_guard) = tracing_appender::non_blocking(file_appender);
+
+    // `from_default_env()` falls back to filtering out everything, not to
+    // a sane level, when `RUST_LOG` is unset — which it always was here in
+    // practice, so "the backend has logs" was previously untrue by
+    // default. `info` is what every `tracing::info!` call in this crate
+    // already assumes an operator wants to see.
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(tracing_subscriber::fmt::layer())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(file_writer)
+                .with_ansi(false),
+        )
         .init();
+    tracing::info!(dir = %log_dir, "file logging ready, rolls daily");
 
     let config = config::Config::from_env()?;
 

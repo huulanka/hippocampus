@@ -7,7 +7,10 @@
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { appLogDir } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { error as writeErrorLog } from "@tauri-apps/plugin-log";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 
 /// Emitted by the Rust side when the global shortcut is pressed. Must match
 /// `FOCUS_EVENT` in `src-tauri/src/lib.rs`.
@@ -20,6 +23,37 @@ export const DEFAULT_CAPTURE_SHORTCUT = "Super+Shift+KeyH";
 
 export function runningInDesktopApp(): boolean {
   return isTauri();
+}
+
+/// Writes to the app's log file (see `tauri_plugin_log` in `lib.rs`), so a
+/// failure is on disk for the Logs button to show even if nobody was
+/// looking at a terminal when it happened. Falls back to the console in
+/// the browser build, where there is no such file.
+export function logError(message: string): void {
+  if (!isTauri()) {
+    console.error(message);
+    return;
+  }
+  writeErrorLog(message).catch(() => {});
+}
+
+/// Opens the folder the app's own logs (and the backend's, once pointed at
+/// the same machine) live in, so diagnosing a problem on either Mac never
+/// requires a terminal.
+export async function openLogDirectory(): Promise<void> {
+  if (!isTauri()) return;
+  const dir = await appLogDir();
+  await openPath(dir);
+}
+
+/// Opens a link in the system's default browser rather than inside the
+/// app's own webview — used for the GitHub link in About.
+export async function openExternalLink(url: string): Promise<void> {
+  if (!isTauri()) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  await openUrl(url);
 }
 
 /// Subscribes to the global-shortcut summon. Returns an unsubscribe
@@ -102,12 +136,15 @@ export function cancelRecording(): Promise<void> {
 
 export interface Settings {
   capture_shortcut: string;
+  /// `null` means the built-in default (`http://localhost:8080`), not
+  /// "no backend" — mirrors `settings::Settings::backend_url` in Rust.
+  backend_url: string | null;
 }
 
 /// Reads the persisted settings. In the browser there are none, so the
 /// defaults come back instead of an error.
 export async function getSettings(): Promise<Settings> {
-  if (!isTauri()) return { capture_shortcut: DEFAULT_CAPTURE_SHORTCUT };
+  if (!isTauri()) return { capture_shortcut: DEFAULT_CAPTURE_SHORTCUT, backend_url: null };
   return await invoke<Settings>("get_settings");
 }
 
@@ -116,6 +153,14 @@ export async function getSettings(): Promise<Settings> {
 /// the previous shortcut is still in force.
 export function setCaptureShortcut(accelerator: string): Promise<Settings> {
   return invoke<Settings>("set_capture_shortcut", { accelerator });
+}
+
+/// Persists which backend the client talks to. Pass `null` (or an empty
+/// string) to go back to the built-in default. Does not itself change
+/// which backend the running app is using — callers apply the result via
+/// `setApiBaseUrl` after this resolves, once they trust the value.
+export function setBackendUrl(url: string | null): Promise<Settings> {
+  return invoke<Settings>("set_backend_url", { url });
 }
 
 const MODIFIER_SYMBOLS: Record<string, string> = {
