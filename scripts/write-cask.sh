@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Rewrites the Homebrew cask for a released version.
+#
+# Called by the release-app workflow once the DMG exists and has been
+# attached to the GitHub Release: the cask has to name both the version
+# and the artifact's checksum, and neither is known until then.
+#
+# Usage: scripts/write-cask.sh <version> <path-to-dmg>
+set -euo pipefail
+
+version="${1:?version required}"
+dmg="${2:?path to the built dmg required}"
+
+sha="$(shasum -a 256 "$dmg" | awk '{print $1}')"
+
+cat > Casks/hippocampus.rb <<CASK
+cask "hippocampus" do
+  version "${version}"
+  sha256 "${sha}"
+
+  url "https://github.com/huulanka/hippocampus/releases/download/v#{version}/Hippocampus_#{version}_aarch64.dmg"
+  name "Hippocampus"
+  desc "Personal knowledge system fed by voice, structured without losing the original"
+  homepage "https://github.com/huulanka/hippocampus"
+
+  # Apple Silicon only. The build is aarch64, and cross-building an x86
+  # bundle would ship something nobody has tested.
+  depends_on arch: :arm64
+  depends_on macos: ">= :sonoma"
+
+  app "Hippocampus.app"
+
+  # The app's own data: the settings file, the downloaded speech model
+  # (~670 MB) and the log directory. The Cloudflare Access secret is NOT
+  # here — it lives in the macOS Keychain and is deliberately left alone,
+  # because an uninstall should not silently revoke a credential that may
+  # still be in use on another machine.
+  zap trash: [
+    "~/Library/Application Support/com.andreasbauer.hippocampus",
+    "~/Library/Logs/com.andreasbauer.hippocampus",
+    "~/Library/Saved Application State/com.andreasbauer.hippocampus.savedState",
+  ]
+
+  caveats <<~EOS
+    This build is ad-hoc signed, not notarised — there is no Apple
+    Developer account behind it. macOS will therefore refuse to open it
+    until the quarantine flag is gone. Either install with:
+
+      brew install --cask --no-quarantine hippocampus
+
+    or, if it is already installed, remove the flag once:
+
+      xattr -dr com.apple.quarantine /Applications/Hippocampus.app
+
+    The microphone needs the bundle: speaking a capture does not work
+    from a development build, only from an installed app like this one.
+  EOS
+end
+CASK
+
+echo "wrote Casks/hippocampus.rb for ${version} (${sha})"

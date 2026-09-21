@@ -1,0 +1,96 @@
+name: Release app
+
+# Builds the macOS app for a published release and attaches it, then
+# points the Homebrew cask at it.
+#
+# Deliberately a separate workflow from the release itself rather than a
+# step inside it: a failed app build must not be able to abort a release
+# whose version bump, tag and changelog are already correct. If this ever
+# fails, the release stands and only the download is missing — which is
+# re-runnable from the Actions tab without touching git history.
+on:
+  release:
+    types: [published]
+  # Re-runnable by hand for a release whose build failed or predates this
+  # workflow.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build, e.g. v1.3.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The tag, not the branch: the app must be built from exactly
+          # what was released, version numbers included.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          # Needed to push the cask update back to main afterwards; same
+          # token and the same reason as the release job.
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build the app
+        working-directory: client
+        run: npm run tauri build
+
+      - name: Find the bundle
+        id: bundle
+        run: |
+          dmg="$(ls client/src-tauri/target/release/bundle/dmg/*.dmg | head -n1)"
+          echo "path=$dmg" >> "$GITHUB_OUTPUT"
+          echo "Built $dmg"
+
+      - name: Attach it to the release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release upload "$TAG" "${{ steps.bundle.outputs.path }}" --clobber
+
+      # Written to a scratch path first: the checkout is on the tag, and
+      # the cask has to land on main, which is where a tap reads from.
+      - name: Point the cask at it
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          ./scripts/write-cask.sh "${TAG#v}" "${{ steps.bundle.outputs.path }}"
+          cp Casks/hippocampus.rb "${RUNNER_TEMP}/hippocampus.rb"
+
+      - name: Commit the cask to main
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p Casks
+          cp "${RUNNER_TEMP}/hippocampus.rb" Casks/hippocampus.rb
+          if git diff --quiet -- Casks/hippocampus.rb; then
+            echo "cask already current"
+            exit 0
+          fi
+          git add Casks/hippocampus.rb
+          git commit -m "chore(release): cask for ${TAG} [skip ci]"
+          git push origin main

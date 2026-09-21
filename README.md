@@ -39,6 +39,32 @@ pin incompatible exact versions of `ort`. See
 [`docs/adr/0007-separate-client-workspace.md`](docs/adr/0007-separate-client-workspace.md).
 Cargo commands for the client must be run from `client/src-tauri/`.
 
+## Installing it
+
+Apple Silicon only, macOS Sonoma or newer:
+
+```sh
+brew tap huulanka/hippocampus https://github.com/huulanka/hippocampus
+brew install --cask --no-quarantine hippocampus
+```
+
+`--no-quarantine` is not optional here and is worth understanding rather
+than pasting. This build is **ad-hoc signed, not notarised** — there is no
+Apple Developer account behind it — so Gatekeeper refuses to open it. The
+flag tells Homebrew not to set the quarantine attribute in the first
+place. Without it the app installs and then will not start; the fix after
+the fact is `xattr -dr com.apple.quarantine /Applications/Hippocampus.app`.
+
+Install it properly rather than running `npm run tauri dev` for daily use:
+**the microphone only works from a bundled app.** macOS grants microphone
+permission per bundle identity, and a development binary has none — it
+records silence instead of failing, which is the worst possible way to
+find out.
+
+The cask and the `.dmg` it points at are produced by
+`.github/workflows/release-app.yml` on every published release, so the
+version you get is the version that was released.
+
 ## Development
 
 Prerequisites: Rust (stable, via [rustup](https://rustup.rs)), Docker,
