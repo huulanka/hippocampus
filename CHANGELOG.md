@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/huulanka/hippocampus/compare/v1.1.0...v1.2.0) (2026-09-21)
+
+
+### Features
+
+* replace ort with candle for local inference ([#33](https://github.com/huulanka/hippocampus/issues/33)) ([171ec1f](https://github.com/huulanka/hippocampus/commit/171ec1f7c6acba2c18e43ceef23a28cedb35759a))
+
 # [1.1.0](https://github.com/huulanka/hippocampus/compare/v1.0.0...v1.1.0) (2026-09-21)
 
 
