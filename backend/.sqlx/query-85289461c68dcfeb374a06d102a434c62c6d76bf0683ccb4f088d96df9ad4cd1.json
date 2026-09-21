@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into capture_echo_judged (capture_event_id, judged_by, judged_at)\n           values ($1, $2, now())\n           on conflict (capture_event_id) do update\n               set judged_by = excluded.judged_by, judged_at = excluded.judged_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "85289461c68dcfeb374a06d102a434c62c6d76bf0683ccb4f088d96df9ad4cd1"
+}

@@ -102,7 +102,10 @@ export interface VoiceCapture {
   capture: {
     event_id: string;
     occurred_at: string;
+    /// Empty on arrival — the echo is judged after the capture is stored,
+    /// so that speaking a note is confirmed as saved immediately.
     echo: DesktopEchoItem[];
+    echo_pending: boolean;
   };
 }
 

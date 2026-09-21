@@ -26,7 +26,9 @@ pub struct Config {
     pub echo_min_rerank: f32,
     /// Which cross-encoder reranks echo candidates: "jina", "bge" or
     /// "off".
-    pub reranker: crate::reranker::Choice,
+    pub judge: crate::judge::Choice,
+    /// Which hosted model judges echoes when `judge` is `Remote`.
+    pub echo_judge_model: String,
     /// Expected `aud` of the Cloudflare Access token. Unset means access
     /// verification is switched off, which is how local development runs.
     pub cf_access_aud: Option<String>,
@@ -56,10 +58,10 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         // Read first: both echo thresholds default differently depending
         // on whether a cross-encoder is doing the judging.
-        let reranker = env_non_empty("HIPPOCAMPUS_RERANKER")
-            .map(|v| v.parse::<crate::reranker::Choice>())
+        let judge = env_non_empty("HIPPOCAMPUS_RERANKER")
+            .map(|v| v.parse::<crate::judge::Choice>())
             .transpose()?
-            .unwrap_or(crate::reranker::Choice::Bge);
+            .unwrap_or(crate::judge::Choice::Remote);
 
         let config = Self {
             database_url: env_non_empty("DATABASE_URL")
@@ -78,19 +80,21 @@ impl Config {
                 .map(|v| v.parse())
                 .transpose()
                 .map_err(|err| anyhow::anyhow!("ECHO_MIN_SIMILARITY must be a number: {err}"))?
-                .unwrap_or(match reranker {
-                    // A recall floor, not a quality bar: the cross-encoder
+                .unwrap_or(match judge {
+                    // A recall floor, not a quality bar: the judge
                     // decides. Keeping 0.89 here would hand it a candidate
                     // set already filtered by the thing it exists to fix.
-                    crate::reranker::Choice::Off => crate::echo::DEFAULT_MIN_SIMILARITY,
+                    crate::judge::Choice::Off => crate::echo::DEFAULT_MIN_SIMILARITY,
                     _ => crate::echo::CANDIDATE_MIN_SIMILARITY,
                 }),
             echo_min_rerank: env_non_empty("ECHO_MIN_RERANK_SCORE")
                 .map(|v| v.parse())
                 .transpose()
                 .map_err(|err| anyhow::anyhow!("ECHO_MIN_RERANK_SCORE must be a number: {err}"))?
-                .unwrap_or_else(|| crate::reranker::default_min_score(reranker)),
-            reranker,
+                .unwrap_or_else(|| crate::judge::default_min_score(judge)),
+            judge,
+            echo_judge_model: env_non_empty("ECHO_JUDGE_MODEL")
+                .unwrap_or_else(|| crate::judge::DEFAULT_JUDGE_MODEL.to_string()),
             cf_access_aud: env_non_empty("CF_ACCESS_AUD"),
             cf_access_team_domain: env_non_empty("CF_ACCESS_TEAM_DOMAIN"),
             timezone: env_non_empty("HIPPOCAMPUS_TIMEZONE")

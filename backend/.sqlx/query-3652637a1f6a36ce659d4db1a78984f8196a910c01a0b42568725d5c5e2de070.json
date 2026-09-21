@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from capture_echo_judged where capture_event_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3652637a1f6a36ce659d4db1a78984f8196a910c01a0b42568725d5c5e2de070"
+}

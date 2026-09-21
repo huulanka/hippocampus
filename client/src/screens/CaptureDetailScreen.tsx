@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { correctTranscript, getCapture, type CaptureDetail } from "../api";
 import { AudioPlayer } from "../components/AudioPlayer";
+import { useEcho } from "../useEcho";
 import { entityColor } from "../entityType";
 import { whenLabel } from "../whenLabel";
 
@@ -27,6 +28,16 @@ export function CaptureDetailScreen({
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  /// A capture recorded before its echo was judged — or one whose
+  /// judgement is still running — gets it filled in here rather than
+  /// making the whole page wait for a model.
+  const live = useEcho(
+    detail?.echo_pending ? detail.event_id : null,
+    detail?.echo_pending ?? false,
+  );
+  const echoItems = detail?.echo_pending ? live.items : (detail?.echo ?? []);
+  const echoPending = detail?.echo_pending ? live.pending : false;
 
   const reload = useCallback(
     () => getCapture(eventId).then(setDetail),
@@ -221,13 +232,15 @@ export function CaptureDetailScreen({
           [ YOU'VE BEEN HERE BEFORE ]{" "}
           <span className="dim">— your own earlier words, not a summary</span>
         </div>
-        {detail.echo.length === 0 ? (
+        {echoPending ? (
+          <p className="dim detail-note">Looking through your earlier captures…</p>
+        ) : echoItems.length === 0 ? (
           <p className="dim detail-note">
             Nothing close enough among your earlier captures.
           </p>
         ) : (
           <div className="card-stack detail-echo">
-            {detail.echo.map((item) => (
+            {echoItems.map((item) => (
               <div
                 key={item.capture_event_id}
                 className="timeline-card clickable"

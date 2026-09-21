@@ -28,10 +28,19 @@ pub struct CaptureAccepted {
     pub event_id: Uuid,
     pub occurred_at: DateTime<Utc>,
     /// Earlier captures that are semantically close to the one just
-    /// recorded, returned inline so the client can show them immediately
-    /// without a second round trip. Empty when nothing clears the
-    /// similarity threshold — which is the common case early on.
+    /// recorded. Empty when nothing clears the threshold — which is the
+    /// common case early on — **and** while `echo_pending` is true.
     pub echo: Vec<EchoItem>,
+    /// The echo is still being judged and will arrive shortly; ask
+    /// `GET /captures/{id}/echo` for it.
+    ///
+    /// Judging used to happen inline, which meant the capture was not
+    /// confirmed as stored until it finished: 28 seconds against the NAS,
+    /// for a note that had been safely written after 250 ms. It now runs
+    /// behind the response, so this flag is how the client knows to show
+    /// "looking for echoes" rather than "nothing echoed".
+    #[serde(default)]
+    pub echo_pending: bool,
 }
 
 /// One earlier capture surfaced as an echo. Deliberately carries the
@@ -46,12 +55,22 @@ pub struct EchoItem {
     /// Cosine similarity in [0, 1]; higher is closer. This is the
     /// retrieval score, not the one the echo was judged by.
     pub similarity: f32,
-    /// The cross-encoder's verdict, when one ran. A raw logit, not a
-    /// probability, and not comparable between reranker models — which is
-    /// why it is never shown to the user. It is here so the threshold can
-    /// be tuned by looking at real captures.
+    /// The judge's verdict, when one ran. Not comparable between judges —
+    /// raw logits for the local cross-encoder, a 0-1 relevance for a
+    /// hosted one — which is why it is never shown to the user. It is
+    /// here so the threshold can be tuned by looking at real captures.
     #[serde(default)]
     pub rerank_score: Option<f32>,
+}
+
+/// A capture's echo, and whether it is final.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EchoResponse {
+    pub items: Vec<EchoItem>,
+    /// True while the judgement is still running. An empty `items` with
+    /// this set means "not yet"; an empty `items` without it means
+    /// "nothing echoed", which is a real and common answer.
+    pub pending: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,6 +108,11 @@ pub struct CaptureDetail {
     pub entities: Vec<EntityMention>,
     pub relations: Vec<RelationMention>,
     pub echo: Vec<EchoItem>,
+    /// As on `CaptureAccepted`: the echo is still being judged. Opening a
+    /// capture recorded before this mechanism existed sets it once, while
+    /// the backfill runs.
+    #[serde(default)]
+    pub echo_pending: bool,
     /// Everything this capture caused, in order — the capture event itself,
     /// its transcripts, and the entity/relation events derived from it.
     pub events: Vec<EventRecord>,

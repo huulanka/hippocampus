@@ -5,6 +5,7 @@ mod echo;
 mod embedding;
 mod error;
 mod events;
+mod judge;
 mod openrouter;
 mod reranker;
 mod routes;
@@ -29,7 +30,13 @@ pub struct AppState {
     openrouter: Option<Arc<OpenRouterClient>>,
     echo_min_similarity: f32,
     echo_min_rerank: f32,
-    reranker: Option<reranker::Reranker>,
+    /// Shared rather than cloned: echo judging now happens in a spawned
+    /// task, which outlives the request that started it.
+    judge: Option<Arc<judge::Judge>>,
+    /// Captures currently being judged. Without it, opening a capture
+    /// that has no stored echo three times would start three judgements
+    /// of it — and each one is a paid call.
+    judging: Arc<std::sync::Mutex<std::collections::HashSet<uuid::Uuid>>>,
     audio_dir: std::path::PathBuf,
     timezone: chrono_tz::Tz,
 }
@@ -88,12 +95,23 @@ async fn main() -> anyhow::Result<()> {
     let embedder = Embedder::load(config.model_cache_dir.clone().into()).await?;
     tracing::info!("embedding model ready");
 
-    let reranker =
-        reranker::Reranker::load(config.reranker, config.model_cache_dir.clone().into()).await?;
-    match &reranker {
-        Some(loaded) => tracing::info!(reranker = ?loaded.choice(), "echo reranking enabled"),
+    let judge = judge::Judge::load(
+        config.judge,
+        config.model_cache_dir.clone().into(),
+        config.openrouter_api_key.clone(),
+        config.echo_judge_model.clone(),
+        config.openrouter_zdr,
+    )
+    .await?
+    .map(Arc::new);
+    match &judge {
+        Some(loaded) => tracing::info!(
+            judge = %loaded.name(),
+            min_score = config.echo_min_rerank,
+            "echo judging enabled"
+        ),
         None => tracing::warn!(
-            "echo reranking is off — echoes are ordered by embedding similarity alone, \
+            "echo judging is off — echoes are ordered by embedding similarity alone, \
              which measurably ranks unrelated captures above related ones"
         ),
     }
@@ -116,7 +134,8 @@ async fn main() -> anyhow::Result<()> {
         openrouter,
         echo_min_similarity: config.echo_min_similarity,
         echo_min_rerank: config.echo_min_rerank,
-        reranker,
+        judge,
+        judging: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         audio_dir: config.audio_dir.clone().into(),
         timezone: config.timezone,
     };

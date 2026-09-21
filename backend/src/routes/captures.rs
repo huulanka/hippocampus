@@ -4,7 +4,7 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use contracts::{
     AudioDetail, CaptureAccepted, CaptureDetail, CorrectTranscriptRequest, CreateCaptureRequest,
-    EchoItem, EntityMention, EventRecord, RelationMention, TranscriptVersion,
+    EchoItem, EchoResponse, EntityMention, EventRecord, RelationMention, TranscriptVersion,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -71,7 +71,7 @@ pub async fn create(
     .execute(&state.pool)
     .await?;
 
-    let echo = index_capture(
+    index_capture(
         &state,
         stored.id,
         stored.occurred_at,
@@ -86,7 +86,8 @@ pub async fn create(
     Ok(Json(CaptureAccepted {
         event_id: stored.id,
         occurred_at: stored.occurred_at,
-        echo,
+        echo: Vec::new(),
+        echo_pending: true,
     }))
 }
 
@@ -225,7 +226,7 @@ pub async fn create_from_audio(
     .execute(&state.pool)
     .await?;
 
-    let echo = index_capture(
+    index_capture(
         &state,
         stored.id,
         stored.occurred_at,
@@ -240,19 +241,27 @@ pub async fn create_from_audio(
     Ok(Json(CaptureAccepted {
         event_id: stored.id,
         occurred_at: stored.occurred_at,
-        echo,
+        echo: Vec::new(),
+        echo_pending: true,
     }))
 }
 
 /// Everything that happens to a capture's text once it exists, whatever
-/// produced it: make it findable, structure it, and answer with its echoes.
+/// produced it: make it findable, structure it, and start judging its
+/// echoes.
+///
+/// Nothing here waits for a model. Structuring never did; echo used to,
+/// and that inline wait was the whole of the 28 seconds a capture took
+/// against the NAS — for a note that was already safely stored after a
+/// quarter of a second. The echo now arrives behind the response, and
+/// [`super::AppState`] remembers it so it is never computed twice.
 async fn index_capture(
     state: &AppState,
     capture_event_id: Uuid,
     occurred_at: chrono::DateTime<chrono::Utc>,
     transcript: &str,
     spoken_at: SpokenAt,
-) -> Result<Vec<EchoItem>, AppError> {
+) -> Result<(), AppError> {
     let embedding: pgvector::Vector = state.embedder.embed_passage(transcript).await?.into();
 
     sqlx::query!(
@@ -280,27 +289,73 @@ async fn index_capture(
         spoken_at,
     ));
 
-    // Echo, by contrast, is computed inline: it is the one thing the user
-    // is waiting to see and needs no network call. A failure still must not
-    // cost the capture, so it degrades to an empty list.
-    Ok(echo::for_capture_text(
+    spawn_judging(state, capture_event_id);
+
+    Ok(())
+}
+
+/// Judges a capture's echo behind whatever response is being sent, unless
+/// a judgement for it is already running.
+///
+/// A failure is logged and otherwise ignored: the marker is only written
+/// on success, so the next read of this capture starts a fresh attempt.
+/// That is the retry, and it costs nothing when nobody looks.
+fn spawn_judging(state: &AppState, capture_event_id: Uuid) {
+    {
+        let Ok(mut in_flight) = state.judging.lock() else {
+            return;
+        };
+        if !in_flight.insert(capture_event_id) {
+            return;
+        }
+    }
+
+    let pool = state.pool.clone();
+    let judge = state.judge.clone();
+    let in_flight = state.judging.clone();
+    let min_similarity = state.echo_min_similarity;
+
+    tokio::spawn(async move {
+        let result =
+            echo::judge_stored_capture(&pool, judge.as_deref(), capture_event_id, min_similarity)
+                .await;
+        if let Err(err) = result {
+            tracing::warn!(
+                ?err,
+                %capture_event_id,
+                "echo judging failed; it will be retried the next time this capture is read"
+            );
+        }
+        if let Ok(mut in_flight) = in_flight.lock() {
+            in_flight.remove(&capture_event_id);
+        }
+    });
+}
+
+/// The stored echo for a capture, starting a judgement if there is none.
+///
+/// Returns the items and whether a judgement is still outstanding, which
+/// is what lets the client say "looking for echoes" instead of showing
+/// the empty result as if it were the answer.
+async fn stored_echo(state: &AppState, capture_event_id: Uuid) -> (Vec<EchoItem>, bool) {
+    match echo::stored(
         &state.pool,
-        &embedding,
-        transcript,
-        occurred_at,
-        Some(capture_event_id),
-        state.reranker.as_ref(),
-        echo::Thresholds {
-            min_similarity: state.echo_min_similarity,
-            min_rerank: state.echo_min_rerank,
-        },
+        capture_event_id,
+        state.echo_min_rerank,
         echo::DEFAULT_LIMIT,
     )
     .await
-    .unwrap_or_else(|err| {
-        tracing::warn!(?err, %capture_event_id, "echo lookup failed, returning capture without it");
-        Vec::new()
-    }))
+    {
+        Ok(Some(items)) => (items, false),
+        Ok(None) => {
+            spawn_judging(state, capture_event_id);
+            (Vec::new(), true)
+        }
+        Err(err) => {
+            tracing::warn!(?err, %capture_event_id, "reading the stored echo failed");
+            (Vec::new(), false)
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -369,35 +424,47 @@ pub async fn audio_for(
 
 #[derive(serde::Deserialize)]
 pub struct EchoParams {
-    /// Override the configured thresholds, for tuning against real
-    /// captures without restarting the backend. The right values drift
-    /// as the corpus grows, and they can only be found by looking.
-    pub min_similarity: Option<f32>,
+    /// Override the display threshold, for tuning against real captures
+    /// without restarting the backend. The right value drifts as the
+    /// corpus grows, and it can only be found by looking:
+    /// `?min_rerank=-99` returns every candidate with its score.
+    ///
+    /// There is deliberately no `min_similarity` any more. That one chose
+    /// the *candidate* set, and candidates are settled when a capture is
+    /// judged — honouring it per request would mean re-judging, which is
+    /// the cost this endpoint exists to avoid.
     pub min_rerank: Option<f32>,
     pub limit: Option<i64>,
 }
 
-/// Echoes for an existing capture. `POST /captures` already returns these
-/// inline; this endpoint exists so they can be re-viewed later from the
-/// timeline, and so the threshold can be tuned interactively.
+/// A capture's echo. `POST /captures` starts it; this is where it is
+/// collected, and where the timeline goes to re-read it later.
+///
+/// Thresholds can still be overridden per request, and that now costs
+/// nothing: every candidate was stored with its score, so tuning
+/// `min_rerank` — or asking for everything with `?min_rerank=-99` to
+/// calibrate — re-filters what is already known instead of paying a judge
+/// again.
 pub async fn echo_for(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<Uuid>,
     Query(params): Query<EchoParams>,
-) -> Result<Json<Vec<EchoItem>>, AppError> {
-    let items = echo::for_capture(
-        &state.pool,
-        id,
-        state.reranker.as_ref(),
-        echo::Thresholds {
-            min_similarity: params.min_similarity.unwrap_or(state.echo_min_similarity),
-            min_rerank: params.min_rerank.unwrap_or(state.echo_min_rerank),
-        },
-        params.limit.unwrap_or(echo::DEFAULT_LIMIT).clamp(1, 20),
-    )
-    .await?;
+) -> Result<Json<EchoResponse>, AppError> {
+    let min_score = params.min_rerank.unwrap_or(state.echo_min_rerank);
+    let limit = params.limit.unwrap_or(echo::DEFAULT_LIMIT).clamp(1, 20);
 
-    Ok(Json(items))
+    if let Some(items) = echo::stored(&state.pool, id, min_score, limit).await? {
+        return Ok(Json(EchoResponse {
+            items,
+            pending: false,
+        }));
+    }
+
+    spawn_judging(&state, id);
+    Ok(Json(EchoResponse {
+        items: Vec::new(),
+        pending: true,
+    }))
 }
 
 #[derive(serde::Serialize)]
@@ -565,21 +632,7 @@ pub async fn detail(
     .fetch_all(&state.pool)
     .await?;
 
-    let echo = echo::for_capture(
-        &state.pool,
-        id,
-        state.reranker.as_ref(),
-        echo::Thresholds {
-            min_similarity: state.echo_min_similarity,
-            min_rerank: state.echo_min_rerank,
-        },
-        echo::DEFAULT_LIMIT,
-    )
-    .await
-    .unwrap_or_else(|err| {
-        tracing::warn!(?err, %id, "echo lookup failed for detail view");
-        Vec::new()
-    });
+    let (echo, echo_pending) = stored_echo(&state, id).await;
 
     let origin = head.origin.unwrap_or_else(|| "text".to_string());
     let audio = (origin == "audio" && !redacted).then(|| AudioDetail {
@@ -631,6 +684,7 @@ pub async fn detail(
             })
             .collect(),
         echo,
+        echo_pending,
         events: events
             .into_iter()
             .map(|e| EventRecord {
@@ -750,6 +804,14 @@ pub async fn correct_transcript(
         &state,
         capture.payload.get("timezone").and_then(|t| t.as_str()),
     );
+
+    // The stored echo judged the sentence that was just replaced, so it
+    // is no longer an answer about this capture. Dropping the marker is
+    // what makes `index_capture` below judge it again.
+    if let Err(err) = echo::forget(&state.pool, id).await {
+        tracing::warn!(?err, %id, "could not clear the echo of a corrected capture");
+    }
+
     index_capture(
         &state,
         id,

@@ -58,6 +58,15 @@ pub enum Choice {
     Off,
 }
 
+impl std::fmt::Display for Choice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Bge => BGE_MODEL_ID,
+            Self::Off => "none",
+        })
+    }
+}
+
 impl FromStr for Choice {
     type Err = anyhow::Error;
 

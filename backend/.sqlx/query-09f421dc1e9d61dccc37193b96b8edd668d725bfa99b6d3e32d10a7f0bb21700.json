@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into capture_echo\n                   (capture_event_id, echo_event_id, rank, score, similarity)\n               values ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Float4",
+        "Float4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "09f421dc1e9d61dccc37193b96b8edd668d725bfa99b6d3e32d10a7f0bb21700"
+}

@@ -35,6 +35,18 @@ export interface CaptureAccepted {
   event_id: string;
   occurred_at: string;
   echo: EchoItem[];
+  /// The echo is still being judged; ask `getEcho` for it. Judging used
+  /// to happen before this response was sent, which is what made saving a
+  /// note take 28 seconds against the NAS.
+  echo_pending: boolean;
+}
+
+/// A capture's echo, and whether it is final.
+export interface EchoResponse {
+  items: EchoItem[];
+  /// Empty `items` with `pending` means "not yet". Empty without it means
+  /// "nothing echoed" — a real and common answer.
+  pending: boolean;
 }
 
 /// Everything known about one capture. Mirrors `contracts::CaptureDetail`;
@@ -52,6 +64,7 @@ export interface CaptureDetail {
   entities: EntityMention[];
   relations: RelationMention[];
   echo: EchoItem[];
+  echo_pending: boolean;
   events: EventRecord[];
 }
 
@@ -293,11 +306,13 @@ export function createCapture(transcriptText: string, device: string): Promise<C
   });
 }
 
-export function getEcho(captureEventId: string, minSimilarity?: number): Promise<EchoItem[]> {
+/// A capture's judged echo. Comes back with `pending` set while the
+/// judgement is still running — see `useEcho`, which follows it.
+export function getEcho(captureEventId: string, minRerank?: number): Promise<EchoResponse> {
   const params = new URLSearchParams();
-  if (minSimilarity !== undefined) params.set("min_similarity", String(minSimilarity));
+  if (minRerank !== undefined) params.set("min_rerank", String(minRerank));
   const query = params.toString();
-  return request<EchoItem[]>(`/captures/${captureEventId}/echo${query ? `?${query}` : ""}`);
+  return request<EchoResponse>(`/captures/${captureEventId}/echo${query ? `?${query}` : ""}`);
 }
 
 export function getCapture(eventId: string): Promise<CaptureDetail> {

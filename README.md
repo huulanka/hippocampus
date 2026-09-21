@@ -134,24 +134,43 @@ After every capture, Hippocampus shows the earlier captures closest to it —
 your own words, never a summary
 ([`docs/adr/0006-echo-before-graph.md`](docs/adr/0006-echo-before-graph.md)).
 
-Retrieval and judgement are two different models. The bi-encoder
-(`multilingual-e5-small`, already in the database) finds candidates, because
-recall is what it is good at. A cross-encoder then reads the new capture and
-each candidate **together** and decides which survive — a bi-encoder cannot,
-because it compares two vectors that have never met, and measurably ranked
-*cardamom buns* above *finnischer Aufguss* for a note about a sauna.
+Retrieval and judgement are two different jobs. The bi-encoder
+(`multilingual-e5-small`, running locally via
+[`candle`](https://github.com/huggingface/candle), embeddings already in
+the database) finds candidates, because recall is what it is good at. It
+turns each text into a vector **without ever seeing the other one**, so it
+is blunt about ordering: it measurably ranked *cardamom buns* above
+*finnischer Aufguss* for a note about a sauna, and a larger e5 did not fix
+it. Something then has to read the new capture and each candidate
+together.
 
-Both models run locally via [`candle`](https://github.com/huggingface/candle)
-(pure Rust, no prebuilt ONNX Runtime binary — see
-[`docs/adr/0008-candle-not-onnxruntime.md`](docs/adr/0008-candle-not-onnxruntime.md)
-for why that matters on a NAS). The reranker is `bge-reranker-v2-m3`:
-~1.3-1.5s for ten candidates on an M-series Mac. Echo runs inline, right
-after a capture, so that latency is felt — worth it over the alternative,
-which was a reranker that could not run on the target hardware at all. Set
-`HIPPOCAMPUS_RERANKER=off` to fall back to similarity alone.
+That judgement is made once, when the capture is recorded, and written
+down — an echo looks only at captures strictly *earlier* than its own, and
+those never change, so there is nothing to recompute. It runs behind the
+response: saving a capture is confirmed as soon as the capture is safe,
+and the echo follows a second or two later. Reading it afterwards is a
+single indexed query.
 
-The model files are downloaded on first start into `MODEL_CACHE_DIR`
-(2.1 GB for the reranker, on top of the 465 MB embedding model).
+Who judges is `HIPPOCAMPUS_RERANKER`:
+
+| Value | What it does |
+| --- | --- |
+| `remote` (default) | A small hosted model over OpenRouter, ZDR-routed, same path as structuring. `ECHO_JUDGE_MODEL` picks it; the default is `mistralai/mistral-small-2603`, chosen for German. |
+| `bge` | `bge-reranker-v2-m3` locally through candle. The only option that keeps capture text on the machine — and the only one that needs hardware for it (see below). |
+| `off` | Embedding similarity alone, which measurably ranks unrelated captures above related ones. |
+
+The hardware caveat, measured rather than assumed: on an M-series Mac
+`bge` scores ten candidates in 1.3-1.5 s. On the Synology DS220+ this
+system is deployed to it costs **9.4 seconds per candidate** — 568M
+parameters in F32 against a Celeron with no AVX2. That is why judging
+moved off the machine by default, and why `bge` is still there for
+machines that can afford it. Full reasoning and the measurements:
+[`docs/adr/0010-echo-is-judged-once-and-remembered.md`](docs/adr/0010-echo-is-judged-once-and-remembered.md).
+
+ADR 0006 says echo involves no LLM. A judge only ever *selects and orders*
+candidates and returns numbers — what is displayed is still the verbatim
+transcript. That rule is about never putting words in your mouth, and it
+still holds.
 
 Run `cargo sqlx prepare` (from `backend/`, with `DATABASE_URL` set and
 migrations applied) after changing any `sqlx::query!` call, and commit the

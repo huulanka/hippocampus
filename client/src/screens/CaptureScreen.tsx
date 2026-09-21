@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mascot } from "../mascot";
-import { createCapture, type EchoItem } from "../api";
+import { createCapture } from "../api";
+import { useEcho } from "../useEcho";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   cancelRecording,
@@ -37,7 +38,7 @@ function relativeDay(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-type Saved = { eventId: string; transcript: string; echo: EchoItem[]; spoken: boolean };
+type Saved = { eventId: string; transcript: string; echoPending: boolean; spoken: boolean };
 type Phase = "idle" | "recording" | "working";
 
 export function CaptureScreen({
@@ -97,6 +98,11 @@ export function CaptureScreen({
     return () => clearInterval(id);
   }, [phase]);
 
+  /// The echo arrives after the capture is stored, not with it. Saving a
+  /// note is confirmed the moment it is safe on disk; the earlier
+  /// thoughts it recalls follow a second or two later.
+  const echo = useEcho(saved?.eventId ?? null, saved?.echoPending ?? false);
+
   /// Escape sends the window away, so the capture field behaves like a
   /// panel rather than an app you have to close. Unsaved text is kept in
   /// state, so summoning it again brings the half-finished thought back.
@@ -112,7 +118,12 @@ export function CaptureScreen({
     setError(null);
     try {
       const accepted = await createCapture(transcript, DEVICE);
-      setSaved({ eventId: accepted.event_id, transcript, echo: accepted.echo, spoken: false });
+      setSaved({
+        eventId: accepted.event_id,
+        transcript,
+        echoPending: accepted.echo_pending,
+        spoken: false,
+      });
       setText("");
     } catch (err) {
       setError(String(err));
@@ -139,7 +150,7 @@ export function CaptureScreen({
       setSaved({
         eventId: result.capture.event_id,
         transcript: result.transcript,
-        echo: result.capture.echo,
+        echoPending: result.capture.echo_pending,
         spoken: true,
       });
       setText("");
@@ -209,14 +220,21 @@ export function CaptureScreen({
           <p className="timeline-transcript">{saved.transcript}</p>
         </div>
 
-        {saved.echo.length > 0 ? (
+        {echo.pending ? (
+          <div className="panel transcript-panel">
+            <div className="kicker">
+              [ LOOKING FOR EARLIER THOUGHTS ]{" "}
+              <span className="dim">— your note is saved; this part takes a moment</span>
+            </div>
+          </div>
+        ) : echo.items.length > 0 ? (
           <div className="panel transcript-panel">
             <div className="kicker">
               [ YOU'VE BEEN HERE BEFORE ]{" "}
               <span className="dim">— your own earlier words, not a summary</span>
             </div>
             <div className="card-stack">
-              {saved.echo.map((item) => (
+              {echo.items.map((item) => (
                 <div
                   key={item.capture_event_id}
                   className="timeline-card clickable"

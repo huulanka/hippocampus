@@ -25,6 +25,24 @@ mit localhost. Gegen echte Sockets getestet ist, wie der Client auf 200,
 302 und 403 reagiert und dass die Header tatsächlich auf der Leitung
 liegen (`backend.rs`); ungeprüft ist der Weg durch den echten Tunnel.
 
+### Der entfernte Echo-Judge gegen die echte API
+Der Aufruf an OpenRouter ist in der Form identisch zu dem, den die
+Strukturierung seit Monaten macht, und das Auswerten der Antwort ist mit
+sechs Fällen unit-getestet (fehlendes Urteil, erfundene ID, Werte außerhalb
+0-1, Prosa statt JSON, leere Liste, Reihenfolge). **Ungeprüft ist ein
+echter Aufruf**: lokal liegt kein OpenRouter-Schlüssel, der Schlüssel lebt
+auf der NAS. Das entscheidet sich beim nächsten Redeploy — und ist von
+außen messbar, weil `GET /captures/{id}/echo` dann `judged_by` mit dem
+Modellnamen füllt statt mit `similarity`.
+
+### Die Schwelle des entfernten Judges
+0,5 ist gesetzt, weil das Modell ausdrücklich nach einer 0-1-Relevanz
+gefragt wird und die Hälfte der sinnvolle Mittelpunkt ist — **nicht, weil
+sie gemessen wurde**. Sie braucht dieselbe Kalibrierung, die die
+Cross-Encoder-Schwellen bekommen haben, sobald genug echte Captures da
+sind. `?min_rerank=-99` gibt die Werte dafür aus und kostet nichts mehr,
+weil jeder Kandidat mit seiner Bewertung gespeichert ist.
+
 ### Ein echtes Cloudflare-Access-Token
 Die Signaturprüfung ist gegen selbst erzeugte Schlüsselpaare getestet
 (gültig, fremde `aud`, fremdes Team, abgelaufen, gefälscht, `alg: none`).
@@ -77,6 +95,9 @@ Das entscheidet sich erst beim echten Redeploy auf der NAS.
 | Einstellungen | Default parst, Accelerator round-trippt, Unsinn wird abgelehnt, kaputte Datei fällt auf den Default zurück. |
 | Secret in der Keychain | Schreiben, Lesen, Löschen und nochmals Löschen gegen die echte macOS-Keychain durchgespielt (`cargo test --lib -- --ignored`, 21.09.2026). Ein Unit-Test hält zusätzlich fest, dass `persist` das Secret nie in `settings.json` schreibt. |
 | Access-Fehler sind unterscheidbar | Gegen echte Sockets: 200 wird akzeptiert, ein 302 auf die Cloudflare-Login-Seite wird als abgelehnter Service Token gemeldet statt als gesunder Backend, ein 403 nennt die Access-Policy, eine URL ohne Schema sagt das. |
+| Echo-Persistenz, Ende zu Ende | Gegen die lokale Datenbank durchgespielt (21.09.2026): Capture speichern 81 ms mit `echo_pending: true`, Detailansicht 22 ms, Echo erneut lesen 2,5 ms, `?min_rerank=-99` liefert alle gespeicherten Kandidaten ohne Neuberechnung. Datenbank enthält Marker mit Provenienz plus die gerankten Zeilen. |
+| Nachziehen und Neubewerten | Ein Capture ohne gespeichertes Urteil antwortet beim ersten Lesen mit `pending: true` und beim zweiten mit dem Ergebnis. Eine Korrektur löscht das Urteil und löst ein neues aus — nachgeprüft über `judged_at`. |
+| Reranker-Latenz auf der NAS (BGE über candle) | Gegen das laufende Backend gemessen, 21.09.2026: 17,7 s bei zwei Kandidaten, 27,9 s bei drei, 36,6 s bei vier — linear, **9,4 s pro Kandidat**. Zum Vergleich auf demselben Weg: `/search` 247 ms, alle reinen Lese-Endpunkte 120-135 ms, `/health` 160 ms. Der Engpass ist ausschließlich der Cross-Encoder, und weil die Zeit linear mit der Kandidatenzahl wächst (Gewichte werden pro Batch einmal gelesen), ist es Rechenleistung und nicht Speicher. |
 | Service-Token-Header auf der Leitung | Gegen einen echten Socket geprüft: mit Credentials stehen `cf-access-client-id` und `cf-access-client-secret` im Request, ohne Credentials steht keiner der beiden drin (statt leerer Header). |
 
 ## Bekannter Zustand
@@ -90,6 +111,12 @@ Das entscheidet sich erst beim echten Redeploy auf der NAS.
   Sie bekommen eins erst, wenn die Re-Derivation gebaut ist oder das
   jeweilige Capture korrigiert wird — der Abschnitt „you said this was
   coming" füllt sich also erst mit neuen Notizen.
+- Der Bi-Encoder sortiert weiterhin nachweislich falsch, und das ist jetzt
+  dokumentiert statt erinnert: eine Notiz „Ich war heute Abend in der
+  Sauna, der finnische Aufguss war richtig gut" bekam am 21.09.2026 gegen
+  den lokalen Bestand **Kardamom-Espresso mit 0,9192 vor dem finnischen
+  Aufguss mit 0,9064** und der Sauna-Notiz mit 0,9053. Genau dafür gibt es
+  die zweite Stufe.
 - Der Client spricht seit ADR 0009 nicht mehr aus dem Webview mit dem
   Backend, sondern aus Rust. Die CORS-Konfiguration des Backends betrifft
   damit nur noch den Browser-Entwicklungsbuild.

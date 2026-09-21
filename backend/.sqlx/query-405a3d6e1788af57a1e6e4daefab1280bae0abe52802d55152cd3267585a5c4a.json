@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select judged_by from capture_echo_judged where capture_event_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "judged_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_echo_judged",
+            "name": "judged_by"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "405a3d6e1788af57a1e6e4daefab1280bae0abe52802d55152cd3267585a5c4a"
+}
