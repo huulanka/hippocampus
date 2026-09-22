@@ -3,6 +3,12 @@ name = "backend"
 version = "1.5.2"
 edition = "2024"
 
+[features]
+# Tests that need a real Postgres to say anything. Off by default, because
+# the CI job that runs `cargo test --workspace` is on macOS and has no
+# database; the `rust-db` job turns it on. See routes::graph::tests.
+db-tests = []
+
 [dependencies]
 anyhow = "1.0.104"
 axum = { version = "0.8.9", features = ["multipart"] }

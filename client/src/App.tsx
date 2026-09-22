@@ -107,7 +107,7 @@ function Screen({
     case "entities":
       return <EntitiesScreen onOpenEntity={onOpenEntity} />;
     case "relations":
-      return <RelationsScreen />;
+      return <RelationsScreen onOpenEntity={onOpenEntity} />;
     case "chat":
       return <ChatScreen />;
     case "settings":

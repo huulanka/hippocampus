@@ -63,6 +63,44 @@ pub struct EchoItem {
     pub rerank_score: Option<f32>,
 }
 
+/// The entity graph, in one piece.
+///
+/// Sent whole rather than walked entity by entity: a graph is the one
+/// view whose whole point is what it looks like *together*, and fetching
+/// it a node at a time would mean the layout settles while the data is
+/// still arriving.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Graph {
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+    /// Entities that exist but were left out because the graph was
+    /// capped. Shown as a number rather than hidden, so a graph that is
+    /// only part of the picture never pretends to be all of it.
+    pub omitted_nodes: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphNode {
+    pub id: Uuid,
+    pub name: String,
+    pub entity_type: String,
+    /// How often this entity has been observed. Drives how large it is
+    /// drawn — the things you keep coming back to should be the things
+    /// you see first.
+    pub mention_count: i64,
+    pub last_seen: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphEdge {
+    pub from: Uuid,
+    pub to: Uuid,
+    pub relation_type: String,
+    /// How many separate captures assert this same relation. One is a
+    /// passing remark; five is something you keep saying.
+    pub weight: i64,
+}
+
 /// What a redaction actually removed.
 ///
 /// Returned so the confirmation can say something true rather than a

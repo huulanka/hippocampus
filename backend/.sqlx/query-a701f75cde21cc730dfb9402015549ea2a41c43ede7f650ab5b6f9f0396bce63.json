@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into relations (from_entity_id, to_entity_id, relation_type, source_event_id, model)\n             values ($1, $2, $3, $4, 'test-model')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a701f75cde21cc730dfb9402015549ea2a41c43ede7f650ab5b6f9f0396bce63"
+}

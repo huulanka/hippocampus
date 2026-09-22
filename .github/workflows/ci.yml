@@ -25,6 +25,39 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+  # Split from `rust` rather than folded into it: GitHub service
+  # containers only exist on Linux runners, and the job above is on macOS
+  # because that is what the app is actually built and shipped on. The
+  # tests here are the ones whose whole subject is SQL, so a mock pool
+  # would assert nothing — see backend/src/routes/graph.rs.
+  rust-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: hippocampus
+          POSTGRES_PASSWORD: hippocampus
+          POSTGRES_DB: hippocampus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hippocampus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://hippocampus:hippocampus@localhost:5432/hippocampus
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test against a real database
+        # `#[sqlx::test]` migrates a fresh database per test itself, so
+        # there is no migration step here — only the empty one it clones
+        # from has to exist, which the service container provides.
+        run: cargo test -p backend --features db-tests
+
   client:
     runs-on: macos-latest
     defaults:
@@ -62,7 +95,7 @@ jobs:
 
   release:
     name: Release
-    needs: [rust, client, frontend]
+    needs: [rust, rust-db, client, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: macos-latest
     # Two pushes to main close together used to race here: one release job

@@ -401,25 +401,170 @@ a:hover {
 }
 
 /* — relations — */
-.relations-graph {
-  position: relative;
-  width: 100%;
-  height: 340px;
+.graph-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+  font-size: 12px;
 }
-.relations-edge {
-  position: absolute;
-  height: 1px;
-  background: var(--hpo-border);
-  transform-origin: 0 50%;
-}
-.relations-node {
-  position: absolute;
-}
-.relations-label {
-  position: absolute;
-  width: 120px;
-  text-align: center;
+.graph-hint {
   font-size: 11px;
+}
+/* Legend and filter in one row. Column-gap larger than row-gap: the
+   chips have no boxes around them — nothing else in this interface does
+   either — so the space between them is the only thing separating one
+   from the next. */
+.graph-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--hpo-dim);
+}
+.graph-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--hpo-dim);
+}
+.graph-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.graph-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+/* Switched off rather than removed: the chip stays in place with its
+   colour drained, so turning a type back on is where you left it. */
+.graph-chip-off {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+.graph-reset {
+  font-size: 11px;
+  margin-left: 4px;
+}
+.relations-graph {
+  display: block;
+  width: 100%;
+  height: min(62vh, 620px);
+  border: 1px solid var(--hpo-border);
+  border-radius: 2px;
+  /* The graph is dragged, so the pointer should say so — and the browser
+     must not try to scroll the page out from under a drag. */
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.relations-graph:active {
+  cursor: grabbing;
+}
+.graph-edge {
+  stroke: var(--hpo-border);
+  stroke-opacity: 0.85;
+}
+.graph-node {
+  cursor: pointer;
+}
+/* `:not(.graph-ring)` is load-bearing. A CSS rule beats a presentation
+   attribute, so without it this hairline also repainted the focus and
+   search rings — whose colour comes from the entity type and is set as an
+   attribute — in the background colour, i.e. invisibly. */
+.graph-node circle:not(.graph-ring) {
+  /* A hairline in the page's own background colour, so overlapping nodes
+     stay countable instead of merging into one blob. */
+  stroke: var(--hpo-bg);
+  stroke-width: 1.5;
+  transition: r 120ms ease-out;
+}
+.graph-node:hover circle:not(.graph-ring) {
+  stroke: var(--hpo-text);
+}
+.graph-label {
+  fill: var(--hpo-text);
+  font-size: 10px;
+  text-anchor: middle;
+  paint-order: stroke;
+  /* Drawn behind the glyphs, so a label crossing an edge stays readable
+     without a box around it. */
+  stroke: var(--hpo-bg);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+/* Hovering or focusing one node answers "what is this connected to" by
+   taking everything else out of the way rather than by drawing more. */
+.graph-dimmed {
+  opacity: 0.16;
+  transition: opacity 120ms ease-out;
+}
+/* Drawn around the focused node and around search hits. A ring rather
+   than a glow: everything else on this screen is a line or a letter, and
+   a soft halo would be the only lit thing in the whole interface. */
+.graph-ring {
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  opacity: 0.9;
+}
+.graph-node-focused circle:not(.graph-ring) {
+  stroke: var(--hpo-text);
+}
+/* Only ever shown for the edges touching the focused node, so it can
+   afford to be readable rather than tiny. */
+.graph-edge-label {
+  fill: var(--hpo-muted);
+  font-size: 9px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--hpo-bg);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.graph-search {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+/* Fixed width rather than greedy: letting the field fill the row pushed
+   the matches to the far edge of the window, where they read as part of
+   the hint line above instead of as answers to what was typed. */
+.graph-search .search-input {
+  flex: 0 1 320px;
+  min-width: 0;
+}
+.graph-matches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* Under the graph rather than over it: a panel floating on top would
+   cover the neighbourhood it is describing. */
+.graph-focus {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--hpo-border);
+  border-radius: 2px;
+  background: var(--hpo-panel);
+  font-size: 12px;
 }
 
 /* — chat — */

@@ -198,6 +198,31 @@ export interface SearchResult {
   related_entities: EntitySummary[];
 }
 
+/// The entity graph in one piece. Mirrors `contracts::Graph`.
+export interface Graph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  /// Entities left out because the graph was capped. Shown as a number
+  /// rather than hidden, so a partial picture never pretends to be whole.
+  omitted_nodes: number;
+}
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  entity_type: string;
+  mention_count: number;
+  last_seen: string | null;
+}
+
+export interface GraphEdge {
+  from: string;
+  to: string;
+  relation_type: string;
+  /// How many separate captures assert this same relation.
+  weight: number;
+}
+
 export interface EntityTypeCount {
   entity_type: string;
   count: number;
@@ -395,6 +420,16 @@ export function getEntity(id: string): Promise<EntityDetail> {
 /// What the system has to say without being asked.
 export function getResurfaced(): Promise<Resurfaced> {
   return request<Resurfaced>("/resurface");
+}
+
+/// The whole graph at once — see `contracts::Graph` for why it is not
+/// walked node by node.
+export function getGraph(options: { limit?: number; entityType?: string } = {}): Promise<Graph> {
+  const params = new URLSearchParams();
+  if (options.limit) params.set("limit", String(options.limit));
+  if (options.entityType) params.set("entity_type", options.entityType);
+  const query = params.toString();
+  return request<Graph>(`/graph${query ? `?${query}` : ""}`);
 }
 
 export function listEntityTypes(): Promise<EntityTypeCount[]> {

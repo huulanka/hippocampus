@@ -72,7 +72,6 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "relations",
-    pending: "Every relation is already on its entity's page — the graph view itself is not built yet",
     label: "Relations",
     icon: (
       <svg width="14" height="14" viewBox="0 0 15 15">

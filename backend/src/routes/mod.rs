@@ -1,5 +1,6 @@
 pub mod captures;
 pub mod entities;
+mod graph;
 pub mod resurface;
 pub mod search;
 
@@ -47,6 +48,7 @@ pub fn router() -> Router<AppState> {
         .route("/entities", get(entities::list))
         .route("/entities/{id}", get(entities::detail))
         .route("/entity-types", get(captures::entity_types))
+        .route("/graph", get(graph::graph))
         .route("/resurface", get(resurface::resurface))
         .route("/search", get(search::search))
 }

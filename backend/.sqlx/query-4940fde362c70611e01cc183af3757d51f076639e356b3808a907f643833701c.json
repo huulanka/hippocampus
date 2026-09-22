@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into entity_type_registry (entity_type) values ($1)\n             on conflict do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4940fde362c70611e01cc183af3757d51f076639e356b3808a907f643833701c"
+}
