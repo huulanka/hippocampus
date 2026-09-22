@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/huulanka/hippocampus/compare/v1.9.1...v1.10.0) (2026-09-22)
+
+
+### Features
+
+* consolidation waits to be asked, and a relation can be taken back ([#49](https://github.com/huulanka/hippocampus/issues/49)) ([77ac326](https://github.com/huulanka/hippocampus/commit/77ac326c1d10649e478cedd5b179de253548ecee))
+
 ## [1.9.1](https://github.com/huulanka/hippocampus/compare/v1.9.0...v1.9.1) (2026-09-22)
 
 
