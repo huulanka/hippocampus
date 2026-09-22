@@ -49,16 +49,22 @@ cask "hippocampus" do
   ]
 
   caveats <<~EOS
-    This build is ad-hoc signed, not notarised — there is no Apple
-    Developer account behind it. Homebrew no longer attaches the
-    quarantine attribute to what it installs, so the app opens as
-    installed and nothing extra is needed here.
-
-    If you instead download the .dmg from the Releases page by hand, the
-    browser does attach it, and Gatekeeper will refuse to open the app
-    until you remove it once:
+    One more step, and it is not optional:
 
       xattr -dr com.apple.quarantine /Applications/Hippocampus.app
+
+    This build is ad-hoc signed, not notarised — there is no Apple
+    Developer account behind it — so Gatekeeper refuses it until the
+    quarantine attribute is gone. Homebrew attaches that attribute to the
+    downloaded .dmg and the app inherits it; the --no-quarantine flag
+    that used to prevent this was removed in Homebrew 7. Run the line
+    again after every upgrade.
+
+    If an older version was installed by hand rather than by Homebrew,
+    remove it first — Homebrew will not take over an app it did not
+    install:
+
+      rm -rf /Applications/Hippocampus.app
 
     The microphone needs the bundle: speaking a capture does not work
     from a development build, only from an installed app like this one.

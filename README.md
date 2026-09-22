@@ -45,29 +45,84 @@ Apple Silicon only, macOS Sonoma or newer:
 
 ```sh
 brew tap huulanka/hippocampus https://github.com/huulanka/hippocampus
+brew trust --cask huulanka/hippocampus/hippocampus
 brew install --cask hippocampus
+xattr -dr com.apple.quarantine /Applications/Hippocampus.app
 ```
 
-This build is **ad-hoc signed, not notarised** — there is no Apple
-Developer account behind it. That used to mean installing with
-`--no-quarantine`, and older writeups still say so, but Homebrew 7
-removed the flag and stopped attaching the quarantine attribute at all,
-so the app now opens as installed.
+`brew trust` is not optional and is easy to mistake for a broken tap.
+Homebrew 7 refuses to load a cask from a third-party tap until it has
+been trusted once, and says so with an error that reads like the cask is
+missing. It is not — it is Homebrew asking whether you meant it.
 
-Downloading the `.dmg` from the Releases page by hand is a different
-story: the browser does attach the attribute, and Gatekeeper will then
-refuse to open the app until you remove it once with
-`xattr -dr com.apple.quarantine /Applications/Hippocampus.app`.
+If an older version was installed by hand, remove it first
+(`rm -rf /Applications/Hippocampus.app`); Homebrew will not take over an
+app it did not install. macOS asks for microphone permission again
+afterwards, because the signature changed.
 
-Install it properly rather than running `npm run tauri dev` for daily use:
-**the microphone only works from a bundled app.** macOS grants microphone
-permission per bundle identity, and a development binary has none — it
-records silence instead of failing, which is the worst possible way to
-find out.
+The `xattr` line is not optional either, and it is the step most likely
+to be skipped because older instructions promised it away. This build is
+**ad-hoc signed, not notarised** — there is no Apple Developer account
+behind it — so Gatekeeper refuses it outright (`spctl` calls it "code has
+no resources but signature indicates they must be present"). Removing the
+quarantine attribute is what lets it open.
+
+It used to be possible to prevent the attribute instead, with
+`brew install --cask --no-quarantine`. Homebrew 7 removed that flag, and
+it does still attach the attribute: it lands on the downloaded `.dmg`
+with `Homebrew Cask` named as the agent, and the installed app inherits
+it. Reading `Cask::Quarantine.check_quarantine_support` — which returns
+`:quarantine_unavailable` unconditionally — suggests otherwise and is
+about the staging step, not the download. Checked by installing:
+`xattr -p com.apple.quarantine /Applications/Hippocampus.app` comes back
+with a value.
+
+Repeat the `xattr` line after every `brew upgrade --cask hippocampus`,
+for the same reason.
+
+Install it properly rather than running the app from source for daily
+use: **the microphone only works from a bundled app.** macOS grants
+microphone permission per bundle identity, and a development binary has
+none — it records silence instead of failing, which is the worst possible
+way to find out.
 
 The cask and the `.dmg` it points at are produced by
 `.github/workflows/release-app.yml` on every published release, so the
 version you get is the version that was released.
+
+## The app you use and the app you are changing
+
+These are two different installs, deliberately.
+
+The one you use is the one above. The one you are changing runs from
+source **under its own bundle identity**:
+
+```sh
+cd client && npm run dev:app
+```
+
+That is `tauri dev` with `src-tauri/tauri.dev.conf.json` merged over the
+real config: identifier `com.andreasbauer.hippocampus.dev`, product name
+`Hippocampus (dev)`. Everything macOS keys off the identifier therefore
+splits — `settings.json`, the log directory, the microphone permission —
+so a development run cannot write over the configuration the installed
+app is reading. It also means the development build starts with **no
+backend configured** and so talks to `http://localhost:8080`, which is
+the right default for it: the installed app keeps pointing at the NAS,
+and an experiment cannot reach real captures without being told to.
+
+What is *not* split, and why:
+
+- **The speech model.** `asr::default_model_dir` names the stable
+  identifier outright rather than deriving it, so both builds find the
+  same 640 MB rather than keeping a copy each.
+- **The Keychain entry.** One Cloudflare Service Token for one backend;
+  splitting it would only mean typing it twice.
+- **The global capture shortcut.** It is a system-wide hotkey, not an
+  app-scoped one: with both running, whichever registered first keeps it
+  and the other logs a warning and carries on without one. Give the
+  development build a different combination in its own settings — it has
+  its own `settings.json` now, so it sticks.
 
 ## Development
 
@@ -89,9 +144,12 @@ cargo run -p backend
 # Fetch the on-device speech model (~670 MB, once)
 ./scripts/fetch-asr-model.sh
 
-# Run the desktop client
-cd client && npm install && npm run tauri dev
+# Run the desktop client, under its own bundle identity
+cd client && npm install && npm run dev:app
 ```
+
+`npm run dev:app` rather than `npm run tauri dev`: the plain one runs as
+the installed app and writes over its settings. See above.
 
 ## Releases
 
