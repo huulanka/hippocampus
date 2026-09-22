@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/huulanka/hippocampus/compare/v1.5.2...v1.6.0) (2026-09-22)
+
+
+### Features
+
+* the graph is something you can walk ([#43](https://github.com/huulanka/hippocampus/issues/43)) ([0637574](https://github.com/huulanka/hippocampus/commit/0637574f02975e4234853e126560f133fdc1e5e9))
+
 ## [1.5.2](https://github.com/huulanka/hippocampus/compare/v1.5.1...v1.5.2) (2026-09-22)
 
 
