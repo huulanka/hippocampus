@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/huulanka/hippocampus/compare/v1.7.0...v1.7.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* the documented install command does not work, and dev overwrites live settings ([#45](https://github.com/huulanka/hippocampus/issues/45)) ([6cbbba0](https://github.com/huulanka/hippocampus/commit/6cbbba02249cb819219b6319f2bb95b5f8475260))
+
 # [1.7.0](https://github.com/huulanka/hippocampus/compare/v1.6.0...v1.7.0) (2026-09-22)
 
 
