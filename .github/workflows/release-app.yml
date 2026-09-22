@@ -75,6 +75,10 @@ jobs:
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           ./scripts/write-cask.sh "${TAG#v}" "${{ steps.bundle.outputs.path }}"
+          # Nobody reads a generated file, so let Homebrew read it. A cask
+          # that lints clean here is one the tap will not complain about on
+          # every install.
+          brew style Casks/hippocampus.rb
           cp Casks/hippocampus.rb "${RUNNER_TEMP}/hippocampus.rb"
 
       - name: Commit the cask to main
@@ -87,10 +91,16 @@ jobs:
           git checkout -B main origin/main
           mkdir -p Casks
           cp "${RUNNER_TEMP}/hippocampus.rb" Casks/hippocampus.rb
-          if git diff --quiet -- Casks/hippocampus.rb; then
+          # Staged first, then compared against the index. `git diff` alone
+          # does not see an untracked file, so on the very run that matters
+          # most — the first one, when `Casks/` does not exist on main yet —
+          # it reported no change and the job exited claiming success while
+          # the tap stayed empty. Comparing the staged copy is the version
+          # of this check that notices a new file.
+          git add Casks/hippocampus.rb
+          if git diff --cached --quiet -- Casks/hippocampus.rb; then
             echo "cask already current"
             exit 0
           fi
-          git add Casks/hippocampus.rb
           git commit -m "chore(release): cask for ${TAG} [skip ci]"
           git push origin main

@@ -45,15 +45,19 @@ Apple Silicon only, macOS Sonoma or newer:
 
 ```sh
 brew tap huulanka/hippocampus https://github.com/huulanka/hippocampus
-brew install --cask --no-quarantine hippocampus
+brew install --cask hippocampus
 ```
 
-`--no-quarantine` is not optional here and is worth understanding rather
-than pasting. This build is **ad-hoc signed, not notarised** — there is no
-Apple Developer account behind it — so Gatekeeper refuses to open it. The
-flag tells Homebrew not to set the quarantine attribute in the first
-place. Without it the app installs and then will not start; the fix after
-the fact is `xattr -dr com.apple.quarantine /Applications/Hippocampus.app`.
+This build is **ad-hoc signed, not notarised** — there is no Apple
+Developer account behind it. That used to mean installing with
+`--no-quarantine`, and older writeups still say so, but Homebrew 7
+removed the flag and stopped attaching the quarantine attribute at all,
+so the app now opens as installed.
+
+Downloading the `.dmg` from the Releases page by hand is a different
+story: the browser does attach the attribute, and Gatekeeper will then
+refuse to open the app until you remove it once with
+`xattr -dr com.apple.quarantine /Applications/Hippocampus.app`.
 
 Install it properly rather than running `npm run tauri dev` for daily use:
 **the microphone only works from a bundled app.** macOS grants microphone

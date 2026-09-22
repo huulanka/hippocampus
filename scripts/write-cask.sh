@@ -31,7 +31,9 @@ cask "hippocampus" do
   # Apple Silicon only. The build is aarch64, and cross-building an x86
   # bundle would ship something nobody has tested.
   depends_on arch: :arm64
-  depends_on macos: ">= :sonoma"
+  # A bare symbol already means "this release or newer" — the older
+  # ">= :sonoma" spelling says the same thing and is now a style offence.
+  depends_on macos: :sonoma
 
   app "Hippocampus.app"
 
@@ -48,12 +50,13 @@ cask "hippocampus" do
 
   caveats <<~EOS
     This build is ad-hoc signed, not notarised — there is no Apple
-    Developer account behind it. macOS will therefore refuse to open it
-    until the quarantine flag is gone. Either install with:
+    Developer account behind it. Homebrew no longer attaches the
+    quarantine attribute to what it installs, so the app opens as
+    installed and nothing extra is needed here.
 
-      brew install --cask --no-quarantine hippocampus
-
-    or, if it is already installed, remove the flag once:
+    If you instead download the .dmg from the Releases page by hand, the
+    browser does attach it, and Gatekeeper will refuse to open the app
+    until you remove it once:
 
       xattr -dr com.apple.quarantine /Applications/Hippocampus.app
 
