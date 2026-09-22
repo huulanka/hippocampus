@@ -60,3 +60,10 @@ objc2-av-foundation = { version = "0.3.2", default-features = false, features = 
 # is gated behind its own `[target.'cfg(...)']` in keyring's manifest, so
 # only apple-native-keyring-store actually gets compiled on macOS.
 keyring = { version = "4", default-features = false, features = ["v1"] }
+# LocalAuthentication, for the Touch ID gate in front of the notes
+# ([`crate::lock`]). The same objc2 generation as the AVFoundation
+# bindings above, so there is one Objective-C bridge in this crate rather
+# than two. `tauri-plugin-biometric` is not an option: it exists only for
+# Android and iOS.
+objc2-local-authentication = { version = "0.3.2", default-features = false, features = ["LAContext", "LAError", "LABiometryType", "block2", "std"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString", "NSError", "std"] }

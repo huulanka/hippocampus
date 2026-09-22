@@ -60,6 +60,17 @@ pub struct Stored {
     /// disappears the first time this version starts.
     #[serde(default, rename = "cf_access_client_secret", skip_serializing)]
     pub legacy_secret: Option<String>,
+    /// Whether reading is behind the machine's own authentication
+    /// ([`crate::lock`]). `None` means "not decided yet", which is read
+    /// as on — a settings file written before this existed belongs to
+    /// someone who has never been asked, and the safe reading of silence
+    /// about a guard is that they want it. It makes itself inert anyway
+    /// on a machine that cannot authenticate at all.
+    #[serde(default)]
+    pub lock_enabled: Option<bool>,
+    /// How long the app may sit unattended before locking itself again.
+    #[serde(default)]
+    pub lock_idle_seconds: Option<u64>,
 }
 
 impl Default for Stored {
@@ -69,6 +80,8 @@ impl Default for Stored {
             backend_url: None,
             cf_access_client_id: None,
             legacy_secret: None,
+            lock_enabled: None,
+            lock_idle_seconds: None,
         }
     }
 }
@@ -82,6 +95,7 @@ pub struct SettingsView {
     pub backend_url: Option<String>,
     pub cf_access_client_id: Option<String>,
     pub cf_access_configured: bool,
+    pub lock: crate::lock::LockStatus,
 }
 
 /// The Keychain read is lazy, so a local or LAN install — which never
@@ -184,13 +198,42 @@ impl SettingsState {
             .unwrap_or_default()
     }
 
-    pub fn view(&self) -> SettingsView {
+    pub fn view(&self, lock: &crate::lock::LockState) -> SettingsView {
         let stored = self.snapshot();
         SettingsView {
             capture_shortcut: stored.capture_shortcut,
             backend_url: stored.backend_url,
             cf_access_client_id: stored.cf_access_client_id,
             cf_access_configured: self.secret().is_some(),
+            lock: self.lock_status(lock),
+        }
+    }
+
+    /// Whether the guard is armed: switched on *and* on a machine that
+    /// can actually authenticate. The second half is the escape hatch —
+    /// without it, a Mac whose Touch ID has stopped working would hold
+    /// its owner out of their own notes with no way back in.
+    pub fn lock_armed(&self) -> bool {
+        crate::lock::armed(self.snapshot().lock_enabled, crate::lock::mechanism())
+    }
+
+    pub fn lock_idle(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(
+            self.snapshot()
+                .lock_idle_seconds
+                .unwrap_or(crate::lock::DEFAULT_IDLE_SECONDS)
+                .clamp(crate::lock::MIN_IDLE_SECONDS, crate::lock::MAX_IDLE_SECONDS),
+        )
+    }
+
+    pub fn lock_status(&self, lock: &crate::lock::LockState) -> crate::lock::LockStatus {
+        let mechanism = crate::lock::mechanism();
+        let armed = crate::lock::armed(self.snapshot().lock_enabled, mechanism);
+        crate::lock::LockStatus {
+            mechanism,
+            enabled: self.snapshot().lock_enabled.unwrap_or(true),
+            locked: armed && !lock.is_unlocked(),
+            idle_seconds: self.lock_idle().as_secs(),
         }
     }
 
@@ -268,8 +311,11 @@ pub fn settings_path(app: &tauri::AppHandle) -> anyhow::Result<PathBuf> {
 }
 
 #[tauri::command]
-pub fn get_settings(state: tauri::State<'_, SettingsState>) -> SettingsView {
-    state.view()
+pub fn get_settings(
+    state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
+) -> SettingsView {
+    state.view(&lock)
 }
 
 /// Registers a new capture shortcut and remembers it.
@@ -281,13 +327,14 @@ pub fn get_settings(state: tauri::State<'_, SettingsState>) -> SettingsView {
 pub fn set_capture_shortcut(
     app: tauri::AppHandle,
     state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
     accelerator: String,
 ) -> Result<SettingsView, String> {
     let wanted = parse(&accelerator).map_err(|_| format!("{accelerator} is not a shortcut"))?;
     let previous = state.capture_shortcut();
 
     if wanted == previous {
-        return Ok(state.view());
+        return Ok(state.view(&lock));
     }
 
     let shortcuts = app.global_shortcut();
@@ -312,7 +359,7 @@ pub fn set_capture_shortcut(
         log::warn!("could not write settings: {err}");
     }
 
-    Ok(state.view())
+    Ok(state.view(&lock))
 }
 
 /// Points the client at a different backend, or back at the built-in
@@ -325,6 +372,7 @@ pub fn set_capture_shortcut(
 #[tauri::command]
 pub fn set_backend_url(
     state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
     url: Option<String>,
 ) -> Result<SettingsView, String> {
     let trimmed = url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
@@ -342,7 +390,7 @@ pub fn set_backend_url(
         log::warn!("could not write settings: {err}");
     }
 
-    Ok(state.view())
+    Ok(state.view(&lock))
 }
 
 /// Sets or clears the Cloudflare Access Service Token.
@@ -359,6 +407,7 @@ pub fn set_backend_url(
 #[tauri::command]
 pub fn set_cf_access_credentials(
     state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
     client_id: Option<String>,
     client_secret: Option<String>,
 ) -> Result<SettingsView, String> {
@@ -383,7 +432,7 @@ pub fn set_cf_access_credentials(
         if let Err(err) = state.persist(&updated) {
             log::warn!("could not write settings: {err}");
         }
-        return Ok(state.view());
+        return Ok(state.view(&lock));
     };
 
     match secret {
@@ -408,7 +457,72 @@ pub fn set_cf_access_credentials(
         log::warn!("could not write settings: {err}");
     }
 
-    Ok(state.view())
+    Ok(state.view(&lock))
+}
+
+/// Switches the guard on or off.
+///
+/// Turning it **off** authenticates first, and that is the whole point:
+/// otherwise the lock screen would have a button on it that removes the
+/// lock, which is not a lock. Turning it on needs nothing — arming a
+/// guard is not a privilege.
+#[tauri::command]
+pub async fn set_lock_enabled(
+    state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
+    enabled: bool,
+) -> Result<SettingsView, String> {
+    if !enabled && state.lock_armed() {
+        let granted = tauri::async_runtime::spawn_blocking(crate::lock::authenticate)
+            .await
+            .map_err(|err| format!("the authentication never finished: {err}"))??;
+        if !granted {
+            return Err("not unlocked, so the guard stays on".to_string());
+        }
+        // Switched off means nothing is guarded, so leave it open rather
+        // than in a locked state nothing would ever reopen.
+        lock.unlock();
+    }
+
+    let updated = {
+        let mut current = state
+            .current
+            .lock()
+            .map_err(|_| "settings lock poisoned".to_string())?;
+        current.lock_enabled = Some(enabled);
+        current.clone()
+    };
+    if let Err(err) = state.persist(&updated) {
+        log::warn!("could not write settings: {err}");
+    }
+
+    Ok(state.view(&lock))
+}
+
+/// How long the app may sit unattended before locking. Clamped rather
+/// than rejected: a value out of range is a slider that went too far, not
+/// something worth refusing.
+#[tauri::command]
+pub fn set_lock_idle_seconds(
+    state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
+    seconds: u64,
+) -> Result<SettingsView, String> {
+    let clamped = seconds.clamp(crate::lock::MIN_IDLE_SECONDS, crate::lock::MAX_IDLE_SECONDS);
+
+    let updated = {
+        let mut current = state
+            .current
+            .lock()
+            .map_err(|_| "settings lock poisoned".to_string())?;
+        current.lock_idle_seconds = Some(clamped);
+        current.clone()
+    };
+    if let Err(err) = state.persist(&updated) {
+        log::warn!("could not write settings: {err}");
+    }
+
+    Ok(state.view(&lock))
 }
 
 #[cfg(test)]

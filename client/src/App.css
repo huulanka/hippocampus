@@ -1000,3 +1000,61 @@ a:hover {
     text-align: left;
   }
 }
+
+/* The lock screen. Centred in the content area rather than covering the
+   whole window: the sidebar stays reachable, because capturing is still
+   open and walking to it should not require getting past the thing that
+   is in the way of something else. */
+.lock-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 60vh;
+  padding: 0 24px;
+  text-align: center;
+}
+.lock-gate-mark {
+  color: var(--hpo-dim);
+  margin-bottom: 4px;
+}
+.lock-gate-line {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.lock-gate-why {
+  max-width: 46ch;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.lock-gate-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--hpo-accent);
+}
+.lock-gate-button {
+  margin-top: 6px;
+  cursor: pointer;
+  color: var(--hpo-accent);
+  font-size: 13px;
+}
+.lock-gate-button.disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+/* Sits directly above [ New Capture ], which is the arrangement the two
+   deserve: the thing you do most, and the thing you do when you stand up. */
+.sidebar-lock {
+  margin: 0 12px 6px;
+  padding: 4px 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--hpo-dim);
+  cursor: pointer;
+}
+.sidebar-lock:hover {
+  color: var(--hpo-text);
+}

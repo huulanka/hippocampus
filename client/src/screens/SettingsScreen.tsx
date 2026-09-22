@@ -13,11 +13,20 @@ import {
   setBackendUrl,
   setCaptureShortcut,
   setCfAccessCredentials,
+  setLockEnabled,
+  setLockIdleSeconds,
   speechAvailable,
+  type LockStatus,
 } from "../desktop";
 import { getApiBaseUrl, getBackendVersion, setApiBaseUrl } from "../api";
 
 const GITHUB_URL = "https://github.com/huulanka/hippocampus";
+
+/// How long the app may sit unattended, in minutes. A short list rather
+/// than a free number: the difference between six and seven minutes is
+/// not a decision anybody has, and every option here is one the Rust side
+/// will accept unchanged.
+const IDLE_CHOICES = [1, 5, 15, 60];
 
 /// Only the hotkey, the backend URL and the theme are real so far.
 /// Everything else this screen used to offer — a tray icon, a cloud
@@ -53,12 +62,16 @@ export function SettingsScreen() {
   const [cfStatus, setCfStatus] = useState<"idle" | "checking" | "saved" | "error">("idle");
   const [cfError, setCfError] = useState<string | null>(null);
 
+  const [lock, setLock] = useState<LockStatus | null>(null);
+  const [lockError, setLockError] = useState<string | null>(null);
+
   useEffect(() => {
     getSettings().then((settings) => {
       setShortcut(settings.capture_shortcut);
       setBackendUrlInput(settings.backend_url ?? getApiBaseUrl());
       setCfClientIdInput(settings.cf_access_client_id ?? "");
       setCfConfigured(settings.cf_access_configured);
+      setLock(settings.lock);
     });
     speechAvailable().then(setCanSpeak);
     if (runningInDesktopApp()) getVersion().then(setClientVersion);
@@ -315,6 +328,65 @@ export function SettingsScreen() {
             ? "A secret is saved in the macOS Keychain. Leave the field empty to keep it; type a new one to replace it; clear both fields and save to remove it."
             : "Only needed once the backend sits behind Cloudflare Access — a Zero Trust Service Token, not your own login. Leave both blank on a local or LAN backend. The secret goes to the macOS Keychain, never to a file.")}
       </p>
+
+      <h4 className="section-label">LOCK</h4>
+      {lock === null || lock.mechanism === "none" ? (
+        <p className="dim settings-note">
+          {runningInDesktopApp()
+            ? "This Mac has no device authentication set up, so there is nothing to lock with. Turn on Touch ID or a login password in System Settings and this becomes available — until then the app deliberately stays open rather than shutting you out of your own notes."
+            : "Only the desktop app can lock — this is the browser build."}
+        </p>
+      ) : (
+        <>
+          <div className="settings-row">
+            <span
+              className={`filter-chip${lock.enabled ? " active" : ""}`}
+              onClick={() => {
+                setLockError(null);
+                setLockEnabled(!lock.enabled)
+                  .then((settings) => setLock(settings.lock))
+                  .catch((err) => setLockError(String(err)));
+              }}
+            >
+              {lock.enabled ? "[x]" : "[ ]"} ask for{" "}
+              {lock.mechanism === "touchid" ? "Touch ID" : "your password"} before reading
+            </span>
+          </div>
+
+          {lock.enabled && (
+            <div className="settings-row">
+              <span className="dim">Locks again after</span>
+              {IDLE_CHOICES.map((minutes) => (
+                <span
+                  key={minutes}
+                  className={`filter-chip${
+                    lock.idle_seconds === minutes * 60 ? " active" : ""
+                  }`}
+                  onClick={() => {
+                    setLockError(null);
+                    setLockIdleSeconds(minutes * 60)
+                      .then((settings) => setLock(settings.lock))
+                      .catch((err) => setLockError(String(err)));
+                  }}
+                >
+                  {minutes} min
+                </span>
+              ))}
+            </div>
+          )}
+
+          {lockError && <p className="dim settings-note">{lockError}</p>}
+
+          <p className="dim settings-note">
+            Reading is what is guarded — the timeline, search, entities, the graph, a
+            capture and its recording. Capturing is not: speaking a note only ever adds to
+            this, and putting a prompt in front of the shortcut would cost the fastest
+            thing the app does. The clock only runs while the window is not in front, so
+            nothing disappears while you are reading it. Switching this off asks for{" "}
+            {lock.mechanism === "touchid" ? "Touch ID" : "your password"} first.
+          </p>
+        </>
+      )}
 
       <h4 className="section-label">SPEECH RECOGNITION</h4>
       <p className="dim settings-note">

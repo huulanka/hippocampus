@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+use crate::lock::LockState;
 use crate::settings::SettingsState;
 
 const CLIENT_ID_HEADER: &str = "CF-Access-Client-Id";
@@ -122,6 +123,7 @@ pub(crate) fn describe_status(
 pub async fn api_request(
     client: tauri::State<'_, BackendClient>,
     settings: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, LockState>,
     method: String,
     path: String,
     body: Option<String>,
@@ -131,6 +133,18 @@ pub async fn api_request(
     // not compile.
     let base = settings.backend_base();
     let credentials = settings.credentials();
+    // Decided here rather than in the webview. A lock screen that is only
+    // drawn leaves every request behind it working.
+    let armed = settings.lock_armed();
+    let locked = armed && !lock.is_unlocked();
+    if let Some(refusal) = crate::lock::refusal(armed, lock.is_unlocked(), &method, &path) {
+        // Worth a line. This is the guard doing its job, and the only way
+        // to tell afterwards that it was the guard rather than the backend
+        // that answered — the webview is told the same short sentence
+        // either way.
+        log::info!("refused {method} {path}: {refusal}");
+        return Err(refusal.to_string());
+    }
 
     let url = format!("{base}{path}");
     let method = reqwest::Method::from_bytes(method.as_bytes())
@@ -160,6 +174,7 @@ pub async fn api_request(
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
     let body = response.text().await.unwrap_or_default();
+    let body = if locked { without_echo(body) } else { body };
 
     Ok(ApiResponse {
         status: status.as_u16(),
@@ -167,6 +182,33 @@ pub async fn api_request(
             .unwrap_or_else(|| status.canonical_reason().unwrap_or("").to_string()),
         body,
     })
+}
+
+/// Strips the echo out of a capture's acceptance while the notes are
+/// locked.
+///
+/// Recording a capture is allowed while locked because it only ever adds
+/// — except that the backend answers it with the earlier captures closest
+/// to it, verbatim. That is the one place where writing hands back
+/// reading, and it would walk straight past the gate. The capture is
+/// still judged and still stored; it is only this answer that is quiet
+/// about it, and the echo is there to be read later, after unlocking.
+///
+/// `echo_pending` is cleared along with it, so the webview does not go
+/// off polling for an echo it would only be refused.
+fn without_echo(body: String) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&body) else {
+        return body;
+    };
+    let Some(object) = value.as_object_mut() else {
+        return body;
+    };
+    if !object.contains_key("echo") {
+        return body;
+    }
+    object.insert("echo".to_string(), serde_json::json!([]));
+    object.insert("echo_pending".to_string(), serde_json::json!(false));
+    serde_json::to_string(&value).unwrap_or(body)
 }
 
 /// The bytes of a capture's original recording.
@@ -184,8 +226,15 @@ pub async fn api_request(
 pub async fn api_audio(
     client: tauri::State<'_, BackendClient>,
     settings: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, LockState>,
     event_id: String,
 ) -> Result<tauri::ipc::Response, String> {
+    if let Some(refusal) = crate::lock::refusal_for_audio(settings.lock_armed(), lock.is_unlocked())
+    {
+        log::info!("refused the recording of {event_id}: {refusal}");
+        return Err(refusal.to_string());
+    }
+
     let base = settings.backend_base();
     let credentials = settings.credentials();
 
@@ -297,6 +346,42 @@ async fn health_check(
 
 #[cfg(test)]
 mod tests {
+    /// The one place where writing hands back reading. Without this the
+    /// gate would be walked past by the very request it lets through.
+    #[test]
+    fn a_locked_capture_comes_back_without_its_echo() {
+        let answered = r#"{"event_id":"abc","occurred_at":"2026-09-22T09:00:00Z",
+            "echo":[{"capture_event_id":"older","transcript_text":"something private",
+            "occurred_at":"2026-09-01T09:00:00Z","similarity":0.9,"rerank_score":null}],
+            "echo_pending":true}"#;
+
+        let stripped = without_echo(answered.to_string());
+
+        assert!(!stripped.contains("something private"));
+        assert!(!stripped.contains("older"));
+        // Still a capture acceptance, not a hollowed-out one: the id the
+        // webview needs to show "kept it" survives.
+        assert!(stripped.contains("abc"));
+        // And nothing is left asking for the echo it would only be refused.
+        assert!(stripped.contains(r#""echo_pending":false"#));
+    }
+
+    /// Every other answer passes through untouched, byte for byte — this
+    /// runs on responses that have nothing to do with an echo.
+    #[test]
+    fn an_answer_with_no_echo_is_not_rewritten() {
+        let plain = r#"{"status":"ok"}"#;
+        assert_eq!(without_echo(plain.to_string()), plain);
+    }
+
+    /// A body that is not JSON at all — an error page, an empty string —
+    /// must come back as it was rather than being swallowed.
+    #[test]
+    fn a_body_that_is_not_json_survives() {
+        assert_eq!(without_echo(String::new()), "");
+        assert_eq!(without_echo("<html>nope".to_string()), "<html>nope");
+    }
+
     use std::io::{Read, Write};
     use std::sync::mpsc;
 

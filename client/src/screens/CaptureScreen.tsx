@@ -44,9 +44,13 @@ type Phase = "idle" | "recording" | "working";
 export function CaptureScreen({
   summons = 0,
   onOpenCapture,
+  locked = false,
 }: {
   summons?: number;
   onOpenCapture: (eventId: string) => void;
+  /// Capturing works either way — this only decides whether the echo can
+  /// be shown, which is the one part of this screen that reads.
+  locked?: boolean;
 }) {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -97,6 +101,14 @@ export function CaptureScreen({
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [phase]);
+
+  /// Locking has to take the last capture off the screen as well.
+  /// Capturing stays open while locked, but what is left standing
+  /// afterwards is still a note — and after five minutes unattended it is
+  /// exactly the note someone walking past would read.
+  useEffect(() => {
+    if (locked) setSaved(null);
+  }, [locked]);
 
   /// The echo arrives after the capture is stored, not with it. Saving a
   /// note is confirmed the moment it is safe on disk; the earlier
@@ -220,7 +232,22 @@ export function CaptureScreen({
           <p className="timeline-transcript">{saved.transcript}</p>
         </div>
 
-        {echo.pending ? (
+        {/* Saying so, rather than showing an empty space where the echo
+            would be. The backend still found the earlier captures closest
+            to this one and still wrote its judgement down; they are
+            withheld on this side because reading is what the guard
+            guards. A screen that quietly leaves them out would be
+            claiming there were none. */}
+        {locked ? (
+          <div className="panel transcript-panel">
+            <div className="kicker">
+              [ EARLIER THOUGHTS ARE LOCKED ]{" "}
+              <span className="dim">
+                — your note is saved; what it echoes is waiting until you unlock
+              </span>
+            </div>
+          </div>
+        ) : echo.pending ? (
           <div className="panel transcript-panel">
             <div className="kicker">
               [ LOOKING FOR EARLIER THOUGHTS ]{" "}

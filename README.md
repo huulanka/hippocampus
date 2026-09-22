@@ -116,6 +116,22 @@ npm install   # once, at the repo root — this is release tooling, not the app
 npm run release:dry-run
 ```
 
+## Who can read it
+
+Everything ever captured is in here, on a laptop that spends its day open.
+Reading it back asks for Touch ID — or the login password, on a Mac with no
+sensor — and **capturing does not**. Speaking a note only ever adds to the
+system; reading it back is the part worth a gate, and the global shortcut
+stays a two-second act. See
+[`docs/adr/0011-reading-is-guarded-capturing-is-not.md`](docs/adr/0011-reading-is-guarded-capturing-is-not.md).
+
+The gate is enforced in Rust, not drawn in the webview: the requests behind
+it are refused, not merely hidden. It re-locks after five minutes in which
+the window was not in front (changeable in **Settings → Lock**, along with
+switching it off — which authenticates first). A Mac that cannot
+authenticate at all disarms it rather than shutting its owner out; if you
+are ever stuck, `"lock_enabled": false` in `settings.json` is the way back.
+
 ## Voice capture
 
 Speech recognition runs on this machine, never on the server: audio is the

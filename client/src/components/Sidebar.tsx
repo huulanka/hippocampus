@@ -1,5 +1,6 @@
 import { Mascot } from "../mascot";
 import type { TabId } from "../App";
+import { lockNow, type LockStatus } from "../desktop";
 
 interface NavItem {
   id: TabId;
@@ -112,10 +113,19 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar({
   activeTab,
   onSelectTab,
+  lock,
+  onLockChange,
 }: {
   activeTab: TabId;
   onSelectTab: (tab: TabId) => void;
+  lock: LockStatus | null;
+  onLockChange: (status: LockStatus) => void;
 }) {
+  /// Shown only when there is a guard to operate. On a machine that
+  /// cannot authenticate, or with the guard switched off, this would be a
+  /// control that does nothing — and the state it reports would be a
+  /// claim about safety that is not true.
+  const armed = lock !== null && lock.enabled && lock.mechanism !== "none";
   return (
     <div className="sidebar">
       <div className="sidebar-brand">
@@ -139,6 +149,18 @@ export function Sidebar({
           </div>
         ))}
       </nav>
+
+      {armed && !lock.locked && (
+        <div
+          className="sidebar-lock"
+          title={`Locks by itself after ${Math.round(lock.idle_seconds / 60)} minutes unattended`}
+          onClick={() => {
+            void lockNow().then(onLockChange);
+          }}
+        >
+          [ lock now ]
+        </div>
+      )}
 
       <div className="sidebar-new-capture" onClick={() => onSelectTab("capture")}>
         [ New Capture ]

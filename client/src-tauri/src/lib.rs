@@ -8,6 +8,7 @@ mod asr;
 mod backend;
 mod capture;
 mod keychain;
+mod lock;
 pub mod microphone;
 mod recorder;
 mod settings;
@@ -50,6 +51,40 @@ fn summon_capture(app: &tauri::AppHandle) {
     }
 }
 
+/// How often the idle clock is checked. Coarse on purpose: the thing
+/// being measured is minutes of absence, and a timer that wakes the
+/// machine four times a second to find out nothing has changed is a
+/// battery cost with no reader.
+const IDLE_TICK: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Locks the app again once it has been left alone long enough.
+///
+/// A timer rather than a check when the window is next touched: the case
+/// this exists for is a laptop left open on a desk with the timeline
+/// still on the screen. Waiting for someone to click would mean the notes
+/// are readable for exactly as long as nobody interacts with them, which
+/// is the opposite of the guarantee.
+fn watch_for_idleness(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(IDLE_TICK).await;
+
+            let idle = app.state::<SettingsState>().lock_idle();
+            if !app.state::<SettingsState>().lock_armed() {
+                continue;
+            }
+            if app.state::<lock::LockState>().lock_if_idle(idle) {
+                log::info!("locked again after {}s unattended", idle.as_secs());
+                // Told, not polled: the screen has to go away while
+                // nobody is asking it anything.
+                if let Err(err) = app.emit(lock::LOCKED_EVENT, ()) {
+                    log::warn!("could not tell the webview it locked: {err}");
+                }
+            }
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -85,8 +120,24 @@ pub fn run() {
                 })
                 .build(),
         )
+        // The idle clock runs only while the window is not the front
+        // one. A note you are reading should not vanish mid-sentence
+        // because you stopped typing for five minutes; a laptop you
+        // walked away from is a different thing entirely, and this is how
+        // the two are told apart.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(focused) = event {
+                window
+                    .app_handle()
+                    .state::<lock::LockState>()
+                    .set_focused(*focused);
+            }
+        })
         .manage(capture::CaptureState::new())
         .manage(backend::BackendClient::new())
+        // Starts locked. Anything else would mean the first launch after
+        // a restart is the one that shows everything.
+        .manage(lock::LockState::new())
         .invoke_handler(tauri::generate_handler![
             capture::speech_available,
             capture::start_recording,
@@ -99,6 +150,11 @@ pub fn run() {
             settings::set_capture_shortcut,
             settings::set_backend_url,
             settings::set_cf_access_credentials,
+            settings::set_lock_enabled,
+            settings::set_lock_idle_seconds,
+            lock::lock_status,
+            lock::unlock,
+            lock::lock_now,
         ])
         .setup(|app| {
             // Settings are loaded before the shortcut is registered, and
@@ -114,6 +170,8 @@ pub fn run() {
             if let Err(err) = app.global_shortcut().register(shortcut) {
                 log::warn!("could not register the capture shortcut: {err}");
             }
+
+            watch_for_idleness(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

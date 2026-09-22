@@ -149,7 +149,33 @@ export interface Settings {
   /// Whether a Client Secret is stored. All the webview needs in order to
   /// render "a secret is saved" and offer to replace it.
   cf_access_configured: boolean;
+  lock: LockStatus;
 }
+
+/// The guard in front of the notes. Mirrors `lock::LockStatus` in Rust.
+///
+/// Note what this is *not*: it is not what enforces anything. The Rust
+/// side refuses the requests, and this is only enough to draw the right
+/// screen — so a webview that lied to itself about it would see a lock
+/// screen missing and every read still refused.
+export interface LockStatus {
+  /// What this machine can actually authenticate with. `"none"` means it
+  /// cannot, and the guard makes itself inert rather than shutting the
+  /// owner out of their own notes.
+  mechanism: "touchid" | "password" | "none";
+  enabled: boolean;
+  locked: boolean;
+  idle_seconds: number;
+}
+
+/// What the guard looks like where there is no Rust side to ask — the
+/// browser build, which has no device authentication to offer.
+const NO_LOCK: LockStatus = {
+  mechanism: "none",
+  enabled: false,
+  locked: false,
+  idle_seconds: 0,
+};
 
 /// Reads the persisted settings. In the browser there are none, so the
 /// defaults come back instead of an error.
@@ -160,6 +186,7 @@ export async function getSettings(): Promise<Settings> {
       backend_url: null,
       cf_access_client_id: null,
       cf_access_configured: false,
+      lock: NO_LOCK,
     };
   return await invoke<Settings>("get_settings");
 }
@@ -195,6 +222,49 @@ export function setCfAccessCredentials(
     clientId,
     clientSecret,
   });
+}
+
+/// The state of the guard, asked for directly rather than through the
+/// whole settings object — this is polled on navigation, and reading the
+/// Keychain for a Client Secret on the way would be an odd side effect of
+/// asking whether the screen is locked.
+export function lockStatus(): Promise<LockStatus> {
+  if (!isTauri()) return Promise.resolve(NO_LOCK);
+  return invoke<LockStatus>("lock_status");
+}
+
+/// Puts up the system's own authentication dialog and resolves with the
+/// state afterwards — `locked: false` when it was answered, still `true`
+/// when it was cancelled. Rejects only when the dialog itself failed.
+export function unlock(): Promise<LockStatus> {
+  if (!isTauri()) return Promise.resolve(NO_LOCK);
+  return invoke<LockStatus>("unlock");
+}
+
+/// Closes the guard by hand, for leaving the desk without waiting out the
+/// idle timer.
+export function lockNow(): Promise<LockStatus> {
+  if (!isTauri()) return Promise.resolve(NO_LOCK);
+  return invoke<LockStatus>("lock_now");
+}
+
+/// Switches the guard off, or back on. Switching it *off* puts the
+/// authentication dialog up first and rejects if it is not answered —
+/// otherwise the lock screen would carry a button that removes the lock.
+export function setLockEnabled(enabled: boolean): Promise<Settings> {
+  return invoke<Settings>("set_lock_enabled", { enabled });
+}
+
+export function setLockIdleSeconds(seconds: number): Promise<Settings> {
+  return invoke<Settings>("set_lock_idle_seconds", { seconds });
+}
+
+/// Fires when the app locked itself after sitting unattended. Pushed from
+/// Rust rather than polled: the screen has to go away while nobody is
+/// asking it anything.
+export function onLocked(handler: () => void): Promise<() => void> {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return listen("hippocampus://locked", () => handler());
 }
 
 /// One HTTP exchange with the backend, performed in Rust.
