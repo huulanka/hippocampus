@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/huulanka/hippocampus/compare/v1.8.0...v1.9.0) (2026-09-22)
+
+
+### Features
+
+* the app lives in the menu bar now, and the shortcut is the only thing that records ([#47](https://github.com/huulanka/hippocampus/issues/47)) ([e4e50f5](https://github.com/huulanka/hippocampus/commit/e4e50f589f3cba5fa0ac8b21921624b047cefcde))
+
 # [1.8.0](https://github.com/huulanka/hippocampus/compare/v1.7.1...v1.8.0) (2026-09-22)
 
 
