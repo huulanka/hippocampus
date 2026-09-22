@@ -50,11 +50,20 @@ deutsch/englisch. `client/src-tauri/src/lib.rs` ist derzeit noch das
 Template mit `greet()`.
 
 ### [P1] Globaler Hotkey und Push-to-talk
-**Teilweise erledigt** in #11 (Shortcut holt das Fenster) und #14 (frei
-konfigurierbar, persistiert). Offen bleiben Tray-Icon und Autostart.
-Tauri-Plugin für globale Shortcuts, Tray-Icon, Autostart. Vom Tastendruck
-bis „nimmt auf" unter 2 Sekunden. Sicht- oder hörbares Feedback, ohne dass
-ein Fenster in den Vordergrund springt.
+**Erledigt** in #11 (Shortcut holt das Fenster), #14 (frei konfigurierbar,
+persistiert) und zuletzt Tray-Icon, Autostart und Single-Instance-Sperre
+(ADR 0012). Vom Tastendruck bis „nimmt auf" unter 2 Sekunden. Sicht- oder
+hörbares Feedback, ohne dass ein Fenster in den Vordergrund springt.
+
+Dabei fiel ein echter Fehler auf: die Funktion, die das Fenster
+hervorholt, hat auch dem Webview signalisiert, der Aufnahme-Shortcut sei
+gedrückt worden — das ist beim globalen Shortcut richtig (Druck startet
+die Aufnahme, zweiter Druck beendet sie), war aber auch für den Klick auf
+das Tray-Icon, den Menüpunkt und den Single-Instance-Neustart verdrahtet.
+Jedes „App wieder zeigen" startete damit unbemerkt eine Aufnahme. Jetzt
+sind es zwei Funktionen: `reveal_window` (nur zeigen) und
+`summon_capture` (zeigen und den Shortcut-Druck melden), Letztere nur für
+den globalen Shortcut selbst. Details in ADR 0012.
 
 ### [P1] Lokale Outbox mit Hintergrund-Sync
 **Erledigt.** Dateien statt SQLite: pro wartendem Capture eine JSON-Datei

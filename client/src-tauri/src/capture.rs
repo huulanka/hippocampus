@@ -75,7 +75,10 @@ pub fn speech_available() -> bool {
 }
 
 #[tauri::command]
-pub fn start_recording(state: tauri::State<'_, CaptureState>) -> Result<(), String> {
+pub fn start_recording(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CaptureState>,
+) -> Result<(), String> {
     let mut slot = state.recording.lock().map_err(|_| "recorder is wedged")?;
     if slot.is_some() {
         return Err("already recording".to_string());
@@ -95,15 +98,22 @@ pub fn start_recording(state: tauri::State<'_, CaptureState>) -> Result<(), Stri
     }
 
     *slot = Some(Recording::start().map_err(|err| err.to_string())?);
+    // The one visible sign, from the menu bar, that the mic is actually
+    // listening — see `crate::tray`.
+    crate::tray::activity_begin(&app);
     Ok(())
 }
 
 /// Throws the recording away without transcribing or storing it.
 #[tauri::command]
-pub fn cancel_recording(state: tauri::State<'_, CaptureState>) -> Result<(), String> {
+pub fn cancel_recording(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CaptureState>,
+) -> Result<(), String> {
     let mut slot = state.recording.lock().map_err(|_| "recorder is wedged")?;
     if let Some(recording) = slot.take() {
         let _ = recording.finish();
+        crate::tray::activity_end(&app);
     }
     Ok(())
 }
@@ -134,6 +144,7 @@ pub async fn stop_recording(
         .map_err(|_| "recorder is wedged")?
         .take()
         .ok_or("not recording")?;
+    crate::tray::activity_end(&app);
 
     let samples = recording.finish().map_err(|err| err.to_string())?;
     let duration_ms = (samples.len() as u64 * 1000 / u64::from(TARGET_RATE)) as u32;

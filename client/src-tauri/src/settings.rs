@@ -21,6 +21,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::keychain;
@@ -523,6 +524,31 @@ pub fn set_lock_idle_seconds(
     }
 
     Ok(state.view(&lock))
+}
+
+/// Whether the app is registered to start at login. Read straight from
+/// the OS launch-agent registration rather than mirrored in
+/// `settings.json` — that registration already *is* the durable state,
+/// and a copy of it here could only ever fall out of sync with it.
+#[tauri::command]
+pub fn autostart_enabled(app: tauri::AppHandle) -> bool {
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+/// Switches the login item on or off. Off by default on a fresh install
+/// — starting a background process before anyone has asked for it is not
+/// a call this app gets to make on its own, unlike the lock above, whose
+/// silence is read the safer way round.
+#[tauri::command]
+pub fn set_autostart_enabled(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
+    let autolaunch = app.autolaunch();
+    let result = if enabled {
+        autolaunch.enable()
+    } else {
+        autolaunch.disable()
+    };
+    result.map_err(|err| err.to_string())?;
+    Ok(enabled)
 }
 
 #[cfg(test)]

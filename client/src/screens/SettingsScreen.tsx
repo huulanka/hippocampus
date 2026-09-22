@@ -4,12 +4,14 @@ import { useTheme } from "../theme";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   acceleratorFromEvent,
+  autostartEnabled,
   checkBackend,
   formatAccelerator,
   getSettings,
   openExternalLink,
   openLogDirectory,
   runningInDesktopApp,
+  setAutostartEnabled,
   setBackendUrl,
   setCaptureShortcut,
   setCfAccessCredentials,
@@ -28,13 +30,12 @@ const GITHUB_URL = "https://github.com/huulanka/hippocampus";
 /// will accept unchanged.
 const IDLE_CHOICES = [1, 5, 15, 60];
 
-/// Only the hotkey, the backend URL and the theme are real so far.
-/// Everything else this screen used to offer — a tray icon, a cloud
-/// transcription mode, a storage path, a "delete audio after
-/// transcription" switch — was a mock, and two of those switches
-/// contradicted decisions the project has already made. A setting that
-/// does nothing is worse than a missing one: it invites you to believe
-/// something about the system that is not true.
+/// This screen used to offer a cloud transcription mode, a storage path,
+/// and a "delete audio after transcription" switch that were all mocks —
+/// two of them contradicted decisions the project has already made. A
+/// setting that does nothing is worse than a missing one: it invites you
+/// to believe something about the system that is not true. The tray icon
+/// and its autostart toggle, added later, are the real thing.
 export function SettingsScreen() {
   const { theme, setTheme } = useTheme();
   const [shortcut, setShortcut] = useState(DEFAULT_CAPTURE_SHORTCUT);
@@ -65,6 +66,9 @@ export function SettingsScreen() {
   const [lock, setLock] = useState<LockStatus | null>(null);
   const [lockError, setLockError] = useState<string | null>(null);
 
+  const [autostart, setAutostart] = useState(false);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
+
   useEffect(() => {
     getSettings().then((settings) => {
       setShortcut(settings.capture_shortcut);
@@ -74,6 +78,7 @@ export function SettingsScreen() {
       setLock(settings.lock);
     });
     speechAvailable().then(setCanSpeak);
+    autostartEnabled().then(setAutostart);
     if (runningInDesktopApp()) getVersion().then(setClientVersion);
     getBackendVersion()
       .then(setBackendVersion)
@@ -262,6 +267,30 @@ export function SettingsScreen() {
           : "Only the desktop app has a global hotkey — this is the browser build."}
       </p>
       {error && <p className="dim settings-note">{error}</p>}
+
+      <h4 className="section-label">MENU BAR</h4>
+      <p className="dim settings-note">
+        {runningInDesktopApp()
+          ? "Hippocampus lives in the menu bar now. Closing the window puts it away rather than quitting — the shortcut above still summons it, and so does clicking the brain. \"Quit Hippocampus\" from its right-click menu is the only way out."
+          : "Only the desktop app has a menu bar icon — this is the browser build."}
+      </p>
+      {runningInDesktopApp() && (
+        <div className="settings-row">
+          <span
+            className={`filter-chip${autostart ? " active" : ""}`}
+            onClick={() => {
+              setAutostartError(null);
+              const next = !autostart;
+              setAutostartEnabled(next)
+                .then(setAutostart)
+                .catch((err) => setAutostartError(String(err)));
+            }}
+          >
+            {autostart ? "[x]" : "[ ]"} start Hippocampus at login
+          </span>
+        </div>
+      )}
+      {autostartError && <p className="dim settings-note">{autostartError}</p>}
 
       <h4 className="section-label">BACKEND</h4>
       <div className="settings-row">

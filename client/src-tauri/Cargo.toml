@@ -24,7 +24,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-log = "2"
@@ -48,6 +48,8 @@ iana-time-zone = "0.1"
 # through `contracts`.
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+tauri-plugin-autostart = "2.5.1"
+tauri-plugin-single-instance = "2.4.5"
 
 [dev-dependencies]
 # `macros` only here: the gated outbox round-trip test needs

@@ -323,6 +323,20 @@ export function setLockIdleSeconds(seconds: number): Promise<Settings> {
   return invoke<Settings>("set_lock_idle_seconds", { seconds });
 }
 
+/// Whether the app is registered to start at login. Read straight from
+/// the OS launch-agent registration, not from `settings.json` — there is
+/// no separate copy of this to fall out of sync. `false` in the browser
+/// build, where there is no OS to register with.
+export function autostartEnabled(): Promise<boolean> {
+  if (!isTauri()) return Promise.resolve(false);
+  return invoke<boolean>("autostart_enabled");
+}
+
+/// Switches the login item on or off.
+export function setAutostartEnabled(enabled: boolean): Promise<boolean> {
+  return invoke<boolean>("set_autostart_enabled", { enabled });
+}
+
 /// Fires when the app locked itself after sitting unattended. Pushed from
 /// Rust rather than polled: the screen has to go away while nobody is
 /// asking it anything.

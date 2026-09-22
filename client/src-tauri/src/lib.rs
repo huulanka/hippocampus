@@ -14,6 +14,7 @@ mod outbox;
 mod recorder;
 mod settings;
 mod sync;
+mod tray;
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -29,16 +30,22 @@ pub fn microphone_permission() -> microphone::Permission {
     microphone::current()
 }
 
-/// Event the webview listens for to jump to a fresh capture field.
+/// Event the webview listens for to jump to a fresh capture field. The
+/// frontend treats *every* firing of this as a press of the shortcut —
+/// which starts recording if nothing is already in flight, and stops it
+/// if a recording is — so this must only ever be emitted for an actual
+/// press of the capture shortcut, never for "the app should be visible."
 const FOCUS_EVENT: &str = "hippocampus://focus-capture";
 
-/// Brings the main window forward and asks the webview for a blank capture
-/// field. Failures are logged rather than propagated: a shortcut that does
-/// nothing is a bad evening, but a shortcut that panics takes the whole
-/// app with it.
-fn summon_capture(app: &tauri::AppHandle) {
+/// Brings the main window forward without touching recording. What the
+/// tray icon's left click, its "Open Hippocampus" menu item, and a second
+/// launch caught by the single-instance guard all want: come back into
+/// view, and nothing more. Failures are logged rather than propagated —
+/// a click that does nothing is a bad moment, but one that panics takes
+/// the whole app with it.
+pub(crate) fn reveal_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
-        log::warn!("global shortcut fired but the main window is gone");
+        log::warn!("asked to show the window, but it is gone");
         return;
     };
 
@@ -48,6 +55,15 @@ fn summon_capture(app: &tauri::AppHandle) {
     if let Err(err) = window.set_focus() {
         log::warn!("could not focus window: {err}");
     }
+}
+
+/// The capture shortcut's actual behaviour: bring the window forward
+/// *and* tell the webview a press just happened, which is what starts
+/// (or stops) a recording. Only the global shortcut handler below may
+/// call this — anything else that wants the window back wants
+/// [`reveal_window`], not this.
+fn summon_capture(app: &tauri::AppHandle) {
+    reveal_window(app);
     if let Err(err) = app.emit(FOCUS_EVENT, ()) {
         log::warn!("could not notify webview: {err}");
     }
@@ -90,6 +106,16 @@ fn watch_for_idleness(app: tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Registered before anything else, per the plugin's own
+        // requirement: a second launch (double-clicking the app again,
+        // or opening it from Spotlight while it is already running in
+        // the menu bar) is caught here and turned into "bring the
+        // existing window forward" instead of a second process fighting
+        // the first one for the same global shortcut, outbox directory
+        // and backend connection.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            reveal_window(app);
+        }))
         // Registered first so nothing logged during setup is lost. Writes
         // to stdout (visible under `tauri dev`) and to a rolling file
         // under the OS log dir, which is what the Settings screen's "Open
@@ -106,6 +132,10 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -134,6 +164,17 @@ pub fn run() {
                     .state::<lock::LockState>()
                     .set_focused(*focused);
             }
+            // The red close button hides the window rather than ending
+            // the process — the whole point of living in the menu bar is
+            // that the app is still there, one click away, after the
+            // window that happened to be open is gone. Quitting is now a
+            // deliberate act, only offered from the tray menu.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                if let Err(err) = window.hide() {
+                    log::warn!("could not hide window on close: {err}");
+                }
+            }
         })
         .manage(capture::CaptureState::new())
         .manage(backend::BackendClient::new())
@@ -157,6 +198,8 @@ pub fn run() {
             settings::set_cf_access_credentials,
             settings::set_lock_enabled,
             settings::set_lock_idle_seconds,
+            settings::autostart_enabled,
+            settings::set_autostart_enabled,
             lock::lock_status,
             lock::unlock,
             lock::lock_now,
@@ -190,6 +233,15 @@ pub fn run() {
             sync::watch(app.handle().clone());
 
             watch_for_idleness(app.handle().clone());
+
+            // No Dock icon, no Cmd+Tab entry: the menu bar is now the
+            // one place this app lives when its window is not open,
+            // and a Dock icon sitting next to it would just be a second,
+            // redundant way to ask for the same window.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            tray::build(app.handle())?;
             Ok(())
         })
         .run(tauri::generate_context!())
