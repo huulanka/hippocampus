@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  applyConsolidation,
   getChangelog,
   getConsolidationPreview,
-  runConsolidation,
+  retractRelation,
   unmergeEntity,
   type ChangeRecord,
   type ConsolidationPreview,
@@ -73,7 +74,8 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
   const [changes, setChanges] = useState<ChangeRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ConsolidationPreview | null>(null);
-  const [busy, setBusy] = useState<"preview" | "run" | null>(null);
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<"preview" | "apply" | null>(null);
 
   const load = useCallback(() => {
     getChangelog().then(setChanges).catch((err) => setError(String(err)));
@@ -85,6 +87,7 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
     setBusy("preview");
     setError(null);
     try {
+      setExcluded(new Set());
       setPreview(await getConsolidationPreview());
     } catch (err) {
       setError(String(err));
@@ -93,12 +96,18 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
     }
   }
 
-  async function tidy() {
-    setBusy("run");
+  function exclude(id: string) {
+    setExcluded((prev) => new Set(prev).add(id));
+  }
+
+  async function apply() {
+    if (!preview?.token) return;
+    setBusy("apply");
     setError(null);
     try {
-      await runConsolidation();
+      await applyConsolidation(preview.token, [...excluded]);
       setPreview(null);
+      setExcluded(new Set());
       load();
     } catch (err) {
       setError(String(err));
@@ -107,20 +116,30 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
     }
   }
 
-  async function undo(id: string) {
+  async function undo(change: ChangeRecord) {
+    if (!change.undo_id) return;
     try {
-      setChanges(await unmergeEntity(id));
+      const updated =
+        change.kind === "related"
+          ? await retractRelation(change.undo_id)
+          : await unmergeEntity(change.undo_id);
+      setChanges(updated);
     } catch (err) {
       setError(String(err));
     }
   }
 
-  const nothingToDo =
-    preview !== null &&
-    preview.same_name.length === 0 &&
-    preview.merges.length === 0 &&
-    preview.retypes.length === 0 &&
-    preview.relations.length === 0;
+  const proposals = useMemo(() => {
+    if (!preview) return [];
+    return [
+      ...preview.same_name.map((m) => ({ kind: "merge" as const, item: m })),
+      ...preview.merges.map((m) => ({ kind: "merge" as const, item: m })),
+      ...preview.retypes.map((r) => ({ kind: "retype" as const, item: r })),
+      ...preview.relations.map((r) => ({ kind: "relation" as const, item: r })),
+    ].filter((p) => !excluded.has(p.item.id));
+  }, [preview, excluded]);
+
+  const nothingToDo = preview !== null && proposals.length === 0 && excluded.size === 0;
 
   return (
     <div className="changes-screen">
@@ -132,18 +151,24 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
 
       <div className="capture-actions changes-actions">
         <span className={`btn${busy ? " disabled" : ""}`} onClick={() => void look()}>
-          [ {busy === "preview" ? "Looking…" : "What would it change?"} ]
+          [ {busy === "preview" ? "Looking…" : "Check for changes"} ]
         </span>
-        <span className={`btn btn-accent${busy ? " disabled" : ""}`} onClick={() => void tidy()}>
-          [ {busy === "run" ? "Tidying…" : "Tidy up now"} ]
-        </span>
+        {preview?.token && (
+          <span
+            className={`btn btn-accent${busy || proposals.length === 0 ? " disabled" : ""}`}
+            onClick={() => proposals.length > 0 && void apply()}
+          >
+            [ {busy === "apply" ? "Applying…" : `Apply ${proposals.length} change${proposals.length === 1 ? "" : "s"}`} ]
+          </span>
+        )}
       </div>
 
       {error && <p className="dim">{error}</p>}
 
-      {/* The dry run. Same reasoning as the real pass, applied and thrown
-          away — which is what makes it safe to point at a database this
-          has never run against. */}
+      {/* The dry run. Same reasoning as the real pass, kept rather than
+          thrown away this time — every item stays exactly as proposed
+          until it is applied, so removing one never risks a second,
+          different judgement of the rest. */}
       {preview && (
         <div className="panel transcript-panel">
           <div className="kicker">
@@ -157,25 +182,37 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
           {nothingToDo && !preview.note && (
             <p className="dim">Nothing worth changing. That is a real answer, not an empty one.</p>
           )}
+          {preview.token && proposals.length === 0 && excluded.size > 0 && (
+            <p className="dim">Everything was removed. Nothing left to apply.</p>
+          )}
 
-          {[...preview.same_name, ...preview.merges].map((m, i) => (
-            <p key={`m${i}`} className="changes-proposal">
-              Fold <strong>{m.absorb.join(", ")}</strong> into <strong>{m.keep}</strong>
-              {m.new_name && m.new_name !== m.keep && <> and call it <strong>{m.new_name}</strong></>}
-              <span className="dim"> — {m.reason}</span>
-            </p>
-          ))}
-          {preview.retypes.map((r, i) => (
-            <p key={`t${i}`} className="changes-proposal">
-              <strong>{r.entity}</strong>: {r.from} → {r.to}
-              <span className="dim"> — {r.reason}</span>
-            </p>
-          ))}
-          {preview.relations.map((r, i) => (
-            <p key={`r${i}`} className="changes-proposal">
-              <strong>{r.from}</strong> <span className="dim">──{r.relation_type}──▶</span>{" "}
-              <strong>{r.to}</strong>
-              <span className="dim"> — {r.reason}</span>
+          {proposals.map(({ kind, item }) => (
+            <p key={item.id} className="changes-proposal">
+              {kind === "merge" && "keep" in item && (
+                <>
+                  Fold <strong>{item.absorb.join(", ")}</strong> into <strong>{item.keep}</strong>
+                  {item.new_name && item.new_name !== item.keep && (
+                    <> and call it <strong>{item.new_name}</strong></>
+                  )}
+                  <span className="dim"> — {item.reason}</span>
+                </>
+              )}
+              {kind === "retype" && "entity" in item && (
+                <>
+                  <strong>{item.entity}</strong>: {item.from} → {item.to}
+                  <span className="dim"> — {item.reason}</span>
+                </>
+              )}
+              {kind === "relation" && "relation_type" in item && (
+                <>
+                  <strong>{item.from}</strong> <span className="dim">──{item.relation_type}──▶</span>{" "}
+                  <strong>{item.to}</strong>
+                  <span className="dim"> — {item.reason}</span>
+                </>
+              )}
+              <span className="dim link changes-proposal-remove" onClick={() => exclude(item.id)}>
+                [x]
+              </span>
             </p>
           ))}
         </div>
@@ -185,7 +222,7 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
         <p className="dim">Reading the log…</p>
       ) : changes.length === 0 ? (
         <p className="dim">
-          Nothing has been rearranged yet. Once the tidying run has done something, it shows up
+          Nothing has been rearranged yet. Once a tidying pass has done something, it shows up
           here with its reasons.
         </p>
       ) : (
@@ -201,14 +238,15 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
               <span className="dim link change-open" onClick={() => onOpenEntity(change.entity_id)}>
                 [open]
               </span>
-              {/* Only a merge has an undo: a name, a type or an edge is
-                  changed again by changing it, but a merge has a thing on
-                  the other side of it that has to be given back. */}
+              {/* A rename or a retype is changed again by changing it; a
+                  merge or a derived edge has a thing on the other side of
+                  it that has to be given back, which is what undo_id is
+                  for. */}
               {change.undo_id &&
                 (change.undone ? (
                   <span className="dim change-undone">taken back</span>
                 ) : (
-                  <span className="dim link change-undo" onClick={() => void undo(change.undo_id!)}>
+                  <span className="dim link change-undo" onClick={() => void undo(change)}>
                     [undo]
                   </span>
                 ))}

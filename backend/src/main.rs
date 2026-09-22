@@ -55,6 +55,10 @@ pub struct AppState {
     /// only by the loop, so the first attempt counts the same as the
     /// fifth.
     retry: pipeline::RetrySettings,
+    /// The most recent `GET /consolidation/preview`, waiting for
+    /// `POST /consolidation/apply` to say which parts of it to keep. See
+    /// `consolidation::PreviewStore`.
+    consolidation_preview: Arc<consolidation::PreviewStore>,
 }
 
 #[tokio::main]
@@ -156,6 +160,7 @@ async fn main() -> anyhow::Result<()> {
         audio_dir: config.audio_dir.clone().into(),
         timezone: config.timezone,
         retry: config.retry,
+        consolidation_preview: Arc::new(std::sync::Mutex::new(None)),
     };
 
     tracing::info!(

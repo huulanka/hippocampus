@@ -431,8 +431,10 @@ pub struct ChangeRecord {
     pub after: String,
     pub reason: String,
     pub changed_at: DateTime<Utc>,
-    /// Present for a merge: the absorbed entity, and the id to hand to
-    /// `POST /entities/{id}/unmerge` to take it back.
+    /// The id to hand to the undo endpoint, when this change can still be
+    /// taken back: the absorbed entity's id for a merge
+    /// (`POST /entities/{id}/unmerge`), or the relation's own id for a
+    /// derived edge (`DELETE /relations/{id}`).
     #[serde(default)]
     pub undo_id: Option<Uuid>,
     /// True once this change has been taken back.
@@ -460,10 +462,21 @@ pub struct ConsolidationPreview {
     /// Set when there was nothing to preview, and why.
     #[serde(default)]
     pub note: Option<String>,
+    /// Names this exact preview for `POST /consolidation/apply`. Absent
+    /// when nothing was proposed. What gets applied is this stored plan
+    /// minus whatever the person removed — never a fresh judgement, which
+    /// is what makes removing an item and applying the rest a coherent
+    /// thing to do: a second call to the model could easily propose
+    /// something different from the first.
+    #[serde(default)]
+    pub token: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewMerge {
+    /// This item's key within the preview, for `POST /consolidation/apply`'s
+    /// `exclude` list.
+    pub id: String,
     pub keep: String,
     pub absorb: Vec<String>,
     /// What the survivor would be called afterwards, when the run would
@@ -475,6 +488,7 @@ pub struct PreviewMerge {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewRetype {
+    pub id: String,
     pub entity: String,
     pub from: String,
     pub to: String,
@@ -483,10 +497,23 @@ pub struct PreviewRetype {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreviewRelation {
+    pub id: String,
     pub from: String,
     pub to: String,
     pub relation_type: String,
     pub reason: String,
+}
+
+/// Body of `POST /consolidation/apply`.
+///
+/// Applies the plan `GET /consolidation/preview` stored under `token`,
+/// skipping whatever item ids are named in `exclude`. Never re-asks the
+/// model — that is the entire point of the token.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsolidationApplyRequest {
+    pub token: Uuid,
+    #[serde(default)]
+    pub exclude: Vec<String>,
 }
 
 #[cfg(test)]

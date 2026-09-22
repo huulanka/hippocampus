@@ -56,6 +56,11 @@ pub fn router() -> Router<AppState> {
             "/consolidation/preview",
             get(entities::consolidation_preview),
         )
+        .route("/consolidation/apply", post(entities::consolidation_apply))
+        .route(
+            "/relations/{id}",
+            axum::routing::delete(entities::retract_relation),
+        )
         .route("/entity-types", get(captures::entity_types))
         .route("/graph", get(graph::graph))
         .route("/resurface", get(resurface::resurface))

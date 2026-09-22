@@ -55,8 +55,11 @@ pub struct Config {
     /// itself a safety property — a mistake in what gets folded together
     /// has time to be noticed.
     pub consolidation_interval: std::time::Duration,
-    /// Whether the consolidation pass runs by itself. Off means it only
-    /// happens when asked for, which is how to look before it acts.
+    /// Whether the consolidation pass runs by itself. Off by default: a
+    /// rearrangement made while nobody was watching is a surprise no
+    /// matter how reversible it is. `false` unless this is set to exactly
+    /// `"true"`, so tidying stays a person clicking a button — preview,
+    /// then apply — rather than something that happens on a timer.
     pub consolidation_enabled: bool,
 }
 
@@ -171,8 +174,8 @@ impl Config {
                     .unwrap_or(5),
             },
             consolidation_enabled: env_non_empty("CONSOLIDATION_ENABLED")
-                .map(|v| v != "false")
-                .unwrap_or(true),
+                .map(|v| v == "true")
+                .unwrap_or(false),
             consolidation_interval: std::time::Duration::from_secs(parse_secs(
                 "CONSOLIDATION_INTERVAL_SECS",
                 3600,

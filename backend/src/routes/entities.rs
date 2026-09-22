@@ -205,8 +205,11 @@ pub async fn changelog(State(state): State<AppState>) -> Result<Json<Vec<ChangeR
             subject.name as "subject_name!",
             -- For a merge: whether the absorbed entity still points here.
             absorbed.merged_into as "still_merged?",
-            -- For a derived edge: what is at the other end.
-            other.name as "other_name?"
+            -- For a derived edge: what is at the other end, and whether
+            -- the edge itself still exists (its id doubles as the undo
+            -- handle, when it does).
+            other.name as "other_name?",
+            rel.id as "relation_id?"
         from events ev
         join entities subject on subject.id = ev.stream_id
         left join entities absorbed
@@ -215,6 +218,11 @@ pub async fn changelog(State(state): State<AppState>) -> Result<Json<Vec<ChangeR
         left join entities other
             on ev.event_type = 'relation.proposed'
            and other.id = (ev.payload ->> 'to_entity_id')::uuid
+        left join relations rel
+            on ev.event_type = 'relation.proposed'
+           and rel.from_entity_id = ev.stream_id
+           and rel.to_entity_id = other.id
+           and rel.relation_type = (ev.payload ->> 'relation_type')
         where ev.event_type in
             ('entity.merged', 'entity.renamed', 'entity.retyped', 'relation.proposed')
           -- Edges that came out of a single capture are not a change to
@@ -261,8 +269,8 @@ pub async fn changelog(State(state): State<AppState>) -> Result<Json<Vec<ChangeR
                         "related",
                         text(p, "relation_type"),
                         row.other_name.clone().unwrap_or_default(),
-                        None,
-                        false,
+                        row.relation_id,
+                        row.relation_id.is_none(),
                     ),
                 };
 
@@ -351,6 +359,7 @@ pub async fn merge_entities(
             source_id: id,
             source_name: pair.source_name,
             source_type: pair.source_type,
+            new_name: None,
             reason: "merged by hand".to_string(),
         },
         "user",
@@ -383,17 +392,67 @@ pub async fn unmerge(
 
 /// What a consolidation pass would do, without doing any of it.
 ///
-/// The endpoint to call before switching the automatic run on against a
-/// database it has not seen before.
+/// This is how a pass gets started at all: consolidation is manual by
+/// default (ADR-worthy decision, 2026-09-22 — a rearrangement nobody
+/// reviewed is a surprise no matter how reversible it is), so this is the
+/// button, and `POST /consolidation/apply` is what carries out whichever
+/// part of the answer a person kept.
 pub async fn consolidation_preview(
     State(state): State<AppState>,
 ) -> Result<Json<contracts::ConsolidationPreview>, AppError> {
     Ok(Json(crate::consolidation::preview(&state).await?))
 }
 
-/// Runs a consolidation pass now rather than waiting for the timer.
+/// Carries out a stored preview, minus whatever item ids `exclude` names.
+///
+/// Never re-judges: the plan applied is exactly the one the matching
+/// `GET /consolidation/preview` call returned, which is what makes
+/// removing one bad proposal and keeping the rest a coherent thing to ask
+/// for — a second model call could easily disagree with the first.
+pub async fn consolidation_apply(
+    State(state): State<AppState>,
+    Json(req): Json<contracts::ConsolidationApplyRequest>,
+) -> Result<Json<crate::consolidation::RunReport>, AppError> {
+    let exclude: std::collections::HashSet<String> = req.exclude.into_iter().collect();
+    let report = crate::consolidation::apply_selected(&state, req.token, &exclude, "user")
+        .await
+        .map_err(AppError::from)?;
+    let Some(report) = report else {
+        return Err(AppError::bad_request(
+            "that preview is gone or was already applied — generate a new one",
+        ));
+    };
+    Ok(Json(report))
+}
+
+/// Runs a full consolidation pass immediately, with no review step.
+///
+/// Kept for scripting and for `CONSOLIDATION_ENABLED=true` deployments
+/// that want an immediate pass rather than waiting for the timer; the
+/// normal desktop-app path is preview-then-apply, above.
 pub async fn consolidate_now(
     State(state): State<AppState>,
 ) -> Result<Json<crate::consolidation::RunReport>, AppError> {
     Ok(Json(crate::consolidation::run_once(&state, "user").await?))
+}
+
+/// Takes a derived edge back.
+///
+/// Addressed by the relation's own id — visible as `undo_id` on a
+/// `"related"` changelog entry — because a relation has no observation
+/// behind it to give back the way a merge does; taking it back deletes the
+/// row outright and blocks the exact same edge from being proposed again.
+pub async fn retract_relation(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<Uuid>,
+) -> Result<Json<Vec<ChangeRecord>>, AppError> {
+    let undone = crate::consolidation::retract_relation(&state.pool, id, "user")
+        .await
+        .map_err(AppError::from)?;
+
+    if !undone {
+        return Err(AppError::not_found("no such relation"));
+    }
+
+    changelog(State(state)).await
 }

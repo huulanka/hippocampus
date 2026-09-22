@@ -87,7 +87,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     id: "changes",
-    label: "Changes",
+    label: "Tidying",
     icon: (
       // Two states of one thing and an arrow between them: the log is
       // about how the arrangement moved, not about the notes.

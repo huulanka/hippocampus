@@ -1135,6 +1135,14 @@ a:hover {
   font-size: 13px;
   line-height: 1.5;
 }
+.changes-proposal-remove {
+  cursor: pointer;
+  margin-left: 6px;
+  font-size: 11px;
+}
+.changes-proposal-remove:hover {
+  color: var(--hpo-text);
+}
 .change-row {
   display: flex;
   align-items: baseline;

@@ -378,6 +378,12 @@ export function unmergeEntity(sourceId: string): Promise<ChangeRecord[]> {
   return request<ChangeRecord[]>(`/entities/${sourceId}/unmerge`, { method: "POST" });
 }
 
+/// Takes a derived edge back — the "related" counterpart to `unmergeEntity`.
+/// `relationId` is the change's `undo_id`, not an entity id.
+export function retractRelation(relationId: string): Promise<ChangeRecord[]> {
+  return request<ChangeRecord[]>(`/relations/${relationId}`, { method: "DELETE" });
+}
+
 /// How the view of your knowledge came to look the way it does. Your
 /// notes never change; this is everything that happened to their
 /// arrangement.
@@ -401,6 +407,10 @@ export interface ChangeRecord {
 
 /// What a consolidation pass would do, if it ran. Mirrors
 /// `contracts::ConsolidationPreview`.
+///
+/// `token` names this exact preview for `applyConsolidation` — absent when
+/// nothing was proposed. Applying replays this stored judgement minus
+/// whatever item ids are excluded; it never asks the model again.
 export interface ConsolidationPreview {
   same_name: PreviewMerge[];
   considered: number;
@@ -408,9 +418,11 @@ export interface ConsolidationPreview {
   retypes: PreviewRetype[];
   relations: PreviewRelation[];
   note: string | null;
+  token: string | null;
 }
 
 export interface PreviewMerge {
+  id: string;
   keep: string;
   absorb: string[];
   new_name: string | null;
@@ -418,6 +430,7 @@ export interface PreviewMerge {
 }
 
 export interface PreviewRetype {
+  id: string;
   entity: string;
   from: string;
   to: string;
@@ -425,13 +438,16 @@ export interface PreviewRetype {
 }
 
 export interface PreviewRelation {
+  id: string;
   from: string;
   to: string;
   relation_type: string;
   reason: string;
 }
 
-/// The same reasoning a real pass performs, applied and thrown away.
+/// The same reasoning a real pass performs, applied and thrown away — and,
+/// when it found anything, stored under the returned `token` so it can be
+/// applied later.
 export function getConsolidationPreview(): Promise<ConsolidationPreview> {
   return request<ConsolidationPreview>("/consolidation/preview");
 }
@@ -445,9 +461,15 @@ export interface RunReport {
   considered: number;
 }
 
-/// Runs a pass now rather than waiting for the timer.
-export function runConsolidation(): Promise<RunReport> {
-  return request<RunReport>("/consolidation/run", { method: "POST" });
+/// Carries out a stored preview, skipping whatever item ids are in
+/// `exclude`. This is the normal way a pass runs: preview, remove what
+/// looks wrong, apply the rest.
+export function applyConsolidation(token: string, exclude: string[]): Promise<RunReport> {
+  return request<RunReport>("/consolidation/apply", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token, exclude }),
+  });
 }
 
 /// Asks the backend for one more attempt at a capture it gave up on.

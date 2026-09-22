@@ -47,6 +47,16 @@
 //! (what may be merged at all), this module (budgets, and a hard cap so
 //! one bad pass cannot fold a graph), and the block list (a merge taken
 //! back is never proposed again).
+//!
+//! ## But it does not, by default
+//!
+//! `CONSOLIDATION_ENABLED` defaults to off. Reversibility is not the same
+//! as being noticed — a rearrangement made while nobody was looking is
+//! still a surprise the moment it is found — so the run instead waits to
+//! be asked: `preview` shows what it would do without doing any of it, and
+//! `apply_selected` carries out exactly that judgement, minus whatever a
+//! person removed from it. Nothing here runs unattended unless the
+//! variable is explicitly switched on.
 
 use std::time::Duration;
 
@@ -69,7 +79,63 @@ pub struct Merge {
     pub source_name: String,
     pub source_type: String,
     pub reason: String,
+    /// What the survivor should be called afterwards, when the plan wants
+    /// to rename it too. Carried on the merge itself rather than applied
+    /// separately, so a stored plan needs nothing beyond its own list of
+    /// merges to be replayed later.
+    pub new_name: Option<String>,
 }
+
+/// One entity's type word changed for the same reason a merge would have
+/// been wrong: the vocabulary drifted, not the thing.
+#[derive(Debug, Clone)]
+pub struct PlannedRetype {
+    pub entity_id: Uuid,
+    pub entity_name: String,
+    pub from_type: String,
+    pub to_type: String,
+    pub reason: String,
+}
+
+/// One edge the run wants to draw between two entities read together.
+#[derive(Debug, Clone)]
+pub struct PlannedRelation {
+    pub from_id: Uuid,
+    pub from_name: String,
+    pub to_id: Uuid,
+    pub to_name: String,
+    pub relation_type: String,
+    pub reason: String,
+}
+
+/// A judged plan, validated and resolved to entity ids.
+///
+/// The output of [`resolve_plan`]: every guard (crossed types, a blocked
+/// pair, the per-pass merge cap) has already been applied, so what is left
+/// is safe to execute directly — either all of it, immediately
+/// ([`run_once`]), or a person's chosen subset of it, later
+/// ([`apply_selected`]).
+#[derive(Debug, Clone, Default)]
+pub struct ResolvedPlan {
+    pub merges: Vec<Merge>,
+    pub retypes: Vec<PlannedRetype>,
+    pub relations: Vec<PlannedRelation>,
+}
+
+/// A preview, kept exactly as shown so that applying part of it later
+/// replays that same judgement rather than asking the model again.
+#[derive(Debug, Clone, Default)]
+pub struct StoredPlan {
+    pub same_name: Vec<Merge>,
+    pub merges: Vec<Merge>,
+    pub retypes: Vec<PlannedRetype>,
+    pub relations: Vec<PlannedRelation>,
+}
+
+/// The most recent preview, waiting to be applied. One slot, not a map: this
+/// is a single-user local app, and a second preview is meant to replace the
+/// first rather than accumulate beside it.
+pub type PreviewStore = std::sync::Mutex<Option<(Uuid, StoredPlan)>>;
 
 /// Pairs that are the same thing by their name alone.
 ///
@@ -125,6 +191,7 @@ pub async fn same_name_duplicates(pool: &PgPool) -> anyhow::Result<Vec<Merge>> {
             source_name: row.source_name,
             source_type: row.source_type,
             reason: "same name".to_string(),
+            new_name: None,
         })
         .collect())
 }
@@ -443,6 +510,13 @@ pub async fn relate(
     if exists.is_some() {
         return Ok(false);
     }
+    if is_relation_blocked(pool, from_id, to_id, relation_type).await? {
+        tracing::info!(
+            %from_id, %to_id, %relation_type,
+            "this edge was taken back before; leaving it alone"
+        );
+        return Ok(false);
+    }
 
     let mut tx = pool.begin().await?;
 
@@ -482,6 +556,75 @@ pub async fn relate(
     .await?;
 
     tx.commit().await?;
+    Ok(true)
+}
+
+/// Takes a derived edge back, and records that this triple is not to be
+/// proposed again.
+///
+/// Unlike a merge, there is nothing to give back later — a relation was
+/// never an observation of its own, it was a reading of two others — so
+/// this deletes the row outright rather than pointing it elsewhere. The
+/// block is what makes that safe: without it, the next pass reads the same
+/// two entities and redraws the exact edge just taken back.
+pub async fn retract_relation(
+    pool: &PgPool,
+    relation_id: Uuid,
+    actor: &str,
+) -> anyhow::Result<bool> {
+    let Some(row) = sqlx::query!(
+        r#"select from_entity_id, to_entity_id, relation_type from relations where id = $1"#,
+        relation_id,
+    )
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(false);
+    };
+
+    let mut tx = pool.begin().await?;
+
+    sqlx::query!(r#"delete from relations where id = $1"#, relation_id)
+        .execute(&mut *tx)
+        .await?;
+
+    sqlx::query!(
+        r#"
+        insert into relation_block (from_entity_id, to_entity_id, relation_type)
+        values ($1, $2, $3)
+        on conflict (from_entity_id, to_entity_id, relation_type)
+        do update set decided_at = now()
+        "#,
+        row.from_entity_id,
+        row.to_entity_id,
+        row.relation_type,
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let version = sqlx::query_scalar!(
+        r#"select coalesce(max(version), 0) + 1 as "next!" from events where stream_id = $1"#,
+        row.from_entity_id,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    events::append_tx(
+        &mut tx,
+        row.from_entity_id,
+        version,
+        "relation.retracted",
+        &json!({
+            "to_entity_id": row.to_entity_id,
+            "relation_type": row.relation_type,
+        }),
+        actor,
+    )
+    .await?;
+
+    tx.commit().await?;
+    tracing::info!(%relation_id, "took a relation back; this pair will not be proposed again");
+
     Ok(true)
 }
 
@@ -646,19 +789,26 @@ async fn working_set(pool: &PgPool) -> anyhow::Result<Vec<(Uuid, EntityDossier)>
         .collect())
 }
 
-/// Carries out what the model proposed, refusing anything it must not do.
+/// Validates what the model proposed against every guard, and resolves it
+/// to entity ids — without touching the database.
 ///
-/// Every check here exists because the prompt cannot be relied on alone:
-/// a tag that does not resolve, a merge of something into itself, a pair
-/// the user has already pulled apart, a pass that wants to fold half the
+/// Every check here exists because the prompt cannot be relied on alone: a
+/// tag that does not resolve, a merge of something into itself, a pair the
+/// user has already pulled apart, a pass that wants to fold half the
 /// graph. None of these should happen; all of them are cheap to refuse.
-async fn apply_plan(
+///
+/// Split from execution ([`execute_resolved`]) so the same judgement can
+/// either run immediately (the automatic pass) or be shown to a person and
+/// applied later, minus whatever they removed (the preview). Read-only
+/// database calls are still needed here — the block list, and following a
+/// merge pointer — which is why this is `async` despite writing nothing.
+async fn resolve_plan(
     pool: &PgPool,
     plan: &ConsolidationPlan,
     by_tag: &std::collections::HashMap<String, (Uuid, String, String)>,
-    actor: &str,
-    report: &mut RunReport,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<ResolvedPlan> {
+    let mut resolved = ResolvedPlan::default();
+
     let total_merges: usize = plan.merges.iter().map(|m| m.absorb.len()).sum();
     if total_merges > MAX_MERGES_PER_PASS {
         tracing::error!(
@@ -672,6 +822,12 @@ async fn apply_plan(
                 tracing::warn!(tag = %planned.keep, "merge names a tag that is not in this pass");
                 continue;
             };
+            let new_name = planned
+                .name
+                .as_deref()
+                .map(|n| n.trim())
+                .filter(|n| !n.is_empty() && *n != target_name)
+                .map(|n| n.to_string());
 
             for absorbed in &planned.absorb {
                 let Some((source_id, source_name, source_type)) = by_tag.get(absorbed) else {
@@ -701,44 +857,37 @@ async fn apply_plan(
                     continue;
                 }
 
-                let candidate = Merge {
+                resolved.merges.push(Merge {
                     target_id: *target_id,
                     target_name: target_name.clone(),
                     source_id: *source_id,
                     source_name: source_name.clone(),
                     source_type: source_type.clone(),
                     reason: planned.reason.clone(),
-                };
-                match merge(pool, &candidate, actor).await {
-                    Ok(()) => report.merged_by_judgement += 1,
-                    Err(err) => tracing::warn!(?err, "could not apply a proposed merge"),
-                }
-            }
-
-            // Renaming after the merge, so the surviving entity carries
-            // the fuller form while every older spelling stays an alias.
-            if let Some(name) = planned.name.as_deref().filter(|n| !n.trim().is_empty())
-                && name != target_name
-                && let Err(err) = rename(pool, *target_id, name, actor).await
-            {
-                tracing::warn!(?err, %name, "could not rename a merged entity");
+                    new_name: new_name.clone(),
+                });
             }
         }
     }
 
     for planned in &plan.retypes {
-        let Some((id, _, _)) = by_tag.get(&planned.tag) else {
+        let Some((id, name, from_type)) = by_tag.get(&planned.tag) else {
             continue;
         };
-        match retype(pool, *id, &planned.entity_type, &planned.reason, actor).await {
-            Ok(true) => report.retyped += 1,
-            Ok(false) => {}
-            Err(err) => tracing::warn!(?err, "could not retype"),
+        if *from_type == planned.entity_type {
+            continue;
         }
+        resolved.retypes.push(PlannedRetype {
+            entity_id: *id,
+            entity_name: name.clone(),
+            from_type: from_type.clone(),
+            to_type: planned.entity_type.clone(),
+            reason: planned.reason.clone(),
+        });
     }
 
     for planned in &plan.relations {
-        let (Some((from_id, _, _)), Some((to_id, _, _))) =
+        let (Some((from_id, from_name, _)), Some((to_id, to_name, _))) =
             (by_tag.get(&planned.from), by_tag.get(&planned.to))
         else {
             continue;
@@ -747,6 +896,89 @@ async fn apply_plan(
         // that this very pass folded away belongs on its survivor.
         let from_id = live_id(pool, *from_id).await?;
         let to_id = live_id(pool, *to_id).await?;
+        if from_id == to_id {
+            continue;
+        }
+        if is_relation_blocked(pool, from_id, to_id, &planned.relation_type).await? {
+            continue;
+        }
+        resolved.relations.push(PlannedRelation {
+            from_id,
+            from_name: from_name.clone(),
+            to_id,
+            to_name: to_name.clone(),
+            relation_type: planned.relation_type.clone(),
+            reason: planned.reason.clone(),
+        });
+    }
+
+    Ok(resolved)
+}
+
+/// Carries out a resolved plan, skipping whatever item ids appear in
+/// `exclude`. Ids follow the same `"merges:{i}"` / `"retypes:{i}"` /
+/// `"relations:{i}"` scheme `preview` hands to the client, so a person's
+/// removals apply to exactly the items they saw.
+async fn execute_resolved(
+    pool: &PgPool,
+    resolved: &ResolvedPlan,
+    exclude: &std::collections::HashSet<String>,
+    actor: &str,
+    report: &mut RunReport,
+) -> anyhow::Result<()> {
+    // Collected rather than applied inline: several merges can share one
+    // `keep`, and renaming once per unique survivor (after all of them
+    // landed) avoids emitting a redundant `entity.renamed` per absorb.
+    let mut renames: std::collections::HashMap<Uuid, String> = std::collections::HashMap::new();
+
+    for (i, candidate) in resolved.merges.iter().enumerate() {
+        if exclude.contains(&format!("merges:{i}")) {
+            continue;
+        }
+        match merge(pool, candidate, actor).await {
+            Ok(()) => {
+                report.merged_by_judgement += 1;
+                if let Some(name) = &candidate.new_name {
+                    renames.insert(candidate.target_id, name.clone());
+                }
+            }
+            Err(err) => tracing::warn!(?err, "could not apply a proposed merge"),
+        }
+    }
+    for (target_id, name) in renames {
+        if let Err(err) = rename(pool, target_id, &name, actor).await {
+            tracing::warn!(?err, %name, "could not rename a merged entity");
+        }
+    }
+
+    for (i, planned) in resolved.retypes.iter().enumerate() {
+        if exclude.contains(&format!("retypes:{i}")) {
+            continue;
+        }
+        match retype(
+            pool,
+            planned.entity_id,
+            &planned.to_type,
+            &planned.reason,
+            actor,
+        )
+        .await
+        {
+            Ok(true) => report.retyped += 1,
+            Ok(false) => {}
+            Err(err) => tracing::warn!(?err, "could not retype"),
+        }
+    }
+
+    for (i, planned) in resolved.relations.iter().enumerate() {
+        if exclude.contains(&format!("relations:{i}")) {
+            continue;
+        }
+        // Followed again rather than trusted from resolve time: an
+        // excluded merge above can leave a relation's id stale between
+        // resolving the plan and executing it.
+        let from_id = live_id(pool, planned.from_id).await?;
+        let to_id = live_id(pool, planned.to_id).await?;
         match relate(
             pool,
             from_id,
@@ -818,6 +1050,29 @@ async fn is_blocked(pool: &PgPool, a: Uuid, b: Uuid) -> anyhow::Result<bool> {
         "#,
         a,
         b,
+    )
+    .fetch_optional(pool)
+    .await?
+    .is_some())
+}
+
+/// Whether this exact directed edge was taken back before. Directed and
+/// typed, unlike [`is_blocked`]: "unfairly close to" and "close to" are
+/// different claims, and retracting one must not silence the other.
+async fn is_relation_blocked(
+    pool: &PgPool,
+    from_id: Uuid,
+    to_id: Uuid,
+    relation_type: &str,
+) -> anyhow::Result<bool> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        select 1 from relation_block
+        where from_entity_id = $1 and to_entity_id = $2 and relation_type = $3
+        "#,
+        from_id,
+        to_id,
+        relation_type,
     )
     .fetch_optional(pool)
     .await?
@@ -920,7 +1175,17 @@ pub async fn run_once(state: &AppState, actor: &str) -> anyhow::Result<RunReport
                 batch.into_iter().map(|(_, dossier)| dossier).collect();
 
             match client.consolidate(&dossiers).await {
-                Ok(plan) => apply_plan(pool, &plan, &by_tag, actor, &mut report).await?,
+                Ok(plan) => {
+                    let resolved = resolve_plan(pool, &plan, &by_tag).await?;
+                    execute_resolved(
+                        pool,
+                        &resolved,
+                        &std::collections::HashSet::new(),
+                        actor,
+                        &mut report,
+                    )
+                    .await?;
+                }
                 // Not fatal and not retried here: the pass runs again on
                 // the next tick, and the entities it did not reach keep
                 // their old `last_consolidated_at`, so they stay at the
@@ -971,97 +1236,202 @@ pub async fn run_once(state: &AppState, actor: &str) -> anyhow::Result<RunReport
     Ok(report)
 }
 
+/// A `Merge` as the thing a person reads and can remove.
+fn preview_merge(id: String, m: &Merge) -> PreviewMerge {
+    PreviewMerge {
+        id,
+        keep: m.target_name.clone(),
+        absorb: vec![format!("{} ({})", m.source_name, m.source_type)],
+        new_name: m.new_name.clone(),
+        reason: m.reason.clone(),
+    }
+}
+
 /// What a pass *would* do, without doing any of it.
 ///
-/// Exists because this run is automatic and the database it will first
-/// run against in earnest is not the one it was developed against. Being
-/// able to look before it acts is the difference between an automatic
-/// tidy-up and an automatic surprise.
+/// Exists for two reasons now. First, the original one: the database this
+/// first ran against in earnest was not the one it was developed against,
+/// and being able to look before acting is the difference between an
+/// automatic tidy-up and an automatic surprise. Second, and now the more
+/// important one: the run is no longer automatic at all
+/// (`CONSOLIDATION_ENABLED` defaults to off) — this is how a person starts
+/// a pass, by reading exactly what it found before any of it happens.
+///
+/// What is proposed here is also *stored*, under the token this returns,
+/// so that `POST /consolidation/apply` replays this exact judgement minus
+/// whatever was removed rather than asking the model a second time and
+/// risking a different answer.
 pub async fn preview(state: &AppState) -> anyhow::Result<ConsolidationPreview> {
     let pool = &state.pool;
 
-    let same_name: Vec<PreviewMerge> = same_name_duplicates(pool)
-        .await?
-        .into_iter()
-        .map(|m| PreviewMerge {
-            keep: format!("{} ({})", m.target_name, m.reason),
-            absorb: vec![format!("{} ({})", m.source_name, m.source_type)],
-            new_name: None,
-            reason: "same name under two type words".to_string(),
-        })
-        .collect();
-
-    let batch = working_set(pool).await?;
-    let considered = batch.len() as i64;
-
-    let mut out = ConsolidationPreview {
-        same_name,
-        considered,
+    let same_name = same_name_duplicates(pool).await?;
+    let mut stored = StoredPlan {
+        same_name: same_name.clone(),
         ..Default::default()
     };
 
-    let Some(client) = state.openrouter.clone() else {
-        out.note = Some("No structuring model configured — only exact-name merges run.".into());
-        return Ok(out);
+    let mut out = ConsolidationPreview {
+        same_name: same_name
+            .iter()
+            .enumerate()
+            .map(|(i, m)| preview_merge(format!("same_name:{i}"), m))
+            .collect(),
+        ..Default::default()
     };
-    if batch.len() < 2 {
-        out.note = Some("Nothing is due for consolidation right now.".into());
-        return Ok(out);
+
+    let batch = working_set(pool).await?;
+    out.considered = batch.len() as i64;
+
+    if let Some(client) = state.openrouter.clone() {
+        if batch.len() >= 2 {
+            let by_tag: std::collections::HashMap<String, (Uuid, String, String)> = batch
+                .iter()
+                .map(|(id, dossier)| {
+                    (
+                        dossier.tag.clone(),
+                        (*id, dossier.name.clone(), dossier.entity_type.clone()),
+                    )
+                })
+                .collect();
+            let dossiers: Vec<EntityDossier> =
+                batch.into_iter().map(|(_, dossier)| dossier).collect();
+
+            let plan = client.consolidate(&dossiers).await?;
+            let resolved = resolve_plan(pool, &plan, &by_tag).await?;
+
+            out.merges = resolved
+                .merges
+                .iter()
+                .enumerate()
+                .map(|(i, m)| preview_merge(format!("merges:{i}"), m))
+                .collect();
+            out.retypes = resolved
+                .retypes
+                .iter()
+                .enumerate()
+                .map(|(i, r)| PreviewRetype {
+                    id: format!("retypes:{i}"),
+                    entity: r.entity_name.clone(),
+                    from: r.from_type.clone(),
+                    to: r.to_type.clone(),
+                    reason: r.reason.clone(),
+                })
+                .collect();
+            out.relations = resolved
+                .relations
+                .iter()
+                .enumerate()
+                .map(|(i, r)| PreviewRelation {
+                    id: format!("relations:{i}"),
+                    from: r.from_name.clone(),
+                    to: r.to_name.clone(),
+                    relation_type: r.relation_type.clone(),
+                    reason: r.reason.clone(),
+                })
+                .collect();
+
+            stored.merges = resolved.merges;
+            stored.retypes = resolved.retypes;
+            stored.relations = resolved.relations;
+        } else {
+            out.note = Some("Nothing is due for consolidation right now.".into());
+        }
+    } else {
+        out.note = Some("No structuring model configured — only exact-name merges run.".into());
     }
 
-    // Names rather than tags in the answer: this is read by a person, and
-    // `e12` means nothing to them.
-    let names: std::collections::HashMap<String, (String, String)> = batch
-        .iter()
-        .map(|(_, d)| (d.tag.clone(), (d.name.clone(), d.entity_type.clone())))
-        .collect();
-    let named = |tag: &str| {
-        names
-            .get(tag)
-            .map(|(name, _)| name.clone())
-            .unwrap_or_else(|| tag.to_string())
-    };
-
-    let dossiers: Vec<EntityDossier> = batch.into_iter().map(|(_, d)| d).collect();
-    let plan = client.consolidate(&dossiers).await?;
-
-    out.merges = plan
-        .merges
-        .iter()
-        .map(|m| PreviewMerge {
-            keep: named(&m.keep),
-            absorb: m.absorb.iter().map(|t| named(t)).collect(),
-            new_name: m.name.clone(),
-            reason: m.reason.clone(),
-        })
-        .collect();
-
-    out.retypes = plan
-        .retypes
-        .iter()
-        .map(|r| PreviewRetype {
-            entity: named(&r.tag),
-            from: names
-                .get(&r.tag)
-                .map(|(_, kind)| kind.clone())
-                .unwrap_or_default(),
-            to: r.entity_type.clone(),
-            reason: r.reason.clone(),
-        })
-        .collect();
-
-    out.relations = plan
-        .relations
-        .iter()
-        .map(|r| PreviewRelation {
-            from: named(&r.from),
-            to: named(&r.to),
-            relation_type: r.relation_type.clone(),
-            reason: r.reason.clone(),
-        })
-        .collect();
+    let has_anything = !stored.same_name.is_empty()
+        || !stored.merges.is_empty()
+        || !stored.retypes.is_empty()
+        || !stored.relations.is_empty();
+    if has_anything {
+        let token = Uuid::new_v4();
+        *state.consolidation_preview.lock().unwrap() = Some((token, stored));
+        out.token = Some(token);
+    }
 
     Ok(out)
+}
+
+/// Applies a stored preview, skipping whatever item ids `exclude` names.
+///
+/// Never re-asks the model — the plan replayed is exactly the one
+/// `preview` showed, which is the entire point of the token: a person
+/// removing one bad merge must not risk getting a different judgement for
+/// everything else too.
+///
+/// `Ok(None)` means the token did not match anything stored — expired,
+/// already applied, or superseded by a later preview. That is a client
+/// mistake to report plainly, not an internal failure, so it is a value
+/// here rather than an error.
+pub async fn apply_selected(
+    state: &AppState,
+    token: Uuid,
+    exclude: &std::collections::HashSet<String>,
+    actor: &str,
+) -> anyhow::Result<Option<RunReport>> {
+    let stored = {
+        let mut slot = state.consolidation_preview.lock().unwrap();
+        match slot.take() {
+            // Consumed on read: applying the same token twice would redo
+            // (or partially redo) work that already happened, and a stale
+            // preview is worse than none.
+            Some((stored_token, plan)) if stored_token == token => Some(plan),
+            Some(other) => {
+                *slot = Some(other);
+                None
+            }
+            None => None,
+        }
+    };
+    let Some(plan) = stored else {
+        return Ok(None);
+    };
+
+    let pool = &state.pool;
+    let mut report = RunReport::default();
+
+    for (i, candidate) in plan.same_name.iter().enumerate() {
+        if exclude.contains(&format!("same_name:{i}")) {
+            continue;
+        }
+        match merge(pool, candidate, actor).await {
+            Ok(()) => report.merged_by_name += 1,
+            Err(err) => tracing::warn!(
+                ?err,
+                target = %candidate.target_name,
+                "could not apply a selected same-name merge"
+            ),
+        }
+    }
+
+    let resolved = ResolvedPlan {
+        merges: plan.merges,
+        retypes: plan.retypes,
+        relations: plan.relations,
+    };
+    execute_resolved(pool, &resolved, exclude, actor, &mut report).await?;
+
+    let changed =
+        report.merged_by_name + report.merged_by_judgement + report.retyped + report.related;
+    if changed > 0 {
+        events::append(
+            pool,
+            Uuid::new_v4(),
+            1,
+            "consolidation.ran",
+            &json!({
+                "merged_by_name": report.merged_by_name,
+                "merged_by_judgement": report.merged_by_judgement,
+                "retyped": report.retyped,
+                "related": report.related,
+            }),
+            actor,
+        )
+        .await?;
+    }
+
+    Ok(Some(report))
 }
 
 /// Runs the pass on a timer.
@@ -1072,9 +1442,9 @@ pub async fn preview(state: &AppState) -> anyhow::Result<ConsolidationPreview> {
 /// before it has folded the whole graph.
 pub fn watch(state: AppState, enabled: bool, every: Duration, actor: String) {
     if !enabled {
-        tracing::warn!(
-            "CONSOLIDATION_ENABLED=false — the graph is only consolidated when asked \
-             (POST /consolidation/run). GET /consolidation/preview says what a pass would do."
+        tracing::info!(
+            "consolidation is manual (the default) — GET /consolidation/preview shows what a \
+             pass would do, and POST /consolidation/apply runs the parts a person kept"
         );
         return;
     }
