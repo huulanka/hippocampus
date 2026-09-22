@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from relations where from_entity_id = to_entity_id and from_entity_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e9ed2a92f79ab48d208f30026e6226b16ced5d923cacc361ab9146dab7046f54"
+}

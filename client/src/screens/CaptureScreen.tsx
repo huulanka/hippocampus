@@ -5,6 +5,7 @@ import { useEcho } from "../useEcho";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   cancelRecording,
+  captureText,
   formatAccelerator,
   getSettings,
   hideWindow,
@@ -38,7 +39,17 @@ function relativeDay(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
-type Saved = { eventId: string; transcript: string; echoPending: boolean; spoken: boolean };
+/// A capture that is safe. `eventId` is null while it is still only safe
+/// *here* — the backend has not acknowledged it, so there is nothing to
+/// open and no echo to ask for. That is a normal state, not an error, and
+/// the screen says so in those words.
+type Saved = {
+  eventId: string | null;
+  transcript: string;
+  echoPending: boolean;
+  spoken: boolean;
+  queuedReason?: string | null;
+};
 type Phase = "idle" | "recording" | "working";
 
 export function CaptureScreen({
@@ -115,6 +126,11 @@ export function CaptureScreen({
   /// thoughts it recalls follow a second or two later.
   const echo = useEcho(saved?.eventId ?? null, saved?.echoPending ?? false);
 
+  /// Safe on this Mac, not yet at the backend. Kept as its own word
+  /// because every branch below has to treat it as success — the whole
+  /// design rests on the user believing a capture is a capture.
+  const queued = saved !== null && saved.eventId === null;
+
   /// Escape sends the window away, so the capture field behaves like a
   /// panel rather than an app you have to close. Unsaved text is kept in
   /// state, so summoning it again brings the half-finished thought back.
@@ -129,6 +145,22 @@ export function CaptureScreen({
     setPhase("working");
     setError(null);
     try {
+      // Through the outbox in the desktop app, so a typed thought is as
+      // safe as a spoken one; straight to the backend in the browser
+      // build, which has no disk to keep it on.
+      const queued = await captureText(transcript);
+      if (queued) {
+        setSaved({
+          eventId: queued.capture?.event_id ?? null,
+          transcript,
+          echoPending: queued.capture?.echo_pending ?? false,
+          spoken: false,
+          queuedReason: queued.queued_reason,
+        });
+        setText("");
+        return;
+      }
+
       const accepted = await createCapture(transcript, DEVICE);
       setSaved({
         eventId: accepted.event_id,
@@ -160,10 +192,11 @@ export function CaptureScreen({
     try {
       const result = await stopRecording();
       setSaved({
-        eventId: result.capture.event_id,
+        eventId: result.capture?.event_id ?? null,
         transcript: result.transcript,
-        echoPending: result.capture.echo_pending,
+        echoPending: result.capture?.echo_pending ?? false,
         spoken: true,
+        queuedReason: result.queued_reason,
       });
       setText("");
     } catch (err) {
@@ -219,7 +252,7 @@ export function CaptureScreen({
     return (
       <div className="capture-idle">
         <Mascot state="idle" cell={9} />
-        <h3>kept, word for word</h3>
+        <h3>{queued ? "kept on this Mac" : "kept, word for word"}</h3>
         <div className="panel transcript-panel">
           <div className="kicker">
             [ CAPTURED ]{" "}
@@ -238,7 +271,22 @@ export function CaptureScreen({
             withheld on this side because reading is what the guard
             guards. A screen that quietly leaves them out would be
             claiming there were none. */}
-        {locked ? (
+        {queued ? (
+          /* Not an error, and deliberately not styled as one. The note is
+             written down and will go up by itself. What is worth saying
+             is the one thing the user cannot see: why it has not, because
+             "waiting to sync" with no reason is how an expired Access
+             token goes unnoticed for a week. */
+          <div className="panel transcript-panel">
+            <div className="kicker">
+              [ WAITING TO SYNC ]{" "}
+              <span className="dim">
+                — safe here; it goes up by itself, and the echo comes with it
+              </span>
+            </div>
+            {saved.queuedReason && <p className="dim">{saved.queuedReason}</p>}
+          </div>
+        ) : locked ? (
           <div className="panel transcript-panel">
             <div className="kicker">
               [ EARLIER THOUGHTS ARE LOCKED ]{" "}
@@ -291,9 +339,14 @@ export function CaptureScreen({
           <span className="btn btn-accent" onClick={startNext}>
             [ Capture Another ]
           </span>
-          <span className="btn" onClick={() => onOpenCapture(saved.eventId)}>
-            [ See What It Made Of It ]
-          </span>
+          {/* Nothing to open while it is queued: the backend has not seen
+              it, so there is no detail page and no entities it could
+              show. Offering the button anyway would be a link to a 404. */}
+          {saved.eventId && (
+            <span className="btn" onClick={() => onOpenCapture(saved.eventId!)}>
+              [ See What It Made Of It ]
+            </span>
+          )}
         </div>
       </div>
     );

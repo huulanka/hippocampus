@@ -92,7 +92,7 @@ export function EntityDetailScreen({
           </div>
           <div className="detail-relations entity-edges">
             {entity.relations.map((edge, index) => (
-              <div key={`${edge.source_event_id}-${index}`} className="detail-relation">
+              <div key={`${edge.source_event_id ?? "derived"}-${index}`} className="detail-relation">
                 {edge.outgoing ? (
                   <>
                     <span className="detail-relation-node">{entity.name}</span>
@@ -116,9 +116,24 @@ export function EntityDetailScreen({
                     <span className="detail-relation-node">{entity.name}</span>
                   </>
                 )}
-                <span className="dim entity-edge-source" onClick={() => onOpenCapture(edge.source_event_id)}>
-                  [why]
-                </span>
+                {/* An edge with no single capture behind it was drawn by
+                    the consolidation run from several notes at once.
+                    Saying "across notes" is more honest than a [why] that
+                    opens nothing — and it is the visible sign that the
+                    graph now links things that were never said in one
+                    breath. */}
+                {edge.source_event_id ? (
+                  <span
+                    className="dim entity-edge-source"
+                    onClick={() => onOpenCapture(edge.source_event_id!)}
+                  >
+                    [why]
+                  </span>
+                ) : (
+                  <span className="dim entity-edge-source derived" title="Drawn by the consolidation run from several notes together">
+                    [across notes]
+                  </span>
+                )}
               </div>
             ))}
           </div>

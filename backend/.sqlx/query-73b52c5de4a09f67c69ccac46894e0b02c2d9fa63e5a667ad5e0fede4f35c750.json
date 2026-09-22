@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from entity_merge_block\n           where lower_id = least($1::uuid, $2::uuid) and higher_id = greatest($1::uuid, $2::uuid)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "73b52c5de4a09f67c69ccac46894e0b02c2d9fa63e5a667ad5e0fede4f35c750"
+}

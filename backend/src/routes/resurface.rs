@@ -71,6 +71,7 @@ pub async fn resurface(State(state): State<AppState>) -> Result<Json<Resurfaced>
             max(o.created_at) as "last_seen!"
         from entities en
         join observations o on o.entity_id = en.id
+        where en.merged_into is null
         group by en.id, en.entity_type, en.name, en.current_summary
         having count(distinct o.source_event_id) >= 2
         order by max(o.created_at) desc

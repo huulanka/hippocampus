@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            count(*) filter (\n                where (p.indexed_at is null or p.structured_at is null)\n                  and p.abandoned_at is null\n            ) as \"waiting!\",\n            count(*) filter (where p.abandoned_at is not null) as \"given_up!\"\n        from capture_pipeline p\n        join capture_content cc on cc.event_id = p.capture_event_id\n        where cc.redacted_at is null\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "waiting!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "given_up!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "6ba6888244948c1d60a76bae26ac3e7207352f25d27c6faed80d4cd5eff86c7f"
+}

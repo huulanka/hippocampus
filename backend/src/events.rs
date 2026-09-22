@@ -47,3 +47,38 @@ pub async fn append(
         occurred_at: row.occurred_at,
     })
 }
+
+/// Appends inside a caller's transaction.
+///
+/// Needed wherever an event and the projection change it describes have
+/// to be one atomic step — a merge, above all. A half-applied merge whose
+/// event never landed would be a graph change with no record of why, and
+/// nothing to undo it with.
+pub async fn append_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    stream_id: Uuid,
+    version: i64,
+    event_type: &str,
+    payload: &Value,
+    source: &str,
+) -> Result<StoredEvent, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        insert into events (stream_id, version, event_type, payload, source)
+        values ($1, $2, $3, $4, $5)
+        returning id, occurred_at
+        "#,
+        stream_id,
+        version,
+        event_type,
+        payload,
+        source,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+
+    Ok(StoredEvent {
+        id: row.id,
+        occurred_at: row.occurred_at,
+    })
+}

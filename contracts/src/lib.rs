@@ -313,7 +313,11 @@ pub struct EntityEdge {
     pub other_id: Uuid,
     pub other_name: String,
     pub other_type: String,
-    pub source_event_id: Uuid,
+    /// The capture this edge was read out of. `None` when it was drawn
+    /// across several captures by the consolidation run — which is the
+    /// only way an edge between two things that were never mentioned in
+    /// one breath can exist at all.
+    pub source_event_id: Option<Uuid>,
 }
 
 /// What the system puts in front of you without being asked.
@@ -386,6 +390,103 @@ pub struct SearchQuery {
 
 fn default_limit() -> u32 {
     20
+}
+
+/// What the backend has not finished yet — the answer to
+/// `GET /pipeline`.
+///
+/// Exists so the client can say so out loud. Both numbers are normally
+/// zero, and a surface that only ever shows zero is a surface nobody
+/// reads; the point is the moment they are not.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineStatus {
+    /// Captures stored but not yet embedded or structured. Usually a
+    /// number that is briefly one and then zero again.
+    pub waiting: i64,
+    /// Captures the retry loop gave up on. These never resolve by
+    /// themselves — that is the whole meaning of the number.
+    pub given_up: i64,
+}
+
+/// One change the consolidation run made to how knowledge is organised —
+/// the answer to `GET /consolidation`.
+///
+/// This is the changelog the whole design rests on. The captures are
+/// immutable; what changes is the *view* of them, and a view that
+/// rearranges itself silently is not trustworthy however correct it is.
+/// So every merge, rename, retype and derived edge shows up here, in the
+/// person's own terms, with the reason the run gave.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChangeRecord {
+    /// "merged", "renamed", "retyped" or "related".
+    pub kind: String,
+    /// The entity the change is about — the surviving one, for a merge.
+    pub entity_id: Uuid,
+    pub entity_name: String,
+    /// What it was before: the absorbed entity's name, the old name, the
+    /// old type. Empty for a new edge.
+    pub before: String,
+    /// What it is now: the relation's other end, the new name, the new
+    /// type. Empty for a merge, where the survivor is `entity_name`.
+    pub after: String,
+    pub reason: String,
+    pub changed_at: DateTime<Utc>,
+    /// Present for a merge: the absorbed entity, and the id to hand to
+    /// `POST /entities/{id}/unmerge` to take it back.
+    #[serde(default)]
+    pub undo_id: Option<Uuid>,
+    /// True once this change has been taken back.
+    pub undone: bool,
+}
+
+/// What a consolidation pass would do, if it ran — the answer to
+/// `GET /consolidation/preview`.
+///
+/// The same reasoning the real pass performs, applied and then thrown
+/// away. It exists because the pass is automatic: being able to look
+/// before it acts is the difference between an automatic tidy-up and an
+/// automatic surprise, especially the first time it meets a database it
+/// was not developed against.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ConsolidationPreview {
+    /// Entities that are one thing under two type words. No model
+    /// involved; these are exact.
+    pub same_name: Vec<PreviewMerge>,
+    /// How many entities the model was shown.
+    pub considered: i64,
+    pub merges: Vec<PreviewMerge>,
+    pub retypes: Vec<PreviewRetype>,
+    pub relations: Vec<PreviewRelation>,
+    /// Set when there was nothing to preview, and why.
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewMerge {
+    pub keep: String,
+    pub absorb: Vec<String>,
+    /// What the survivor would be called afterwards, when the run would
+    /// rename it.
+    #[serde(default)]
+    pub new_name: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewRetype {
+    pub entity: String,
+    pub from: String,
+    pub to: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreviewRelation {
+    pub from: String,
+    pub to: String,
+    pub relation_type: String,
+    pub reason: String,
 }
 
 #[cfg(test)]

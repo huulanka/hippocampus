@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update observations set entity_id = $1 where entity_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52bf99f42d90896cbf6c134b8f5ce428b22d2b1df6ecd5110f5866a2159a39a7"
+}

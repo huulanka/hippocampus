@@ -1,0 +1,98 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            ev.event_type,\n            ev.stream_id,\n            ev.payload,\n            ev.occurred_at,\n            subject.name as \"subject_name!\",\n            -- For a merge: whether the absorbed entity still points here.\n            absorbed.merged_into as \"still_merged?\",\n            -- For a derived edge: what is at the other end.\n            other.name as \"other_name?\"\n        from events ev\n        join entities subject on subject.id = ev.stream_id\n        left join entities absorbed\n            on ev.event_type = 'entity.merged'\n           and absorbed.id = (ev.payload ->> 'source_entity_id')::uuid\n        left join entities other\n            on ev.event_type = 'relation.proposed'\n           and other.id = (ev.payload ->> 'to_entity_id')::uuid\n        where ev.event_type in\n            ('entity.merged', 'entity.renamed', 'entity.retyped', 'relation.proposed')\n          -- Edges that came out of a single capture are not a change to\n          -- the arrangement; they are the arrangement being built in the\n          -- first place, and they already show on the capture itself.\n          and (ev.event_type <> 'relation.proposed'\n               or ev.payload ->> 'across_captures' = 'true')\n        order by ev.occurred_at desc\n        limit 300\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "stream_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "stream_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "payload",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "occurred_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subject_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "still_merged?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "merged_into"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "other_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "9664bf44729eab3b999788b1de718654a8217c04cfc2403fb05e94e2b72036d8"
+}

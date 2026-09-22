@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select r.entity_type as \"entity_type!\"\n        from entity_type_registry r\n        left join entities e on e.entity_type = r.entity_type\n        group by r.entity_type\n        order by count(e.id) desc, r.entity_type\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_type!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entity_type_registry",
+            "name": "entity_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5146dd69e075f6c67774f39067452c36b2613ec4098bce1cf2f07512695045a5"
+}

@@ -57,9 +57,76 @@ bis „nimmt auf" unter 2 Sekunden. Sicht- oder hörbares Feedback, ohne dass
 ein Fenster in den Vordergrund springt.
 
 ### [P1] Lokale Outbox mit Hintergrund-Sync
-Capture wird sofort lokal persistiert (SQLite oder Dateien), Upload mit
-Retry und Backoff. Sichtbarer Zustand „n Captures warten auf Sync". Die
-Erfassung darf niemals wegen Netzwerk fehlschlagen.
+**Erledigt.** Dateien statt SQLite: pro wartendem Capture eine JSON-Datei
+und, bei einer Sprachnotiz, die WAV daneben — unter
+`~/Library/Application Support/com.andreasbauer.hippocampus/outbox/`.
+Geschrieben wird über `.tmp` plus `rename` mit `sync_all`, also sieht ein
+Leser entweder die alte Fassung oder die ganze neue, nie eine halbe.
+
+Der Grund für Dateien ist derselbe, den das Produkt für Audio auf der
+Platte nennt: die Warteschlange ist per Definition der Teil des Systems,
+der an genau einer Stelle existiert. Was dort liegt, muss mit dem Finder
+lesbar und kopierbar sein.
+
+Vorher lief `stop_recording` als aufnehmen → transkribieren → hochladen,
+und gab bei einem fehlgeschlagenen Upload `Err` zurück — in diesem Moment
+waren Audio *und* Transkript weg. Ein schlafendes NAS, ein abgebrochenes
+WLAN oder ein abgelaufener Access-Token genügten, um einen bereits
+ausgesprochenen Gedanken zu verlieren. Jetzt liegt der Capture auf der
+Platte, bevor das Netzwerk überhaupt angefasst wird, und das Hochladen ist
+etwas, das jetzt oder später gelingt. Getippte Captures gehen denselben
+Weg (`capture_text`), weil sie vorher dasselbe Loch hatten.
+
+Der Sync-Lauf wiederholt die ganze Warteschlange gestaffelt (10 s bis
+10 min) und bricht beim ersten Fehlschlag ab: die Ursache ist fast immer
+eine gemeinsame, und der Rest der Schleife wäre nur derselbe Fehler *n*
+mal. Ein Mutex serialisiert alle Uploads, damit der Timer und der
+„ich habe gerade zu Ende gesprochen"-Pfad nicht denselben Eintrag zweimal
+senden — Duplikate wären schlimmer als das Problem, das die Outbox löst.
+
+Belegt durch `sync::tests::a_queued_capture_goes_up_and_leaves_the_queue`
+(mit laufendem Backend, `--ignored`): ein angenommener Capture verlässt
+die Warteschlange, und ein Capture gegen ein totes Backend bleibt samt
+Begründung liegen.
+
+### [P1] Strukturierung und Indexierung dürfen nicht lautlos scheitern
+**Erledigt** zusammen mit der Outbox, weil es dieselbe Fehlerklasse ist:
+Arbeit, die hinter einem Capture lief, scheiterte, sagte es nur in einer
+Logzeile und wurde nie wiederholt.
+
+`structuring.rs` gab bei einem fehlgeschlagenen OpenRouter-Aufruf genau
+eine Zeile aus. Der Capture blieb sicher — aber ohne Entitäten, ohne
+Beobachtung, ohne aufgelöstes Datum, und damit für immer unsichtbar auf
+Entitätsseiten und in Resurface. Nichts sah kaputt aus: die Notiz stand in
+der Timeline und war über ihren Wortlaut auffindbar. **In der
+Entwicklungsdatenbank waren so 11 von 45 Captures nie strukturiert
+worden.** Alle 11 sind beim ersten Lauf nachgeholt worden, die Zahl der
+Entitäten ging dabei von 54 auf 77.
+
+`index_capture` wurde zudem mit `?` aufgerufen, also beantwortete ein
+fehlgeschlagenes Embedding einen bereits dauerhaft gespeicherten Capture
+mit einem 500er — der Aufrufer erfuhr, seine Notiz sei nicht gespeichert,
+obwohl sie es war. Mit einer Outbox davor wäre daraus ein Duplikat
+geworden.
+
+Beides liegt jetzt auf `capture_pipeline` (Migration 0005), mit Versuchen,
+letztem Fehler und einem Aufgeben nach *n* Versuchen. Eine Schleife im
+Backend holt nach, gestaffelt und mit Budget. `GET /pipeline` zählt, was
+wartet und was aufgegeben wurde; `POST /pipeline/retry` und
+`POST /captures/{id}/retry` fragen erneut.
+
+Die Regel, auf die sich der Rest des Codes ab hier verlassen kann: **ist
+ein Capture gespeichert, ist das Speichern gelungen.** Alles danach ist
+eine Verzögerung, kein Fehlschlag.
+
+### [P1] Eine Zeile, die sagt, was nicht fertig ist
+**Erledigt.** `PendingWork` in der Sidebar, still solange es nichts zu
+sagen gibt — eine Statuszeile, die dauerhaft grün leuchtet, liest an dem
+Tag niemand, an dem sie rot wird. Sie zeigt „*n* waiting to sync" (lokal)
+und „*n* not processed" (Backend), nennt im Tooltip den tatsächlichen
+Grund und hat genau eine Handlung: nochmal versuchen. Der Grund gehört
+dazu, weil ein abgelaufener Service-Token und ein schlafendes NAS ohne ihn
+identisch aussehen.
 
 ### [P1] Echo-Endpunkt
 **Erledigt** in #9.

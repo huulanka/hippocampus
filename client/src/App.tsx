@@ -10,12 +10,13 @@ import { TimelineScreen } from "./screens/TimelineScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { EntitiesScreen } from "./screens/EntitiesScreen";
 import { RelationsScreen } from "./screens/RelationsScreen";
+import { ChangesScreen } from "./screens/ChangesScreen";
 import { ChatScreen } from "./screens/ChatScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { LockGate } from "./components/LockGate";
 import { lockStatus, onLocked, onSummonCapture, type LockStatus } from "./desktop";
 
-export type TabId = "capture" | "resurface" | "timeline" | "search" | "entities" | "relations" | "chat" | "settings";
+export type TabId = "capture" | "resurface" | "timeline" | "search" | "entities" | "relations" | "changes" | "chat" | "settings";
 
 /// A thing being looked at, layered over whichever tab you were on.
 /// Details are not tabs: you always arrive at one *from* somewhere, and
@@ -42,6 +43,7 @@ const TAB_NAMES: Partial<Record<TabId, string>> = {
   search: "Search",
   entities: "The things you have mentioned",
   relations: "Your graph",
+  changes: "How this got organised",
   chat: "Chat",
 };
 
@@ -184,6 +186,8 @@ function Screen({
       return <EntitiesScreen onOpenEntity={onOpenEntity} />;
     case "relations":
       return <RelationsScreen onOpenEntity={onOpenEntity} />;
+    case "changes":
+      return <ChangesScreen onOpenEntity={onOpenEntity} />;
     case "chat":
       return <ChatScreen />;
     case "settings":

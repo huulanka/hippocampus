@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- Cast so `least`/`greatest` stay uuid: without it Postgres\n        -- resolves the pair through text and the insert type-mismatches.\n        insert into entity_merge_block (lower_id, higher_id, reason)\n        values (least($1::uuid, $2::uuid), greatest($1::uuid, $2::uuid), 'unmerged')\n        on conflict (lower_id, higher_id) do update set reason = 'unmerged', decided_at = now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a9d7bad40172029c04f467f80775c9452db205792bbc14d71026612d4acbdfe2"
+}

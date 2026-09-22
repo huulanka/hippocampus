@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getGraph, type Graph } from "../api";
+import { getGraph, mergeEntities, type Graph } from "../api";
 import { entityColor } from "../entityType";
 import {
   FLAT_VIEW,
@@ -88,6 +88,24 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
   /// never "show me this entity's page", it is "what is this one next
   /// to". Opening the page is then one more click, on the same node.
   const [focused, setFocused] = useState<string | null>(null);
+
+  /// Folding two nodes into one, by hand.
+  ///
+  /// The automatic run is deliberately timid — it leaves alone anything
+  /// it cannot argue for from the notes themselves, and it refuses some
+  /// merges that are in fact right. This is the way through for the
+  /// person who is looking at both and knows. It is the same operation
+  /// the run performs, with the same event and the same undo; only the
+  /// author differs.
+  ///
+  /// Two clicks and a confirmation rather than a drag: a drag that
+  /// merges is one slip away from merging the wrong pair, on a canvas
+  /// where dragging already means "move this".
+  const [mergeSource, setMergeSource] = useState<string | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+  const [merging, setMerging] = useState(false);
+  const mergeSourceRef = useRef<string | null>(null);
+  mergeSourceRef.current = mergeSource;
   const focusedRef = useRef<string | null>(null);
   const [query, setQuery] = useState("");
 
@@ -434,8 +452,42 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
       draggedFar.current = false;
       return;
     }
+    // While a merge is being aimed, every node means "into this one" —
+    // including, harmlessly, the one being merged away.
+    if (mergeSourceRef.current) {
+      if (id !== mergeSourceRef.current) setMergeTarget(id);
+      return;
+    }
     if (focused === id) onOpenEntity(id);
     else setFocused(id);
+  }
+
+  const nameOf = useCallback(
+    (id: string | null) => graph?.nodes.find((n) => n.id === id)?.name ?? "",
+    [graph],
+  );
+
+  function cancelMerge() {
+    setMergeSource(null);
+    setMergeTarget(null);
+  }
+
+  async function confirmMerge() {
+    if (!mergeSource || !mergeTarget || merging) return;
+    setMerging(true);
+    try {
+      await mergeEntities(mergeSource, mergeTarget);
+      cancelMerge();
+      setFocused(mergeTarget);
+      // Re-read rather than patch: a merge moves edges as well as
+      // observations, and guessing at the new shape here would show a
+      // graph that is not the one the backend now holds.
+      setGraph(await getGraph());
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setMerging(false);
+    }
   }
 
   if (error) return <p className="dim">Couldn't load the graph: {error}</p>;
@@ -774,8 +826,52 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
           <span className="link" onClick={() => onOpenEntity(focusedNode.node.id)}>
             [ open ]
           </span>
+          <span
+            className="dim link"
+            title="Fold this into another entity. Reversible, and nothing is deleted."
+            onClick={() => {
+              setMergeSource(focusedNode.node.id);
+              setMergeTarget(null);
+            }}
+          >
+            [ merge into… ]
+          </span>
           <span className="dim link" onClick={() => setFocused(null)}>
             [ back to everything ]
+          </span>
+        </div>
+      )}
+
+      {/* Two steps, and the second one spells out which way round it
+          goes. "Merge A and B" is ambiguous in exactly the way that
+          matters here — one of the two names is the one that survives. */}
+      {mergeSource && (
+        <div className="graph-merge">
+          {mergeTarget ? (
+            <>
+              <span>
+                Fold <strong>{nameOf(mergeSource)}</strong> into{" "}
+                <strong>{nameOf(mergeTarget)}</strong>?
+              </span>
+              <span className="dim">
+                Everything said about it moves across, and “{nameOf(mergeSource)}” stays
+                searchable. You can take this back.
+              </span>
+              <span className="link" onClick={() => void confirmMerge()}>
+                [ {merging ? "folding…" : `Yes, keep ${nameOf(mergeTarget)}`} ]
+              </span>
+              <span className="dim link" onClick={() => setMergeTarget(null)}>
+                [ pick another ]
+              </span>
+            </>
+          ) : (
+            <span>
+              Click the entity that <strong>{nameOf(mergeSource)}</strong> should be folded
+              into.
+            </span>
+          )}
+          <span className="dim link" onClick={cancelMerge}>
+            [ cancel ]
           </span>
         </div>
       )}

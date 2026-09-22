@@ -204,7 +204,48 @@ ebenso wie in den der Einzelextraktion.
 5. **Verschmelzung** (`entity.merged` / `entity.unmerged`) mit
    Kandidatengenerator.
 
-Schritt 1 **ist gebaut** (#24) und lohnte sich sofort. Die Schritte 2 bis 5
-lohnen sich erst mit mehr Bestand — bei 54 Entitäten verschmilzt ein Lauf
-vier Dubletten, was auch von Hand ginge. Die Mechanik bei 500 Entitäten zu
-bauen ist das Ziel; sie bei 54 zu testen ist der Weg dorthin.
+Schritt 1 **ist gebaut** (#24) und lohnte sich sofort.
+
+---
+
+## Nachtrag, 22. September 2026: der Nutzer meldet es als nächstes Thema an
+
+Wörtlich:
+
+> „Die Verbindungen, die automatisch erstellt würden, müssen zyklisch noch
+> mal durchgegangen werden, damit die tatsächlich auf die richtigen Knoten
+> und Kanten folgen, unter dem richtigen Schlagwort, also dass Duplikate
+> erkannt werden, konsolidiert werden usw. … Gleichartige, gleiche Themen,
+> die nur anders geschrieben sind, müssen konsolidiert und zusammengefasst
+> werden, damit ich die auch strukturiert auswerten kann."
+
+Das ist nicht ein neues Thema, sondern die Schritte 2 bis 5 oben, jetzt
+mit einer Priorität versehen und mit einer Betonung, die das Dokument so
+noch nicht hatte: **zyklisch.** Nicht ein einmaliger Aufräumlauf, sondern
+ein wiederkehrender, der auch das erwischt, was erst durch spätere
+Notizen zu einer Dublette wird.
+
+Zwei Dinge daran sind gegenüber dem Entwurf oben zu schärfen:
+
+1. **„Unter dem richtigen Schlagwort."** Die Kante muss nach der
+   Verschmelzung am überlebenden Knoten hängen, und der Beziehungstyp
+   selbst hat dasselbe Vokabularproblem wie der Entitätstyp — `arbeitet_in`
+   und `ist_angestellt_bei` sind eine Kante mit zwei Namen. Der Entwurf
+   oben vereinheitlicht bislang nur `entity_type`; `relation_type` gehört
+   in denselben Schritt.
+2. **„Damit ich die auch strukturiert auswerten kann."** Das ist ein
+   Anspruch an die *Ausgabe*, nicht nur an die Daten. Ein konsolidierter
+   Graph, den man nicht anders ansieht als vorher, hat den Zweck verfehlt —
+   der Lauf muss also zusammen mit dem gedacht werden, was er sichtbar
+   macht. Das berührt „Entities neu visualisieren" aus der offenen Liste;
+   die beiden gehören womöglich in dieselbe Runde.
+
+Die Reihenfolge oben bleibt: erst die rollierende Zusammenfassung (ohne
+sie skaliert nichts), dann das Typ-Vokabular (der billigste sichtbare
+Gewinn), dann der Nachbarschaftslauf, dann die Verschmelzung mit
+Kandidatengenerator und `entity.unmerged` gegen das Oszillieren.
+
+Die Schritte 2 bis 5 lohnen sich rechnerisch erst mit mehr Bestand — bei
+54 Entitäten verschmilzt ein Lauf vier Dubletten, was auch von Hand ginge.
+Die Mechanik bei 500 Entitäten zu bauen ist das Ziel; sie bei 54 zu testen
+ist der Weg dorthin.

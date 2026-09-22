@@ -62,7 +62,8 @@ pub async fn load(
             max(o.created_at) as "last_seen?"
         from entities e
         left join observations o on o.entity_id = e.id
-        where ($1::text is null or e.entity_type = $1)
+        where e.merged_into is null
+          and ($1::text is null or e.entity_type = $1)
         group by e.id, e.name, e.entity_type
         order by count(o.id) desc, max(o.created_at) desc nulls last, e.name
         limit $2
@@ -75,7 +76,7 @@ pub async fn load(
 
     let total = sqlx::query_scalar!(
         r#"select count(*) as "count!" from entities e
-           where ($1::text is null or e.entity_type = $1)"#,
+           where e.merged_into is null and ($1::text is null or e.entity_type = $1)"#,
         entity_type,
     )
     .fetch_one(pool)

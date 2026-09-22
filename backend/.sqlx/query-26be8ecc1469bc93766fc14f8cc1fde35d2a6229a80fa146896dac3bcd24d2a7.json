@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update capture_pipeline\n        set abandoned_at = null, attempts = 0, last_attempt_at = null, last_error = null\n        where capture_event_id = $1\n          and (indexed_at is null or structured_at is null)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "26be8ecc1469bc93766fc14f8cc1fde35d2a6229a80fa146896dac3bcd24d2a7"
+}

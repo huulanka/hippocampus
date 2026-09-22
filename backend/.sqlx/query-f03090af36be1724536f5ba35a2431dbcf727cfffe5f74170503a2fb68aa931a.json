@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into entity_alias (entity_id, name, source) values ($1, $2, 'observed')\n           on conflict (entity_id, name) do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f03090af36be1724536f5ba35a2431dbcf727cfffe5f74170503a2fb68aa931a"
+}

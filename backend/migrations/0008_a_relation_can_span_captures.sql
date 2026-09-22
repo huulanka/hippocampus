@@ -1,0 +1,22 @@
+-- A relation no longer has to come from one capture.
+--
+-- `source_event_id` was NOT NULL because, until now, that was simply
+-- true: `structuring.rs` could only link two things that appeared in the
+-- same extraction, so every edge had exactly one note behind it. That
+-- limitation is what ADR 0006 predicted would leave the graph as "eine
+-- Menge unverbundener Sterne", and the measurement bore it out — 16 of
+-- 54 entities had no edge at all, and only 13 of 38 captures had ever
+-- produced one.
+--
+-- The consolidation run draws edges by reading several entities and their
+-- notes *together*, which is the entire point of it: "Lena arbeitet
+-- im Westbad" and "beim Aufguss im Westbad" are two separate notes, and
+-- the link between them exists in neither of them alone. Such an edge has
+-- no single source capture, and inventing one would be a lie about
+-- provenance in the one table where provenance is the point.
+--
+-- Null therefore means something specific and readable: this edge was
+-- derived across captures. The `relation.proposed` event carries which
+-- run made it and why.
+
+alter table relations alter column source_event_id drop not null;

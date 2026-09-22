@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into capture_pipeline\n            (capture_event_id, structured_by, structured_at, attempts, last_attempt_at, last_error)\n        values (\n            $1,\n            case when $3::text is null then $2 end,\n            case when $3::text is null then now() end,\n            1,\n            now(),\n            $3\n        )\n        on conflict (capture_event_id) do update set\n            structured_by = case when $3::text is null then $2 end,\n            structured_at = case when $3::text is null then now() end,\n            attempts = capture_pipeline.attempts + 1,\n            last_attempt_at = now(),\n            last_error = $3,\n            -- Given up on only while it is still failing, and only once\n            -- it has failed often enough that the next call would be\n            -- money spent on the same answer.\n            abandoned_at = case\n                when $3::text is not null and capture_pipeline.attempts + 1 >= $4 then now()\n            end\n        returning abandoned_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "abandoned_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_pipeline",
+            "name": "abandoned_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0a51b73e36c7b44b6a51636a4a071132a2a85dbd5d3b3fe6c4d40ad0b5bd85d8"
+}

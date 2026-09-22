@@ -41,6 +41,17 @@ pub struct Config {
     /// Fallback timezone for resolving "tomorrow" and friends, used only
     /// when a capture did not say where it was recorded.
     pub timezone: chrono_tz::Tz,
+    /// How the background loop finishes captures whose indexing or
+    /// structuring did not succeed the first time.
+    pub retry: crate::pipeline::RetrySettings,
+    /// How often the graph is consolidated. Deliberately slow: a
+    /// duplicate surviving another hour costs nothing, and the pace is
+    /// itself a safety property — a mistake in what gets folded together
+    /// has time to be noticed.
+    pub consolidation_interval: std::time::Duration,
+    /// Whether the consolidation pass runs by itself. Off means it only
+    /// happens when asked for, which is how to look before it acts.
+    pub consolidation_enabled: bool,
 }
 
 /// Where the desktop client calls from: `tauri://localhost` is the packaged
@@ -52,6 +63,17 @@ const DEFAULT_ALLOWED_ORIGINS: &str = "tauri://localhost,http://localhost:1420";
 /// `std::env::var` alone would otherwise treat that as a real value.
 fn env_non_empty(key: &str) -> Option<String> {
     env::var(key).ok().filter(|v| !v.is_empty())
+}
+
+/// A duration in whole seconds, or the default when unset.
+fn parse_secs(key: &str, default: u64) -> anyhow::Result<u64> {
+    env_non_empty(key)
+        .map(|v| {
+            v.parse::<u64>()
+                .map_err(|err| anyhow::anyhow!("{key} must be a whole number of seconds: {err}"))
+        })
+        .transpose()
+        .map(|parsed| parsed.unwrap_or(default))
 }
 
 impl Config {
@@ -105,6 +127,46 @@ impl Config {
                 })
                 .transpose()?
                 .unwrap_or(chrono_tz::Europe::Berlin),
+            retry: crate::pipeline::RetrySettings {
+                enabled: env_non_empty("STRUCTURING_RETRY_ENABLED")
+                    .map(|v| v != "false")
+                    .unwrap_or(true),
+                // Minutes, not seconds: this is catch-up work for a
+                // provider that was down, and asking every few seconds
+                // would only turn one outage into a lot of failed calls.
+                interval: std::time::Duration::from_secs(parse_secs(
+                    "STRUCTURING_RETRY_INTERVAL_SECS",
+                    300,
+                )?),
+                backoff: std::time::Duration::from_secs(parse_secs(
+                    "STRUCTURING_RETRY_BACKOFF_SECS",
+                    900,
+                )?),
+                batch: env_non_empty("STRUCTURING_RETRY_BATCH")
+                    .map(|v| v.parse())
+                    .transpose()
+                    .map_err(|err| {
+                        anyhow::anyhow!("STRUCTURING_RETRY_BATCH must be a whole number: {err}")
+                    })?
+                    .unwrap_or(5),
+                // Five, because each one is a paid call and a fault that
+                // survives five attempts spread over more than an hour is
+                // not a blip — it is something a person has to look at.
+                max_attempts: env_non_empty("STRUCTURING_MAX_ATTEMPTS")
+                    .map(|v| v.parse())
+                    .transpose()
+                    .map_err(|err| {
+                        anyhow::anyhow!("STRUCTURING_MAX_ATTEMPTS must be a whole number: {err}")
+                    })?
+                    .unwrap_or(5),
+            },
+            consolidation_enabled: env_non_empty("CONSOLIDATION_ENABLED")
+                .map(|v| v != "false")
+                .unwrap_or(true),
+            consolidation_interval: std::time::Duration::from_secs(parse_secs(
+                "CONSOLIDATION_INTERVAL_SECS",
+                3600,
+            )?),
             cors_allowed_origins: env_non_empty("CORS_ALLOWED_ORIGINS")
                 .unwrap_or_else(|| DEFAULT_ALLOWED_ORIGINS.to_string())
                 .split(',')

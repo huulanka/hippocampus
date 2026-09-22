@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into capture_pipeline (capture_event_id) values ($1)\n        on conflict (capture_event_id) do update\n            -- A correction re-derives everything, so whatever was true of\n            -- the old wording stops being true here — including having\n            -- been given up on.\n            set structured_at = null,\n                structured_by = null,\n                abandoned_at = null,\n                last_error = null\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "97a076c457adf08f821cb5988cef6a1a9f8712481de14b59c5ca08462d700095"
+}

@@ -10,8 +10,10 @@ mod capture;
 mod keychain;
 mod lock;
 pub mod microphone;
+mod outbox;
 mod recorder;
 mod settings;
+mod sync;
 
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -143,6 +145,9 @@ pub fn run() {
             capture::start_recording,
             capture::stop_recording,
             capture::cancel_recording,
+            capture::capture_text,
+            sync::outbox_status,
+            sync::sync_now,
             backend::api_request,
             backend::api_audio,
             backend::check_backend,
@@ -170,6 +175,19 @@ pub fn run() {
             if let Err(err) = app.global_shortcut().register(shortcut) {
                 log::warn!("could not register the capture shortcut: {err}");
             }
+
+            // The outbox before anything else in this block that could
+            // fail: whatever else is wrong with this launch, captures
+            // spoken during it have to have somewhere to land.
+            let outbox = std::sync::Arc::new(outbox::Outbox::new(
+                app.path().app_data_dir()?.join("outbox"),
+            ));
+            let waiting = outbox.counts().waiting;
+            if waiting > 0 {
+                log::info!("{waiting} captures were left waiting to sync; retrying them");
+            }
+            app.manage(sync::SyncState::new(outbox));
+            sync::watch(app.handle().clone());
 
             watch_for_idleness(app.handle().clone());
             Ok(())

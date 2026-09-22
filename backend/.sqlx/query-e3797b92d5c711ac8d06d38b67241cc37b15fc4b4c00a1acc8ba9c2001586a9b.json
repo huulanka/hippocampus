@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select\n            e.id,\n            e.entity_type,\n            e.name,\n            e.current_summary,\n            count(o.id) as \"mention_count!\",\n            max(o.created_at) as \"last_seen?\"\n        from entities e\n        left join observations o on o.entity_id = e.id\n        where ($1::text is null or e.entity_type = $1)\n          and ($2::text is null or e.name ilike '%' || $2 || '%')\n        group by e.id, e.entity_type, e.name, e.current_summary\n        order by count(o.id) desc, max(o.created_at) desc nulls last, e.name\n        limit $3\n        ",
+  "query": "\n        select\n            e.id,\n            e.entity_type,\n            e.name,\n            e.current_summary,\n            count(o.id) as \"mention_count!\",\n            max(o.created_at) as \"last_seen?\"\n        from entities e\n        left join observations o on o.entity_id = e.id\n        -- Merged entities are not rows anyone should see: their\n        -- observations now hang off the surviving one, so listing them\n        -- would show the same thing twice, once of it empty.\n        where e.merged_into is null\n          and ($1::text is null or e.entity_type = $1)\n          -- Aliases as well as the current name, so a name that was\n          -- merged away still finds what it became.\n          and ($2::text is null or e.name ilike '%' || $2 || '%'\n               or exists (select 1 from entity_alias a\n                          where a.entity_id = e.id and a.name ilike '%' || $2 || '%'))\n        group by e.id, e.entity_type, e.name, e.current_summary\n        order by count(o.id) desc, max(o.created_at) desc nulls last, e.name\n        limit $3\n        ",
   "describe": {
     "columns": [
       {
@@ -76,5 +76,5 @@
       null
     ]
   },
-  "hash": "6d4404028cdbe70ed4c8dbbaec8d4b5a98078012e5328b3bda7ad444647eaec7"
+  "hash": "e3797b92d5c711ac8d06d38b67241cc37b15fc4b4c00a1acc8ba9c2001586a9b"
 }

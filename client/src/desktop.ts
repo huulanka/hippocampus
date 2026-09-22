@@ -94,11 +94,15 @@ export interface DesktopEchoItem {
   rerank_score: number | null;
 }
 
-/// Result of a spoken capture: what was heard, and what it echoed.
+/// Result of a capture: what was heard, and — when the backend was
+/// reachable — what it echoed.
 export interface VoiceCapture {
   transcript: string;
   duration_ms: number;
   model: string;
+  /// `null` when the backend could not be reached. The capture is on this
+  /// Mac either way; this only says whether it has arrived yet, so there
+  /// is no echo and no id to open.
   capture: {
     event_id: string;
     occurred_at: string;
@@ -106,6 +110,58 @@ export interface VoiceCapture {
     /// so that speaking a note is confirmed as saved immediately.
     echo: DesktopEchoItem[];
     echo_pending: boolean;
+  } | null;
+  /// Why it has not arrived yet, when it has not.
+  queued_reason: string | null;
+}
+
+/// How much is waiting on this Mac to reach the backend. Mirrors
+/// `outbox::Counts` in Rust.
+export interface OutboxCounts {
+  waiting: number;
+  /// How many of those have already failed at least once. One waiting
+  /// capture is a moment; one that has failed eleven times is a problem,
+  /// and the sidebar says so differently.
+  failing: number;
+  last_error: string | null;
+}
+
+/// Emitted by the Rust side whenever the queue changes. Must match
+/// `OUTBOX_EVENT` in `src-tauri/src/sync.rs`.
+const OUTBOX_EVENT = "hippocampus://outbox";
+
+export async function outboxStatus(): Promise<OutboxCounts> {
+  if (!isTauri()) return { waiting: 0, failing: 0, last_error: null };
+  try {
+    return await invoke<OutboxCounts>("outbox_status");
+  } catch {
+    return { waiting: 0, failing: 0, last_error: null };
+  }
+}
+
+/// Retries the whole queue now, because someone asked rather than because
+/// a timer fired.
+export async function syncNow(): Promise<OutboxCounts> {
+  if (!isTauri()) return { waiting: 0, failing: 0, last_error: null };
+  return await invoke<OutboxCounts>("sync_now");
+}
+
+/// Subscribes to changes in the queue. Same shape as `onSummonCapture`:
+/// returns an unsubscribe function, a no-op in the browser build.
+export function onOutboxChange(handler: (counts: OutboxCounts) => void): () => void {
+  if (!isTauri()) return () => {};
+
+  let dispose: (() => void) | undefined;
+  let cancelled = false;
+
+  listen<OutboxCounts>(OUTBOX_EVENT, (event) => handler(event.payload)).then((unlisten) => {
+    if (cancelled) unlisten();
+    else dispose = unlisten;
+  });
+
+  return () => {
+    cancelled = true;
+    dispose?.();
   };
 }
 
@@ -130,6 +186,14 @@ export function startRecording(): Promise<void> {
 /// milliseconds for a short note.
 export function stopRecording(): Promise<VoiceCapture> {
   return invoke<VoiceCapture>("stop_recording");
+}
+
+/// Stores a typed capture the same way a spoken one is stored: on this
+/// Mac first, then sent. Returns `null` in the browser build, where there
+/// is no outbox and `api.ts` posts directly instead.
+export async function captureText(transcript: string): Promise<VoiceCapture | null> {
+  if (!isTauri()) return null;
+  return await invoke<VoiceCapture>("capture_text", { transcript });
 }
 
 /// Discards the recording without transcribing or storing anything.

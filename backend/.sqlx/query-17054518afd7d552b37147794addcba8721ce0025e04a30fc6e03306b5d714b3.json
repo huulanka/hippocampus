@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update entities set name = $2, updated_at = now() where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "17054518afd7d552b37147794addcba8721ce0025e04a30fc6e03306b5d714b3"
+}

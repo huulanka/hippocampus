@@ -205,6 +205,42 @@ runs and typed capture still works — the record button simply stays hidden.
 
 macOS asks for microphone permission the first time you record.
 
+## A capture cannot be lost
+
+Once a capture is written down, it is kept — whatever the network, the
+backend or the model does next. Two mechanisms, at the two places it used
+to be possible to lose one.
+
+**On this Mac: the outbox.** Speaking a note records it, transcribes it
+on-device, and writes it to
+`~/Library/Application Support/com.andreasbauer.hippocampus/outbox/` as a
+JSON file with its WAV beside it — *before* the network is touched. Only
+then is it uploaded. A sleeping NAS, a dropped Wi-Fi or an expired Access
+token no longer costs a thought that was already spoken; the queue is
+retried in the background, and the entry disappears once the backend has
+acknowledged it. Typed captures take the same path.
+
+Plain files rather than a database, deliberately: the queue is by
+definition the part of the system that exists in exactly one place, so it
+has to be readable and recoverable with nothing but the Finder. Writes go
+through a temporary file and a rename, so a reader sees either the old
+entry or the whole new one.
+
+**On the backend: the pipeline.** A capture is permanent the moment it is
+stored, but two things still have to happen — embedding it for search, and
+having the model read it. Both used to fail with nothing but a log line.
+An unstructured capture looks fine (it is in the timeline, findable by its
+words) and simply never has entities, never a resolved date, and never
+appears in Resurface. `capture_pipeline` records what has not finished and
+a background loop comes back for it, with backoff, a per-pass budget, and
+a point at which it gives up and waits for a person.
+
+`GET /pipeline` counts what is waiting and what was given up on;
+`POST /pipeline/retry` asks again. The client shows both in a single
+sidebar line, which is absent whenever there is nothing to say — a status
+line that is permanently green is one nobody reads on the day it turns
+red. See `STRUCTURING_RETRY_*` in [`.env.example`](.env.example).
+
 ## Talking to a backend that is not on this machine
 
 The desktop client's HTTP requests are made in Rust, not by the webview —

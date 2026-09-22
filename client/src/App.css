@@ -1058,3 +1058,138 @@ a:hover {
 .sidebar-lock:hover {
   color: var(--hpo-text);
 }
+
+/* Unfinished work, in the one column that is always on screen.
+   Deliberately quiet: it is absent whenever there is nothing to say, so
+   the fact that it is *there* is already the whole signal. Gold while the
+   queue is merely waiting, accent once something has actually failed —
+   two states, because "the NAS is asleep" and "the token expired" deserve
+   different amounts of the user's attention. */
+.sidebar-pending {
+  margin: 0 12px 6px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--hpo-gold);
+  color: var(--hpo-gold);
+  font-size: 11px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.sidebar-pending.stuck {
+  border-color: var(--hpo-accent);
+  color: var(--hpo-accent);
+}
+.sidebar-pending:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.sidebar-pending-count {
+  font-weight: 700;
+}
+.sidebar-pending-action {
+  opacity: 0.75;
+}
+
+/* Aiming a merge in the graph. Sits opposite the focus panel so the two
+   never cover each other — you are reading one while acting on the
+   other. */
+.graph-merge {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--hpo-panel);
+  border: 1px solid var(--hpo-accent);
+  font-size: 12px;
+}
+.graph-merge .link {
+  cursor: pointer;
+  color: var(--hpo-accent);
+}
+.graph-merge .dim.link {
+  color: var(--hpo-dim);
+}
+.graph-merge .dim.link:hover {
+  color: var(--hpo-text);
+}
+
+/* — how this got organised — */
+.changes-screen {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.changes-lede {
+  margin-bottom: 18px;
+}
+.changes-actions {
+  margin-bottom: 18px;
+}
+.changes-proposal {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.change-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--hpo-border);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+/* The kind, as a fixed-width label so the column reads as a column. The
+   four colours are the four things that can happen to an arrangement —
+   a merge loses a node and is the only one that is ever alarming. */
+.change-kind {
+  flex: 0 0 62px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hpo-dim);
+}
+.change-kind.merged {
+  color: var(--hpo-accent);
+}
+.change-kind.related {
+  color: var(--hpo-teal);
+}
+.change-kind.retyped,
+.change-kind.renamed {
+  color: var(--hpo-gold);
+}
+.change-body {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.change-what {
+  margin: 0;
+  line-height: 1.5;
+}
+.change-reason {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+.change-when {
+  font-size: 11px;
+  white-space: nowrap;
+}
+.change-open,
+.change-undo {
+  cursor: pointer;
+  font-size: 11px;
+}
+.change-undo:hover,
+.change-open:hover {
+  color: var(--hpo-text);
+}
+.change-undone {
+  font-size: 11px;
+  opacity: 0.7;
+}

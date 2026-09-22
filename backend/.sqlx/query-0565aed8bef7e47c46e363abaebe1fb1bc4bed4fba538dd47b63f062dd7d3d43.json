@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into capture_pipeline (capture_event_id, indexed_at) values ($1, now())\n        on conflict (capture_event_id) do update set indexed_at = now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0565aed8bef7e47c46e363abaebe1fb1bc4bed4fba538dd47b63f062dd7d3d43"
+}

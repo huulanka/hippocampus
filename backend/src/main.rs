@@ -1,12 +1,14 @@
 mod audio;
 mod auth;
 mod config;
+mod consolidation;
 mod echo;
 mod embedding;
 mod error;
 mod events;
 mod judge;
 mod openrouter;
+mod pipeline;
 mod reranker;
 mod routes;
 mod structuring;
@@ -40,6 +42,11 @@ pub struct AppState {
     judging: Arc<std::sync::Mutex<std::collections::HashSet<uuid::Uuid>>>,
     audio_dir: std::path::PathBuf,
     timezone: chrono_tz::Tz,
+    /// How hard the background loop tries to finish a capture whose
+    /// indexing or structuring failed. Read at the point of failure, not
+    /// only by the loop, so the first attempt counts the same as the
+    /// fifth.
+    retry: pipeline::RetrySettings,
 }
 
 #[tokio::main]
@@ -139,12 +146,49 @@ async fn main() -> anyhow::Result<()> {
         judging: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         audio_dir: config.audio_dir.clone().into(),
         timezone: config.timezone,
+        retry: config.retry,
     };
 
     tracing::info!(
         timezone = %config.timezone,
         "relative times in captures resolve against this timezone unless the device names its own"
     );
+
+    // Started before the router: a backlog left by the last run should be
+    // shrinking while the first request of this one arrives, not waiting
+    // for someone to ask.
+    pipeline::watch(state.clone(), config.retry);
+
+    // Slow on purpose, and deliberately not on the same clock as the
+    // capture pipeline: that one is catching up on work a user is
+    // waiting for, this one is tidying a graph nobody is looking at.
+    consolidation::watch(
+        state.clone(),
+        config.consolidation_enabled,
+        config.consolidation_interval,
+        config.openrouter_model.clone(),
+    );
+
+    // Entities have carried an `embedding` column and an HNSW index since
+    // the first migration, and nothing ever wrote to either — every
+    // entity in the database had a null. Spawned rather than awaited: it
+    // is catch-up work on a local model, and nothing should wait to
+    // listen for it.
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            loop {
+                match structuring::backfill_entity_embeddings(&state.pool, &state.embedder).await {
+                    Ok(0) => break,
+                    Ok(filled) => tracing::info!(filled, "gave entities their embeddings"),
+                    Err(err) => {
+                        tracing::warn!(?err, "could not backfill entity embeddings");
+                        break;
+                    }
+                }
+            }
+        });
+    }
 
     let protected = routes::router().with_state(state.clone());
     let protected = match config.cf_access_aud.clone() {

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update relations set from_entity_id = $1 where from_entity_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5dde3fd7e3ed58dc2fd89d809534b848dc767701ad0d1e167c4999d493aebb85"
+}

@@ -18,7 +18,12 @@ Ohne das darf nichts Persönliches ins System.
 - Audio-Aufnahme und -Speicherung nach ADR 0004, Event-Umbau
   (`capture.recorded` ohne Text, `transcript.derived`).
 - `transcribe-rs` in den Tauri-Client, globaler Hotkey, Push-to-talk.
-- Lokale Outbox: Erfassen gelingt offline, Sync mit Retry im Hintergrund.
+- ~~Lokale Outbox: Erfassen gelingt offline, Sync mit Retry im
+  Hintergrund.~~ **Gebaut**, zusammen mit der Wiedervorlage für
+  Strukturierung und Indexierung und der Zustandszeile in der Sidebar.
+  Siehe `docs/issues.md`. Damit gilt: ist ein Capture gespeichert, ist das
+  Speichern gelungen — vorher konnte ein Upload-Fehler eine bereits
+  gesprochene Notiz vernichten.
 - `GET /captures/{id}/echo` und Anzeige direkt nach dem Erfassen.
 - Suche reparieren: Reciprocal Rank Fusion statt gewichteter Score-Addition,
   Zeitfilter, `entity_type`-Parameter entweder implementieren oder entfernen.
@@ -36,7 +41,17 @@ Ohne das darf nichts Persönliches ins System.
 
 ## Phase 3 — Der Graph verdient sich seinen Platz
 
-Erst ab ~1.000 Captures beginnen.
+**Vom Nutzer am 22.09.2026 als nächstes großes Thema angemeldet** und
+damit vorgezogen: die automatisch erzeugten Verbindungen müssen zyklisch
+nachkonsolidiert werden — Dubletten erkennen, gleiche Themen mit
+unterschiedlicher Schreibweise zusammenführen, Kanten unter dem richtigen
+Schlagwort führen. Zuschnitt, Auslöser und Reihenfolge stehen in
+[`docs/consolidation.md`](consolidation.md), inklusive des Nachtrags vom
+selben Tag.
+
+Die Mengenschwelle unten bleibt als *Nutzen*-Argument richtig, nicht als
+Bauverbot: die Mechanik bei 500 Entitäten zu bauen ist das Ziel, sie bei
+54 zu testen der Weg dorthin.
 
 - Entitäts-Zusammenführung mit Kandidatensuche (`pg_trgm` + Embedding).
 - Review-Queue, eine Oberfläche für Merges und Korrekturen.

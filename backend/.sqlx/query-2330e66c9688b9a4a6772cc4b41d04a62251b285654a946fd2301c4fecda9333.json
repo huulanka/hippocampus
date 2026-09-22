@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select merged_into, name from entities where id = $1 and merged_into is not null",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "merged_into",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "merged_into"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "2330e66c9688b9a4a6772cc4b41d04a62251b285654a946fd2301c4fecda9333"
+}

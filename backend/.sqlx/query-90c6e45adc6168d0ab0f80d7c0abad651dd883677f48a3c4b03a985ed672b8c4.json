@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into entity_alias (entity_id, name, source)\n        select $1, a.name, 'merge' from entity_alias a where a.entity_id = $2\n        on conflict (entity_id, name) do nothing\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "90c6e45adc6168d0ab0f80d7c0abad651dd883677f48a3c4b03a985ed672b8c4"
+}

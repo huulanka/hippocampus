@@ -16,6 +16,7 @@ use crate::echo;
 use crate::error::AppError;
 use crate::events;
 use crate::openrouter::SpokenAt;
+use crate::pipeline;
 use crate::structuring;
 
 /// Resolves which timezone a capture's relative time expressions should be
@@ -82,7 +83,7 @@ pub async fn create(
             timezone,
         },
     )
-    .await?;
+    .await;
 
     Ok(Json(CaptureAccepted {
         event_id: stored.id,
@@ -237,7 +238,7 @@ pub async fn create_from_audio(
             timezone,
         },
     )
-    .await?;
+    .await;
 
     Ok(Json(CaptureAccepted {
         event_id: stored.id,
@@ -247,21 +248,17 @@ pub async fn create_from_audio(
     }))
 }
 
-/// Everything that happens to a capture's text once it exists, whatever
-/// produced it: make it findable, structure it, and start judging its
-/// echoes.
+/// Embeds a capture and puts it in the search index.
 ///
-/// Nothing here waits for a model. Structuring never did; echo used to,
-/// and that inline wait was the whole of the 28 seconds a capture took
-/// against the NAS — for a note that was already safely stored after a
-/// quarter of a second. The echo now arrives behind the response, and
-/// [`super::AppState`] remembers it so it is never computed twice.
-async fn index_capture(
+/// Split out so the retry loop can do exactly this much and no more: it
+/// is the only part of finishing a capture that is local and free, and it
+/// is the part everything else — search, echo, the entity pages' links
+/// back — is built on.
+pub(crate) async fn index_for_search(
     state: &AppState,
     capture_event_id: Uuid,
     occurred_at: chrono::DateTime<chrono::Utc>,
     transcript: &str,
-    spoken_at: SpokenAt,
 ) -> Result<(), AppError> {
     let embedding: pgvector::Vector = state.embedder.embed_passage(transcript).await?.into();
 
@@ -280,19 +277,75 @@ async fn index_capture(
     .execute(&state.pool)
     .await?;
 
-    // Structuring is best-effort and never blocks or fails the capture —
-    // the original is already safely stored and stays re-derivable.
+    Ok(())
+}
+
+/// Everything that happens to a capture's text once it exists, whatever
+/// produced it: make it findable, structure it, and start judging its
+/// echoes.
+///
+/// Nothing here waits for a model. Structuring never did; echo used to,
+/// and that inline wait was the whole of the 28 seconds a capture took
+/// against the NAS — for a note that was already safely stored after a
+/// quarter of a second. The echo now arrives behind the response, and
+/// [`super::AppState`] remembers it so it is never computed twice.
+///
+/// And nothing here can fail the caller, which is the other half of the
+/// point. This used to be called with `?`, so a failed embedding answered
+/// a stored capture with a 500 — telling the client its note had not been
+/// saved when it had. A client that retries on failure turns that into a
+/// duplicate note, and a client that does not turns it into a note the
+/// user believes is lost. Both are worse than a capture that is briefly
+/// not yet searchable, which is what happens now: the work stays on
+/// `capture_pipeline` and [`crate::pipeline::watch`] comes back for it.
+async fn index_capture(
+    state: &AppState,
+    capture_event_id: Uuid,
+    occurred_at: chrono::DateTime<chrono::Utc>,
+    transcript: &str,
+    spoken_at: SpokenAt,
+) {
+    if let Err(err) = pipeline::begin(&state.pool, capture_event_id).await {
+        // Worth saying loudly: without this row the retry loop cannot
+        // see the capture, so a failure below would go back to being
+        // silent — the exact thing this is here to stop.
+        tracing::error!(
+            ?err,
+            %capture_event_id,
+            "could not record that this capture still needs finishing"
+        );
+    }
+
+    match index_for_search(state, capture_event_id, occurred_at, transcript).await {
+        Ok(()) => pipeline::mark_indexed(&state.pool, capture_event_id).await,
+        Err(err) => {
+            tracing::error!(
+                ?err,
+                %capture_event_id,
+                "could not index this capture for search; it will be retried"
+            );
+            // Structuring is not started either. It reads the same text
+            // through the same database, so a failure here almost always
+            // means the next call fails too — and it would spend money
+            // finding that out.
+            return;
+        }
+    }
+
+    // Structuring never blocks the capture — the original is already
+    // safely stored and stays re-derivable. What is new is that failing
+    // is recorded rather than only logged.
     tokio::spawn(structuring::structure_capture_in_background(
         state.pool.clone(),
         state.openrouter.clone(),
+        state.embedder.clone(),
         capture_event_id,
         transcript.to_string(),
         spoken_at,
+        state.retry.max_attempts,
     ));
 
     spawn_judging(state, capture_event_id);
-
-    Ok(())
 }
 
 /// Judges a capture's echo behind whatever response is being sent, unless
@@ -486,6 +539,7 @@ pub async fn entity_types(
         r#"
         select entity_type, count(*) as "count!"
         from entities
+        where merged_into is null
         group by entity_type
         order by count(*) desc, entity_type
         "#
@@ -825,7 +879,7 @@ pub async fn correct_transcript(
             timezone,
         },
     )
-    .await?;
+    .await;
 
     Ok(Json(TranscriptVersion {
         event_id: stored.id,
@@ -1086,3 +1140,92 @@ pub async fn redact(
 /// `CORRECTION_AUTHOR` exists: a deletion a person asked for must be
 /// distinguishable from anything a model did.
 const REDACTION_AUTHOR: &str = "user";
+
+/// What the backend has not finished yet.
+///
+/// Cheap on purpose — two counts over one indexed table — because the
+/// client asks for it on a timer so that a stalled capture surfaces on
+/// its own rather than waiting to be discovered.
+pub async fn pipeline_status(
+    State(state): State<AppState>,
+) -> Result<Json<contracts::PipelineStatus>, AppError> {
+    let (waiting, given_up) = pipeline::counts(&state.pool).await?;
+    Ok(Json(contracts::PipelineStatus { waiting, given_up }))
+}
+
+/// Asks for one more try at a capture the retry loop gave up on.
+///
+/// Runs it right away rather than only clearing the flag: someone pressing
+/// this wants to know whether it works now, and a button whose entire
+/// effect is invisible for the next five minutes teaches people not to
+/// trust it.
+pub async fn retry_capture(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<Uuid>,
+) -> Result<Json<contracts::PipelineStatus>, AppError> {
+    if !pipeline::revive(&state.pool, id).await? {
+        return Err(AppError::not_found(
+            "no such capture, or there is nothing left to finish for it",
+        ));
+    }
+
+    let items = pipeline::unfinished(
+        &state.pool,
+        state.timezone,
+        // Zero: the wait is exactly what is being overridden here.
+        std::time::Duration::ZERO,
+        // One row is expected — `revive` just made this capture the
+        // longest-waiting one — but the query is by age, not by id, so
+        // the guard below is what makes sure this acts on the right one.
+        16,
+    )
+    .await?;
+
+    if let Some(item) = items.iter().find(|item| item.capture_event_id == id) {
+        pipeline::finish(&state, item, state.retry.max_attempts).await;
+    }
+
+    let (waiting, given_up) = pipeline::counts(&state.pool).await?;
+    Ok(Json(contracts::PipelineStatus { waiting, given_up }))
+}
+
+/// Asks for one more try at everything that was given up on.
+///
+/// The sidebar's one action. Per-capture retry exists too, but the
+/// failure this is for is almost always one shared cause — a key that
+/// expired, a provider that was down — so the useful gesture is "try
+/// again", not "try again, twelve times, one capture at a time".
+pub async fn retry_all(
+    State(state): State<AppState>,
+) -> Result<Json<contracts::PipelineStatus>, AppError> {
+    let revived = sqlx::query!(
+        r#"
+        update capture_pipeline
+        set abandoned_at = null, attempts = 0, last_attempt_at = null, last_error = null
+        where abandoned_at is not null
+        "#,
+    )
+    .execute(&state.pool)
+    .await?
+    .rows_affected();
+
+    tracing::info!(revived, "asked to try the given-up captures again");
+
+    let items = pipeline::unfinished(
+        &state.pool,
+        state.timezone,
+        std::time::Duration::ZERO,
+        // Bounded even here. Someone pressing a button should not be able
+        // to start an unbounded run of paid calls; the loop picks up
+        // whatever this pass does not reach.
+        state.retry.batch,
+    )
+    .await?;
+
+    for item in &items {
+        pipeline::finish(&state, item, state.retry.max_attempts).await;
+    }
+
+    let (waiting, given_up) = pipeline::counts(&state.pool).await?;
+    Ok(Json(contracts::PipelineStatus { waiting, given_up }))
+}

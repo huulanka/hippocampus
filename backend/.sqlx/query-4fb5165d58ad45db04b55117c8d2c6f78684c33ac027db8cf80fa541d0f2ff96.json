@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        select entity_type, count(*) as \"count!\"\n        from entities\n        group by entity_type\n        order by count(*) desc, entity_type\n        ",
+  "query": "\n        select entity_type, count(*) as \"count!\"\n        from entities\n        where merged_into is null\n        group by entity_type\n        order by count(*) desc, entity_type\n        ",
   "describe": {
     "columns": [
       {
@@ -29,5 +29,5 @@
       null
     ]
   },
-  "hash": "e38dd94808b405342d9eae5aad06b8d4fd2291222bcc1385e6b65e27e7ad8147"
+  "hash": "4fb5165d58ad45db04b55117c8d2c6f78684c33ac027db8cf80fa541d0f2ff96"
 }

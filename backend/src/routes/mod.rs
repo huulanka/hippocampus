@@ -44,11 +44,22 @@ pub fn router() -> Router<AppState> {
             post(captures::correct_transcript),
         )
         .route("/captures/{id}/echo", get(captures::echo_for))
+        .route("/captures/{id}/retry", post(captures::retry_capture))
         .route("/captures/{id}/audio", get(captures::audio_for))
         .route("/entities", get(entities::list))
         .route("/entities/{id}", get(entities::detail))
+        .route("/entities/{id}/merge", post(entities::merge_entities))
+        .route("/entities/{id}/unmerge", post(entities::unmerge))
+        .route("/consolidation", get(entities::changelog))
+        .route("/consolidation/run", post(entities::consolidate_now))
+        .route(
+            "/consolidation/preview",
+            get(entities::consolidation_preview),
+        )
         .route("/entity-types", get(captures::entity_types))
         .route("/graph", get(graph::graph))
         .route("/resurface", get(resurface::resurface))
         .route("/search", get(search::search))
+        .route("/pipeline", get(captures::pipeline_status))
+        .route("/pipeline/retry", post(captures::retry_all))
 }

@@ -9,8 +9,9 @@ use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::embedding::Embedder;
 use crate::events;
-use crate::openrouter::{ExtractionResult, OpenRouterClient, SpokenAt};
+use crate::openrouter::{ExtractionResult, KnownEntity, KnownGraph, OpenRouterClient, SpokenAt};
 
 /// When an observation is about, once the model's ISO string has been
 /// pinned down. `at` is only set when a time of day was actually named —
@@ -118,38 +119,181 @@ pub fn resolve_when(when: &str, precision: Option<&str>, timezone: Tz) -> Option
 }
 
 /// Runs structuring for a capture in the background: never blocks or fails
-/// the ingest request. A failure here just means this capture stays
-/// un-structured until the next attempt — acceptable at personal-note
-/// volume, and always re-derivable from the untouched raw capture event.
+/// the ingest request.
+///
+/// A failure here no longer ends the matter. The outcome is written to
+/// `capture_pipeline` either way, and [`crate::pipeline::watch`] comes
+/// back for whatever did not succeed — which is the difference between a
+/// capture that is temporarily unstructured and one that is permanently
+/// meaningless.
 pub async fn structure_capture_in_background(
     pool: PgPool,
     client: Option<std::sync::Arc<OpenRouterClient>>,
+    embedder: Embedder,
     source_event_id: Uuid,
     transcript: String,
     spoken_at: SpokenAt,
+    max_attempts: i32,
 ) {
     let Some(client) = client else {
+        // Not recorded as a failure: there is no model configured, so
+        // this capture is not waiting on anything that a retry would fix.
         tracing::debug!("OPENROUTER_API_KEY not set, skipping structuring");
         return;
     };
 
-    if let Err(err) =
-        structure_capture(&pool, &client, source_event_id, &transcript, spoken_at).await
+    match structure_capture(
+        &pool,
+        &client,
+        &embedder,
+        source_event_id,
+        &transcript,
+        spoken_at,
+    )
+    .await
     {
-        tracing::error!(?err, %source_event_id, "structuring failed for capture");
+        Ok(()) => {
+            crate::pipeline::record_structuring(
+                &pool,
+                source_event_id,
+                client.model_name(),
+                None,
+                max_attempts,
+            )
+            .await;
+        }
+        Err(err) => {
+            tracing::error!(?err, %source_event_id, "structuring failed for capture");
+            crate::pipeline::record_structuring(
+                &pool,
+                source_event_id,
+                client.model_name(),
+                // `{:#}` so the chain reads "sending the request failed:
+                // connection refused" rather than only the outermost
+                // sentence, which is usually the least useful one.
+                Some(&format!("{err:#}")),
+                max_attempts,
+            )
+            .await;
+        }
+    }
+}
+
+/// How many known entities are offered to the extraction.
+///
+/// Capped because this is sent on every capture and paid for by the
+/// token. Forty is roughly 600 tokens of names and one-line summaries —
+/// cheap next to the cost of finding and merging the duplicate it
+/// prevents.
+const KNOWN_ENTITY_BUDGET: i64 = 40;
+
+/// How much of an entity's name has to match somewhere in the transcript
+/// before it is worth showing the model.
+///
+/// Low on purpose: this decides what the model gets to *consider*, not
+/// what it resolves to. A missed candidate is a duplicate that has to be
+/// merged later; a spurious one costs a few tokens and is ignored.
+const KNOWN_ENTITY_MIN_SIMILARITY: f64 = 0.5;
+
+/// How many recently touched entities are offered regardless of whether
+/// they resemble the transcript.
+///
+/// Recency is a strong prior in a personal note system: notes come in
+/// bursts about the same subject, and the second note of a burst often
+/// names the thing differently from the first ("Hippocampus" after
+/// "Hippocampus Projekt"). Trigram matching alone would miss exactly
+/// those, because the wording that needs resolving is the wording that
+/// does not match.
+const RECENT_ENTITY_BUDGET: i64 = 12;
+
+/// What the graph already holds that could bear on this transcript.
+///
+/// Two sources, because they catch different failures — see the constants
+/// above. Failing to build this is not fatal: extraction then behaves as
+/// it did before, producing a duplicate that the consolidation run picks
+/// up later. A capture is never lost over it.
+async fn known_graph(pool: &PgPool, transcript: &str) -> KnownGraph {
+    let types = sqlx::query_scalar!(
+        r#"
+        select r.entity_type as "entity_type!"
+        from entity_type_registry r
+        left join entities e on e.entity_type = r.entity_type
+        group by r.entity_type
+        order by count(e.id) desc, r.entity_type
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_else(|err| {
+        tracing::warn!(?err, "could not read the entity type vocabulary");
+        Vec::new()
+    });
+
+    let entities = sqlx::query!(
+        r#"
+        -- Column overrides because sqlx cannot see through a UNION to
+        -- the NOT NULL on the underlying columns.
+        (
+            select e.id, e.name as "name!", e.entity_type as "entity_type!", e.current_summary
+            from entities e
+            where word_similarity(e.name, $1) > $2
+            order by word_similarity(e.name, $1) desc
+            limit $3
+        )
+        union
+        (
+            select e.id, e.name as "name!", e.entity_type as "entity_type!", e.current_summary
+            from entities e
+            order by e.updated_at desc
+            limit $4
+        )
+        "#,
+        transcript,
+        KNOWN_ENTITY_MIN_SIMILARITY as f32,
+        KNOWN_ENTITY_BUDGET,
+        RECENT_ENTITY_BUDGET,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap_or_else(|err| {
+        tracing::warn!(
+            ?err,
+            "could not look for entities this capture may be about"
+        );
+        Vec::new()
+    });
+
+    KnownGraph {
+        types,
+        entities: entities
+            .into_iter()
+            .map(|row| KnownEntity {
+                name: row.name,
+                entity_type: row.entity_type,
+                summary: row.current_summary,
+            })
+            .collect(),
     }
 }
 
 async fn structure_capture(
     pool: &PgPool,
     client: &OpenRouterClient,
+    embedder: &Embedder,
     source_event_id: Uuid,
     transcript: &str,
     spoken_at: SpokenAt,
 ) -> anyhow::Result<()> {
-    let extraction = client.extract(transcript, spoken_at).await?;
+    let known = known_graph(pool, transcript).await;
+    tracing::debug!(
+        types = known.types.len(),
+        candidates = known.entities.len(),
+        "extraction knows this much of the existing graph"
+    );
+    let extraction = client.extract(transcript, spoken_at, &known).await?;
     apply_extraction(
         pool,
+        embedder,
         source_event_id,
         &extraction,
         client.model_name(),
@@ -160,6 +304,7 @@ async fn structure_capture(
 
 async fn apply_extraction(
     pool: &PgPool,
+    embedder: &Embedder,
     source_event_id: Uuid,
     extraction: &ExtractionResult,
     model: &str,
@@ -175,6 +320,7 @@ async fn apply_extraction(
 
         let id = resolve_or_create_entity(
             pool,
+            embedder,
             &entity.entity_type,
             &entity.name,
             source_event_id,
@@ -212,9 +358,139 @@ async fn apply_extraction(
     Ok(())
 }
 
+/// The vector for an entity, or `None` when the model could not be asked.
+///
+/// A failure is not propagated: the entity is worth having without its
+/// embedding, and the alternative would be losing an observation because
+/// a local model hiccuped. A row with a null embedding is also exactly
+/// what a later backfill looks for.
+async fn embed_entity(
+    embedder: &Embedder,
+    entity_type: &str,
+    name: &str,
+) -> Option<pgvector::Vector> {
+    match embedder
+        .embed_passage(&format!("{name} ({entity_type})"))
+        .await
+    {
+        Ok(vector) => Some(vector.into()),
+        Err(err) => {
+            tracing::warn!(?err, %name, "could not embed this entity; leaving it unembedded");
+            None
+        }
+    }
+}
+
+/// How alike two names have to be before they are taken to be the same
+/// thing without anyone reading them.
+///
+/// High, and deliberately so. This runs unsupervised on every capture,
+/// and the measured data says similarity alone cannot tell a duplicate
+/// from a relation: `Kardamom-Espresso ↔ Espresso` scores 0.50 and must
+/// never merge, while `Aufguss ↔ Finnischer Aufguss` scores 0.42 and
+/// must. There is no threshold between them, so this one sits far above
+/// both and only catches what is nearly a spelling difference —
+/// "Hippocampus Projekt" against "Hippocampus-Projekt". Everything in the
+/// ambiguous middle is left to the consolidation run, which reads both
+/// entities before deciding (docs/entity-resolution.md).
+const SAME_NAME_SIMILARITY: f64 = 0.9;
+
+/// Finds the entity an extracted name refers to, if the graph already
+/// holds it.
+///
+/// Three attempts, widening:
+///
+/// 1. Exact name and exact type — what this used to do, and nothing else.
+/// 2. **Exact name, any type.** This is the one that matters most. The
+///    type vocabulary was invented per note, so the graph held `Sauna` as
+///    both `Ort` and `Aktivität`, `Northwind` as both `Organisation`
+///    and `Kunde`, `Kardamom-Espresso` as both `Idee` and `Getränk` —
+///    four of the six duplicate pairs in the real data, all of them the
+///    same thing under two type names.
+/// 3. Near-identical name, same type, above [`SAME_NAME_SIMILARITY`].
+///
+/// The type of the surviving entity is left alone. Re-typing is a
+/// decision about the whole vocabulary, not about one capture, and it
+/// belongs to the consolidation run.
+///
+/// The risk this accepts is step 2: two genuinely different things with
+/// the same name ("Golf" the sport, "Golf" the car) resolve to one. For a
+/// single speaker's own memory that is rare, and the alternative —
+/// guaranteed fragmentation of everything whose type wording drifts — is
+/// both certain and worse.
+async fn resolve_existing(
+    pool: &PgPool,
+    entity_type: &str,
+    name: &str,
+) -> anyhow::Result<Option<Uuid>> {
+    let exact = sqlx::query_scalar!(
+        r#"select id from entities where entity_type = $1 and lower(name) = lower($2)"#,
+        entity_type,
+        name,
+    )
+    .fetch_optional(pool)
+    .await?;
+    if let Some(id) = exact {
+        return Ok(Some(id));
+    }
+
+    // Any type. Ordered by how many observations already hang off the
+    // entity, so a name that exists twice resolves onto the one that is
+    // actually being used rather than whichever row came first.
+    let by_name = sqlx::query!(
+        r#"
+        select e.id, e.entity_type
+        from entities e
+        left join observations o on o.entity_id = e.id
+        where lower(e.name) = lower($1)
+        group by e.id, e.entity_type
+        order by count(o.id) desc
+        limit 1
+        "#,
+        name,
+    )
+    .fetch_optional(pool)
+    .await?;
+    if let Some(row) = by_name {
+        tracing::info!(
+            %name,
+            extracted_type = %entity_type,
+            existing_type = %row.entity_type,
+            "same name under a different type; resolved onto the existing entity"
+        );
+        return Ok(Some(row.id));
+    }
+
+    let near = sqlx::query!(
+        r#"
+        select e.id, e.name
+        from entities e
+        where e.entity_type = $1 and similarity(e.name, $2) >= $3
+        order by similarity(e.name, $2) desc
+        limit 1
+        "#,
+        entity_type,
+        name,
+        SAME_NAME_SIMILARITY as f32,
+    )
+    .fetch_optional(pool)
+    .await?;
+    if let Some(row) = near {
+        tracing::info!(
+            extracted = %name,
+            existing = %row.name,
+            "near-identical name; resolved onto the existing entity"
+        );
+        return Ok(Some(row.id));
+    }
+
+    Ok(None)
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn resolve_or_create_entity(
     pool: &PgPool,
+    embedder: &Embedder,
     entity_type: &str,
     name: &str,
     source_event_id: Uuid,
@@ -222,16 +498,10 @@ async fn resolve_or_create_entity(
     model: &str,
     happened: Option<Happened>,
 ) -> anyhow::Result<Uuid> {
-    let existing = sqlx::query!(
-        r#"select id from entities where entity_type = $1 and lower(name) = lower($2)"#,
-        entity_type,
-        name,
-    )
-    .fetch_optional(pool)
-    .await?;
+    let existing = resolve_existing(pool, entity_type, name).await?;
 
     let entity_id = match existing {
-        Some(row) => row.id,
+        Some(row) => row,
         None => {
             let id = Uuid::new_v4();
 
@@ -252,11 +522,20 @@ async fn resolve_or_create_entity(
             )
             .await?;
 
+            // Embedded on creation. The column and its HNSW index have
+            // existed since migration 0001 and nothing ever wrote to them
+            // — 0 of 78 entities had one — so the semantic half of
+            // finding "is this thing already in here somewhere" simply
+            // did not work. Name and type together, because the name
+            // alone is often a single word with no context ("Aufguss").
+            let embedding = embed_entity(embedder, entity_type, name).await;
+
             sqlx::query!(
-                r#"insert into entities (id, entity_type, name) values ($1, $2, $3)"#,
+                r#"insert into entities (id, entity_type, name, embedding) values ($1, $2, $3, $4)"#,
                 id,
                 entity_type,
                 name,
+                embedding as _,
             )
             .execute(pool)
             .await?;
@@ -361,6 +640,54 @@ async fn record_relation(
     .await?;
 
     Ok(())
+}
+
+/// How many entities one backfill pass embeds.
+///
+/// Local and free, so the only reason to bound it at all is to keep one
+/// pass from holding the embedder for a long stretch while captures are
+/// arriving.
+const EMBEDDING_BACKFILL_BATCH: i64 = 200;
+
+/// Gives an embedding to entities that have none.
+///
+/// Two populations need this and they are the same shape: every entity
+/// created before entities were embedded at all (78 of 78 when this was
+/// written), and the occasional later one whose embedding failed. Returns
+/// how many it filled, so a caller can tell "done" from "more to do".
+pub async fn backfill_entity_embeddings(
+    pool: &PgPool,
+    embedder: &Embedder,
+) -> anyhow::Result<usize> {
+    let rows = sqlx::query!(
+        r#"
+        select id, name, entity_type
+        from entities
+        where embedding is null
+        order by updated_at desc
+        limit $1
+        "#,
+        EMBEDDING_BACKFILL_BATCH,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut filled = 0usize;
+    for row in rows {
+        let Some(embedding) = embed_entity(embedder, &row.entity_type, &row.name).await else {
+            continue;
+        };
+        sqlx::query!(
+            r#"update entities set embedding = $2 where id = $1"#,
+            row.id,
+            embedding as _,
+        )
+        .execute(pool)
+        .await?;
+        filled += 1;
+    }
+
+    Ok(filled)
 }
 
 #[cfg(test)]

@@ -43,6 +43,16 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 # workspace, CI included. `ort` ships prebuilt binaries.
 transcribe-rs = { version = "0.3", features = ["onnx"] }
 iana-time-zone = "0.1"
+# The outbox names its entries and stamps them. Both are on disk in files
+# the user can read, so they are spelled out here rather than reached
+# through `contracts`.
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+
+[dev-dependencies]
+# `macros` only here: the gated outbox round-trip test needs
+# `#[tokio::test]`; the app itself runs on Tauri's own runtime.
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [profile.release]
 codegen-units = 1

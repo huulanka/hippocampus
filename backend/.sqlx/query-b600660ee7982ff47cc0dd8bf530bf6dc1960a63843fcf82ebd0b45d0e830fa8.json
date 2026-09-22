@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update entities set merged_into = null, updated_at = now() where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b600660ee7982ff47cc0dd8bf530bf6dc1960a63843fcf82ebd0b45d0e830fa8"
+}

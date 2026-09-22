@@ -53,6 +53,76 @@ impl SpokenAt {
     }
 }
 
+/// One thing the graph already holds, offered to the extraction so it can
+/// recognise it rather than invent a variant of it.
+#[derive(Debug, Clone)]
+pub struct KnownEntity {
+    pub name: String,
+    pub entity_type: String,
+    pub summary: Option<String>,
+}
+
+/// What the memory already contains, as far as it could bear on this
+/// transcript.
+///
+/// The cheapest half of entity resolution: a name the model reuses is a
+/// duplicate that never has to be found and merged afterwards. Measured
+/// on the real graph, four of the six duplicate pairs existed *only*
+/// because the type vocabulary was invented afresh per note — `Sauna`
+/// as both `Ort` and `Aktivität`, `Northwind` as both `Organisation`
+/// and `Kunde`. Those pairs simply do not arise once the model is told
+/// which types are already in use.
+#[derive(Debug, Clone, Default)]
+pub struct KnownGraph {
+    /// Entity types already in use, most-used first.
+    pub types: Vec<String>,
+    /// Entities that might be what this transcript is about.
+    pub entities: Vec<KnownEntity>,
+}
+
+impl KnownGraph {
+    /// The block handed to the model.
+    ///
+    /// The closing sentence is not decoration. Without it a model shown
+    /// forty known entities helpfully returns all forty, each with a
+    /// plausible observation it invented — which in a memory system is
+    /// the one unforgivable output, because a fabricated memory is
+    /// indistinguishable from a real one.
+    fn describe(&self) -> String {
+        let mut out = String::new();
+
+        if !self.types.is_empty() {
+            out.push_str(
+                "Entity types already in use in this person's memory. Reuse one of these                  whenever it fits; invent a new type only when none of them does:\n",
+            );
+            out.push_str(&self.types.join(", "));
+            out.push_str("\n\n");
+        }
+
+        if !self.entities.is_empty() {
+            out.push_str(
+                "Things already in this person's memory that this transcript may be                  referring to. If it is talking about one of them, use that exact `name`                  and `entity_type` rather than a variant or a synonym of it:\n",
+            );
+            for entity in &self.entities {
+                out.push_str(&format!("- {} ({})", entity.name, entity.entity_type));
+                if let Some(summary) = entity.summary.as_deref().filter(|s| !s.trim().is_empty()) {
+                    // Truncated: this is here to disambiguate which
+                    // "Paul" is meant, not to retell what is known about
+                    // him.
+                    let short: String = summary.chars().take(160).collect();
+                    out.push_str(&format!(" — {short}"));
+                }
+                out.push('\n');
+            }
+            out.push_str(
+                "\nThis list is for recognition only. Include an entity in your answer ONLY                  if THIS transcript actually says something about it. Never invent an                  observation for an entity the transcript does not mention.\n\n",
+            );
+        }
+
+        out
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ExtractedRelation {
     pub from: String,
@@ -70,7 +140,13 @@ pub struct ExtractionResult {
 
 const SYSTEM_PROMPT: &str = r#"You extract structured knowledge from a short personal voice-note transcript. The transcript may be in German or English.
 
-Identify every distinct thing worth remembering: people, projects, topics, ideas, decisions, tasks, or literally anything else the speaker mentions (health, recipes, travel, hobbies — anything). Do not force items into a fixed category list; use whatever entity_type fits best (reuse common ones like "Person", "Projekt", "Thema", "Idee", "Entscheidung", "Aufgabe" when they genuinely fit, invent others freely otherwise).
+Identify every distinct thing worth remembering: people, projects, topics, ideas, decisions, tasks, or literally anything else the speaker mentions (health, recipes, travel, hobbies — anything).
+
+Naming matters more than coverage here, because these names are how the speaker will find this again. Two rules:
+- If the user message lists entity types already in use, prefer one of those. Invent a new type only when none of them honestly fits. A type that already exists under a different word ("Kunde" when "Organisation" is in the list) is a wrong answer.
+- If the user message lists things already in memory and this transcript is about one of them, use that exact name. "Espresso mit Kardamom" when "Kardamom-Espresso" is already known is a wrong answer; so is "Paul" when "Paul Hartmann" is known to be the person being talked about.
+
+Naming two genuinely different things the same is worse than naming one thing twice, so when you are unsure whether the transcript means the known entity or a new one, treat it as new.
 
 For each entity, write a short first-person observation capturing what was just learned about it from this transcript alone (not general knowledge).
 
@@ -110,12 +186,23 @@ impl OpenRouterClient {
         &self,
         transcript: &str,
         spoken_at: SpokenAt,
+        known: &KnownGraph,
     ) -> anyhow::Result<ExtractionResult> {
+        // Known graph first, then the moment, then the words. The order
+        // is the order the model needs them in: what things are called,
+        // when this was said, what was said.
+        let user_message = format!(
+            "{}{}\n\nTranscript:\n{}",
+            known.describe(),
+            spoken_at.describe(),
+            transcript,
+        );
+
         let body = json!({
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": format!("{}\n\nTranscript:\n{}", spoken_at.describe(), transcript)},
+                {"role": "user", "content": user_message},
             ],
             "response_format": {"type": "json_object"},
             "provider": {"zdr": self.zdr},
@@ -243,5 +330,154 @@ mod tests {
     #[test]
     fn rejects_garbage() {
         assert!(parse_extraction("not json at all").is_err());
+    }
+}
+
+/// One entity, as the consolidation run shows it to the model.
+#[derive(Debug, Clone, Serialize)]
+pub struct EntityDossier {
+    /// Short handle used in the answer instead of a UUID. Models are
+    /// unreliable at copying 36 hex characters and very reliable at
+    /// copying `e12`.
+    pub tag: String,
+    pub name: String,
+    pub entity_type: String,
+    /// Other names this entity has answered to.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+    /// What the person actually said about it, verbatim. This is the
+    /// evidence — everything the model decides has to be defensible from
+    /// these sentences and nothing else.
+    pub observations: Vec<String>,
+}
+
+/// What one consolidation pass decided.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ConsolidationPlan {
+    #[serde(default)]
+    pub merges: Vec<PlannedMerge>,
+    #[serde(default)]
+    pub retypes: Vec<PlannedRetype>,
+    #[serde(default)]
+    pub relations: Vec<PlannedRelation>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlannedMerge {
+    /// Tag of the entity that survives.
+    pub keep: String,
+    /// Tags of the entities folded into it.
+    pub absorb: Vec<String>,
+    /// What the surviving entity should be called afterwards. Usually the
+    /// fuller form; every other name is kept as an alias regardless.
+    #[serde(default)]
+    pub name: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlannedRetype {
+    pub tag: String,
+    pub entity_type: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PlannedRelation {
+    pub from: String,
+    pub to: String,
+    pub relation_type: String,
+    pub reason: String,
+}
+
+/// The rules the consolidation run works under.
+///
+/// Written at length on purpose. This is the one prompt in the system
+/// that is allowed to *change* the shape of what the person knows rather
+/// than add to it, and the thing it can destroy — a distinction the
+/// person actually draws — cannot be recovered by re-reading the notes,
+/// because the notes will still be there and the graph will merely look
+/// tidy and wrong.
+///
+/// The central rule comes from the user, who drew it himself about Sauna
+/// and Finnischer Aufguss before any of this was built: things that
+/// belong together are not necessarily the same thing. Merging is for one
+/// thing under two names. Everything else that belongs together is an
+/// edge.
+const CONSOLIDATION_PROMPT: &str = r#"You are tidying one person's private knowledge graph. It was built by extracting entities from their spoken notes, one note at a time, with no memory between notes — so the same thing often ended up recorded several times under different names or different type words.
+
+The person's notes themselves are immutable and you never see or change them. You are only changing how what they said is organised.
+
+You get a set of entities. Each has a tag, a name, a type, any other names it has answered to, and the observations recorded about it — the person's own words. Those observations are your only evidence. Never use outside knowledge about a real place, company or public figure to justify a decision.
+
+Decide three kinds of thing.
+
+1. MERGE — two or more entries are ONE thing recorded more than once.
+   Merge when the difference is spelling, punctuation, word order, an abbreviation, or a fuller form of the same name: "Kardamom-Espresso" and "Espresso mit Kardamom"; "Hippocampus" and "Hippocampus Projekt"; "Paul" and "Paul Hartmann" when the observations show it is the same person.
+   Do NOT merge a specific thing with the general thing it belongs to, and do NOT merge a thing with something it merely belongs to or is named after. Espresso and Kardamom-Espresso are not the same. Coffee and espresso are not the same. An ingredient and the dish it goes into are not the same. A project and the customer it is for are not the same — "Northwind Abrechnungsprojekt" is a project AT the company "Northwind", so those are two entries and one edge, never one entry. Sharing a word in the name is not evidence of being the same thing; it is usually evidence of an edge. If your own reason for merging contains "gehört zu", "beim Kunden", "ist Teil von", "findet statt in", "eine Art von" or anything like them, you have described a relation and must put it under relations instead.
+   Merging destroys a distinction the person draws and will need again.
+   Do NOT merge two people, projects or places whose names merely resemble each other. "Hafenportal" and "HPortal" are two projects. If the observations do not positively show these are the same thing, leave them apart.
+   Choose the entry to keep, and give the name it should carry afterwards — normally the fullest, most specific form. Every other name is kept as a searchable alias automatically, so nothing is lost by choosing.
+
+2. RETYPE — the type word is wrong, or is a synonym of one already used in this set.
+   The type vocabulary was invented afresh per note, so synonyms accumulate. Unify them onto whichever word best fits the things that carry it. Prefer a type that already appears in this set. You MAY introduce a new type when nothing existing honestly fits — this vocabulary is meant to keep growing with the person's life, not to be frozen.
+   Do not retype something merely to reduce the number of types. A type with one member that genuinely describes it is fine.
+
+3. RELATE — two entries belong together but are not the same thing.
+   This is where the pairs you refused to merge go: the specific and the general, the project and its customer, the dish and its ingredient, the person and their employer. Use a short lowercase German or English relation_type that reads as a sentence from `from` to `to`, and reuse a relation type you have already used in this answer rather than coining a second word for the same link.
+   Only relate things the observations actually connect. Two notes that happen to mention food are not thereby related.
+
+Across all three: when you are unsure, do nothing. Two entries left apart cost the person a little tidiness. Two different things fused into one cost them a distinction, silently, and it will look correct afterwards. Those costs are not comparable. An empty answer is a good answer.
+
+Every decision needs a `reason`: one short sentence, in the language of the observations, that a person reading the changelog can check against their own notes.
+
+Respond with ONLY this JSON object, no prose, no markdown fences:
+{"merges": [{"keep": "e1", "absorb": ["e7"], "name": "...", "reason": "..."}], "retypes": [{"tag": "e3", "entity_type": "...", "reason": "..."}], "relations": [{"from": "e1", "to": "e4", "relation_type": "...", "reason": "..."}]}
+
+Use {"merges": [], "retypes": [], "relations": []} when nothing should change."#;
+
+impl OpenRouterClient {
+    /// Asks the model what should be folded together, retyped or linked.
+    pub async fn consolidate(
+        &self,
+        dossiers: &[EntityDossier],
+    ) -> anyhow::Result<ConsolidationPlan> {
+        let listing = serde_json::to_string_pretty(dossiers)?;
+
+        let body = json!({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": CONSOLIDATION_PROMPT},
+                {"role": "user", "content": format!("Entities:\n{listing}")},
+            ],
+            "response_format": {"type": "json_object"},
+            "provider": {"zdr": self.zdr},
+        });
+
+        let started = std::time::Instant::now();
+        let response = self
+            .http
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .bearer_auth(&self.api_key)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        let payload: Value = response.json().await?;
+        crate::telemetry::model_call("consolidation", &self.model, &payload, started.elapsed());
+
+        let content = payload["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("consolidation response had no content"))?;
+
+        let cleaned = content
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim();
+
+        Ok(serde_json::from_str(cleaned)?)
     }
 }

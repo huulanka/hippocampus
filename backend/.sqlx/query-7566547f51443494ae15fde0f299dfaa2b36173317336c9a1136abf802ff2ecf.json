@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        update capture_pipeline\n        set abandoned_at = null, attempts = 0, last_attempt_at = null, last_error = null\n        where abandoned_at is not null\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "7566547f51443494ae15fde0f299dfaa2b36173317336c9a1136abf802ff2ecf"
+}

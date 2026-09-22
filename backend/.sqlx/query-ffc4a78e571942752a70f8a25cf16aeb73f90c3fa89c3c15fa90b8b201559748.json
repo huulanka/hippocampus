@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from entity_alias where entity_id = $1 and source = 'merge'\n           and name in (select name from entity_alias where entity_id = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ffc4a78e571942752a70f8a25cf16aeb73f90c3fa89c3c15fa90b8b201559748"
+}

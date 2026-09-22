@@ -16,6 +16,18 @@ pub struct AppError {
     source: anyhow::Error,
 }
 
+/// Prints the cause, not the wrapper.
+///
+/// Written out rather than derived because the point of logging one of
+/// these is always the underlying fault — the status and the sanitised
+/// client message are the two things a reader already knows by the time
+/// they are looking at the log line.
+impl std::fmt::Debug for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.source)
+    }
+}
+
 impl AppError {
     pub fn bad_request(message: impl Into<String>) -> Self {
         let message = message.into();

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id, entity_type, name, current_summary, created_at from entities where id = $1",
+  "query": "\n        select\n            en.id,\n            en.entity_type,\n            en.name,\n            en.current_summary,\n            count(distinct o.source_event_id) as \"capture_count!\",\n            min(o.created_at) as \"first_seen!\",\n            max(o.created_at) as \"last_seen!\"\n        from entities en\n        join observations o on o.entity_id = en.id\n        where en.merged_into is null\n        group by en.id, en.entity_type, en.name, en.current_summary\n        having count(distinct o.source_event_id) >= 2\n        order by max(o.created_at) desc\n        limit $1\n        ",
   "describe": {
     "columns": [
       {
@@ -49,19 +49,26 @@
       },
       {
         "ordinal": 4,
-        "name": "created_at",
+        "name": "capture_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "first_seen!",
         "type_info": "Timestamptz",
-        "origin": {
-          "Table": {
-            "table": "entities",
-            "name": "created_at"
-          }
-        }
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_seen!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Int8"
       ]
     },
     "nullable": [
@@ -69,8 +76,10 @@
       false,
       false,
       true,
-      false
+      null,
+      null,
+      null
     ]
   },
-  "hash": "5a749ef16c608eb40d39eb5728d6e62779e4fcaeace5e41b9a51894e890d2b8d"
+  "hash": "871bc8c31873bd6acdc2293a3068d8ee46ffe233757e4f39a2e3d7a6a0d639a7"
 }

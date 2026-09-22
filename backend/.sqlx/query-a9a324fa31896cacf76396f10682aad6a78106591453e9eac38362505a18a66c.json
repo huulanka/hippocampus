@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with live as (\n            select e.id, e.name, e.entity_type, e.created_at,\n                   (select count(*) from observations o where o.entity_id = e.id) as \"weight!\"\n            from entities e\n            where e.merged_into is null\n        ),\n        ranked as (\n            select *,\n                   row_number() over (\n                       partition by lower(name)\n                       order by \"weight!\" desc, created_at\n                   ) as rank\n            from live\n        )\n        select\n            keep.id as \"target_id!\", keep.name as \"target_name!\",\n            drop_it.id as \"source_id!\", drop_it.name as \"source_name!\",\n            drop_it.entity_type as \"source_type!\"\n        from ranked keep\n        join ranked drop_it\n          on lower(drop_it.name) = lower(keep.name) and drop_it.rank > 1\n        where keep.rank = 1\n          and not exists (\n            select 1 from entity_merge_block b\n            where b.lower_id = least(keep.id, drop_it.id)\n              and b.higher_id = greatest(keep.id, drop_it.id)\n          )\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "target_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "source_name!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "source_type!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "entity_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a9a324fa31896cacf76396f10682aad6a78106591453e9eac38362505a18a66c"
+}

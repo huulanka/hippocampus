@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select 1 from entity_merge_block\n        where lower_id = least($1::uuid, $2::uuid) and higher_id = greatest($1::uuid, $2::uuid)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "?column?",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e1420bd6960f73504f1cc2e76c6bf4df8524be016ec35cdac5fa9399c8903c37"
+}

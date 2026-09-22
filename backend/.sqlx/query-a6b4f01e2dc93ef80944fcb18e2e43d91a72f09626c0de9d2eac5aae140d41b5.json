@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            s.name as source_name, s.entity_type as source_type, s.merged_into as \"source_merged?\",\n            t.name as target_name, t.merged_into as \"target_merged?\"\n        from entities s, entities t\n        where s.id = $1 and t.id = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "source_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "entity_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source_merged?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "merged_into"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "target_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "target_merged?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "merged_into"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "a6b4f01e2dc93ef80944fcb18e2e43d91a72f09626c0de9d2eac5aae140d41b5"
+}

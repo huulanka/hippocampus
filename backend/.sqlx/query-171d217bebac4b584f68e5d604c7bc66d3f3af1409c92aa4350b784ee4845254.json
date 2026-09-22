@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update entities set last_consolidated_at = now() where id = any($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "171d217bebac4b584f68e5d604c7bc66d3f3af1409c92aa4350b784ee4845254"
+}

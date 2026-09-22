@@ -159,7 +159,11 @@ export interface EntityEdge {
   other_id: string;
   other_name: string;
   other_type: string;
-  source_event_id: string;
+  /// The capture this edge was read out of. `null` when the
+  /// consolidation run drew it across several captures — the only way an
+  /// edge between two things that were never mentioned in one breath can
+  /// exist.
+  source_event_id: string | null;
 }
 
 export interface Resurfaced {
@@ -338,6 +342,123 @@ export function getEcho(captureEventId: string, minRerank?: number): Promise<Ech
   if (minRerank !== undefined) params.set("min_rerank", String(minRerank));
   const query = params.toString();
   return request<EchoResponse>(`/captures/${captureEventId}/echo${query ? `?${query}` : ""}`);
+}
+
+/// What the backend has not finished yet. Mirrors
+/// `contracts::PipelineStatus`.
+export interface PipelineStatus {
+  waiting: number;
+  given_up: number;
+}
+
+/// Asked on a timer by the sidebar. Both numbers are normally zero; the
+/// point is the moment they are not — a capture whose structuring failed
+/// is otherwise completely invisible, because it is still in the timeline
+/// and still findable by its words and simply never has any meaning
+/// attached to it.
+export function getPipelineStatus(): Promise<PipelineStatus> {
+  return request<PipelineStatus>("/pipeline");
+}
+
+/// Folds one entity into another because you said so.
+///
+/// `sourceId` is the one that disappears from the graph; `intoId` is the
+/// one that survives and inherits its observations, edges and names.
+/// Nothing is deleted — the merge is an event and `unmergeEntity` takes
+/// it back.
+export function mergeEntities(sourceId: string, intoId: string): Promise<ChangeRecord[]> {
+  return request<ChangeRecord[]>(`/entities/${sourceId}/merge`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ into: intoId }),
+  });
+}
+
+export function unmergeEntity(sourceId: string): Promise<ChangeRecord[]> {
+  return request<ChangeRecord[]>(`/entities/${sourceId}/unmerge`, { method: "POST" });
+}
+
+/// How the view of your knowledge came to look the way it does. Your
+/// notes never change; this is everything that happened to their
+/// arrangement.
+export function getChangelog(): Promise<ChangeRecord[]> {
+  return request<ChangeRecord[]>("/consolidation");
+}
+
+/// One change the consolidation run made. Mirrors
+/// `contracts::ChangeRecord`.
+export interface ChangeRecord {
+  kind: "merged" | "renamed" | "retyped" | "related";
+  entity_id: string;
+  entity_name: string;
+  before: string;
+  after: string;
+  reason: string;
+  changed_at: string;
+  undo_id: string | null;
+  undone: boolean;
+}
+
+/// What a consolidation pass would do, if it ran. Mirrors
+/// `contracts::ConsolidationPreview`.
+export interface ConsolidationPreview {
+  same_name: PreviewMerge[];
+  considered: number;
+  merges: PreviewMerge[];
+  retypes: PreviewRetype[];
+  relations: PreviewRelation[];
+  note: string | null;
+}
+
+export interface PreviewMerge {
+  keep: string;
+  absorb: string[];
+  new_name: string | null;
+  reason: string;
+}
+
+export interface PreviewRetype {
+  entity: string;
+  from: string;
+  to: string;
+  reason: string;
+}
+
+export interface PreviewRelation {
+  from: string;
+  to: string;
+  relation_type: string;
+  reason: string;
+}
+
+/// The same reasoning a real pass performs, applied and thrown away.
+export function getConsolidationPreview(): Promise<ConsolidationPreview> {
+  return request<ConsolidationPreview>("/consolidation/preview");
+}
+
+export interface RunReport {
+  merged_by_name: number;
+  merged_by_judgement: number;
+  retyped: number;
+  related: number;
+  examined: number;
+  considered: number;
+}
+
+/// Runs a pass now rather than waiting for the timer.
+export function runConsolidation(): Promise<RunReport> {
+  return request<RunReport>("/consolidation/run", { method: "POST" });
+}
+
+/// Asks the backend for one more attempt at a capture it gave up on.
+export function retryCapture(eventId: string): Promise<PipelineStatus> {
+  return request<PipelineStatus>(`/captures/${eventId}/retry`, { method: "POST" });
+}
+
+/// Asks for one more attempt at everything the backend gave up on. The
+/// sidebar's action, because the cause is nearly always shared.
+export function retryStuck(): Promise<PipelineStatus> {
+  return request<PipelineStatus>("/pipeline/retry", { method: "POST" });
 }
 
 export function getCapture(eventId: string): Promise<CaptureDetail> {

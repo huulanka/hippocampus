@@ -1,4 +1,5 @@
 import { Mascot } from "../mascot";
+import { PendingWork } from "./PendingWork";
 import type { TabId } from "../App";
 import { lockNow, type LockStatus } from "../desktop";
 
@@ -85,6 +86,20 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
+    id: "changes",
+    label: "Changes",
+    icon: (
+      // Two states of one thing and an arrow between them: the log is
+      // about how the arrangement moved, not about the notes.
+      <svg width="14" height="14" viewBox="0 0 15 15">
+        <circle cx="3" cy="7.5" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        <circle cx="12" cy="7.5" r="2.2" fill="currentColor" />
+        <line x1="5.6" y1="7.5" x2="9" y2="7.5" stroke="currentColor" strokeWidth="1.3" />
+        <polyline points="8,5.8 9.8,7.5 8,9.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      </svg>
+    ),
+  },
+  {
     id: "chat",
     pending: "Not built yet",
     label: "Chat",
@@ -149,6 +164,11 @@ export function Sidebar({
           </div>
         ))}
       </nav>
+
+      {/* Above the lock control and the capture button, because it is the
+          only thing in this column that is ever urgent — and below the
+          navigation, because it is silent almost always. */}
+      <PendingWork />
 
       {armed && !lock.locked && (
         <div

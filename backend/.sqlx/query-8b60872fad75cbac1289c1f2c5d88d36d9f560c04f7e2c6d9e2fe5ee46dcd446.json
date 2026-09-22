@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select id from entities\n        where merged_into is null\n          and (\n            -- Never looked at.\n            last_consolidated_at is null\n            -- Or something has been said about it since it was.\n            or updated_at > last_consolidated_at\n            -- Or it has simply gone stale: the part that keeps the run\n            -- cyclical rather than reactive, so nothing sits unexamined\n            -- forever merely because it stopped being mentioned.\n            or last_consolidated_at < now() - make_interval(days => $2)\n          )\n        order by last_consolidated_at nulls first, updated_at desc\n        limit $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8b60872fad75cbac1289c1f2c5d88d36d9f560c04f7e2c6d9e2fe5ee46dcd446"
+}
