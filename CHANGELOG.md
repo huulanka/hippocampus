@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/huulanka/hippocampus/compare/v1.7.1...v1.8.0) (2026-09-22)
+
+
+### Features
+
+* a capture cannot be lost, and the graph tidies itself ([#46](https://github.com/huulanka/hippocampus/issues/46)) ([b307092](https://github.com/huulanka/hippocampus/commit/b307092218efa15e382b467351aaf31e512f6d22))
+
 ## [1.7.1](https://github.com/huulanka/hippocampus/compare/v1.7.0...v1.7.1) (2026-09-22)
 
 
