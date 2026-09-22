@@ -1,3 +1,10 @@
+## [1.9.1](https://github.com/huulanka/hippocampus/compare/v1.9.0...v1.9.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* echo judging backs off after a failure instead of retrying every poll ([#48](https://github.com/huulanka/hippocampus/issues/48)) ([4299563](https://github.com/huulanka/hippocampus/commit/4299563012cd19a5e9f14b4a45865752700f5419))
+
 # [1.9.0](https://github.com/huulanka/hippocampus/compare/v1.8.0...v1.9.0) (2026-09-22)
 
 
