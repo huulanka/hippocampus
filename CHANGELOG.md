@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/huulanka/hippocampus/compare/v1.6.0...v1.7.0) (2026-09-22)
+
+
+### Features
+
+* reading the notes asks for Touch ID, capturing does not ([#44](https://github.com/huulanka/hippocampus/issues/44)) ([bca8822](https://github.com/huulanka/hippocampus/commit/bca882209f9f0034d2178c0473b1b54d6f342477))
+
 # [1.6.0](https://github.com/huulanka/hippocampus/compare/v1.5.2...v1.6.0) (2026-09-22)
 
 
