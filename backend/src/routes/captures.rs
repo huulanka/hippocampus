@@ -348,25 +348,43 @@ async fn index_capture(
     spawn_judging(state, capture_event_id);
 }
 
+/// A capture's echo-judging slot: either a judgement is running for it, or
+/// one just failed and is cooling down before it may be retried.
+#[derive(Clone, Copy)]
+pub enum JudgeSlot {
+    InFlight,
+    FailedAt(std::time::Instant),
+}
+
 /// Judges a capture's echo behind whatever response is being sent, unless
-/// a judgement for it is already running.
+/// a judgement for it is already running or a previous failure is still
+/// within its backoff window.
 ///
 /// A failure is logged and otherwise ignored: the marker is only written
-/// on success, so the next read of this capture starts a fresh attempt.
-/// That is the retry, and it costs nothing when nobody looks.
+/// on success, so the next read of this capture starts a fresh attempt —
+/// once the backoff has passed. That is the retry, and it costs nothing
+/// when nobody looks. The backoff is what keeps it from costing something
+/// on every read while a provider is failing fast (a rate limit, say):
+/// without it, the client's 1.2s poll would turn one failing call into
+/// several paid calls a second for as long as anyone is watching.
 fn spawn_judging(state: &AppState, capture_event_id: Uuid) {
     {
-        let Ok(mut in_flight) = state.judging.lock() else {
+        let Ok(mut slots) = state.judging.lock() else {
             return;
         };
-        if !in_flight.insert(capture_event_id) {
-            return;
+        match slots.get(&capture_event_id) {
+            Some(JudgeSlot::InFlight) => return,
+            Some(JudgeSlot::FailedAt(at)) if at.elapsed() < state.echo_judge_retry_backoff => {
+                return;
+            }
+            Some(JudgeSlot::FailedAt(_)) | None => {}
         }
+        slots.insert(capture_event_id, JudgeSlot::InFlight);
     }
 
     let pool = state.pool.clone();
     let judge = state.judge.clone();
-    let in_flight = state.judging.clone();
+    let slots = state.judging.clone();
     let thresholds = echo::Thresholds {
         min_similarity: state.echo_min_similarity,
         min_score: state.echo_min_rerank,
@@ -375,15 +393,24 @@ fn spawn_judging(state: &AppState, capture_event_id: Uuid) {
     tokio::spawn(async move {
         let result =
             echo::judge_stored_capture(&pool, judge.as_deref(), capture_event_id, thresholds).await;
-        if let Err(err) = result {
-            tracing::warn!(
-                ?err,
-                %capture_event_id,
-                "echo judging failed; it will be retried the next time this capture is read"
-            );
-        }
-        if let Ok(mut in_flight) = in_flight.lock() {
-            in_flight.remove(&capture_event_id);
+        let Ok(mut slots) = slots.lock() else {
+            return;
+        };
+        match result {
+            Ok(()) => {
+                slots.remove(&capture_event_id);
+            }
+            Err(err) => {
+                tracing::warn!(
+                    ?err,
+                    %capture_event_id,
+                    "echo judging failed; it will be retried after a backoff"
+                );
+                slots.insert(
+                    capture_event_id,
+                    JudgeSlot::FailedAt(std::time::Instant::now()),
+                );
+            }
         }
     });
 }

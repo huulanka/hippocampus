@@ -78,6 +78,16 @@ retry when a judgement fails: the marker is only written on success. An
 in-flight set keeps a refreshed page from starting the same judgement
 twice, because each one is now a paid call.
 
+That set alone only stops *concurrent* duplicates. A judgement that fails
+fast — a provider rate limit answers in well under a second — clears the
+in-flight set the moment it fails, and the client polls every 1.2s while
+it waits. Left alone, that turns one failing call into a new paid call
+several times a second for as long as anyone is looking at the note,
+which both wastes money and keeps the rate limit from ever clearing. So a
+failure now also starts a cooldown (`ECHO_JUDGE_RETRY_BACKOFF_SECS`,
+default 20s) before the same capture may be retried — in-memory, like the
+in-flight set itself, since a restart clearing it is harmless.
+
 ### Judged off the machine
 `HIPPOCAMPUS_RERANKER` gains a third value, `remote`, and it is the
 default. The candidates still come from the local bi-encoder — that part

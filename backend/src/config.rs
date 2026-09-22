@@ -29,6 +29,12 @@ pub struct Config {
     pub judge: crate::judge::Choice,
     /// Which hosted model judges echoes when `judge` is `Remote`.
     pub echo_judge_model: String,
+    /// How long a failed echo judgement blocks a new attempt for the same
+    /// capture. Judging is triggered by every read of a not-yet-judged
+    /// capture, and the client polls every 1.2s while it waits — without
+    /// this, a single failing provider (a rate limit, say) turns into a
+    /// new paid call several times a second for as long as anyone looks.
+    pub echo_judge_retry_backoff: std::time::Duration,
     /// Expected `aud` of the Cloudflare Access token. Unset means access
     /// verification is switched off, which is how local development runs.
     pub cf_access_aud: Option<String>,
@@ -117,6 +123,10 @@ impl Config {
             judge,
             echo_judge_model: env_non_empty("ECHO_JUDGE_MODEL")
                 .unwrap_or_else(|| crate::judge::DEFAULT_JUDGE_MODEL.to_string()),
+            echo_judge_retry_backoff: std::time::Duration::from_secs(parse_secs(
+                "ECHO_JUDGE_RETRY_BACKOFF_SECS",
+                20,
+            )?),
             cf_access_aud: env_non_empty("CF_ACCESS_AUD"),
             cf_access_team_domain: env_non_empty("CF_ACCESS_TEAM_DOMAIN"),
             timezone: env_non_empty("HIPPOCAMPUS_TIMEZONE")

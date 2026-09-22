@@ -36,10 +36,18 @@ pub struct AppState {
     /// Shared rather than cloned: echo judging now happens in a spawned
     /// task, which outlives the request that started it.
     judge: Option<Arc<judge::Judge>>,
-    /// Captures currently being judged. Without it, opening a capture
-    /// that has no stored echo three times would start three judgements
-    /// of it — and each one is a paid call.
-    judging: Arc<std::sync::Mutex<std::collections::HashSet<uuid::Uuid>>>,
+    /// Per-capture echo judging state: in flight, or cooling down after a
+    /// failure. Without the in-flight half, opening a capture that has no
+    /// stored echo three times would start three judgements of it — and
+    /// each one is a paid call. Without the cooldown half, a judgement
+    /// that fails fast (a provider rate limit, say) would start a new one
+    /// on every read that follows — and the client reads every 1.2s while
+    /// it waits.
+    judging:
+        Arc<std::sync::Mutex<std::collections::HashMap<uuid::Uuid, routes::captures::JudgeSlot>>>,
+    /// How long a failed judgement blocks a new attempt for the same
+    /// capture. See `judging`.
+    echo_judge_retry_backoff: std::time::Duration,
     audio_dir: std::path::PathBuf,
     timezone: chrono_tz::Tz,
     /// How hard the background loop tries to finish a capture whose
@@ -143,7 +151,8 @@ async fn main() -> anyhow::Result<()> {
         echo_min_similarity: config.echo_min_similarity,
         echo_min_rerank: config.echo_min_rerank,
         judge,
-        judging: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+        judging: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        echo_judge_retry_backoff: config.echo_judge_retry_backoff,
         audio_dir: config.audio_dir.clone().into(),
         timezone: config.timezone,
         retry: config.retry,
