@@ -4,12 +4,15 @@ import { entityColor } from "../entityType";
 import {
   FLAT_VIEW,
   SETTLED_THRESHOLD,
+  declutterLabels,
   depthOpacity,
+  labelWidth,
   layoutFrom,
   nodeRadius,
   project,
   tick,
   unproject,
+  type LabelBox,
   type LaidOutEdge,
   type LaidOutNode,
   type View,
@@ -29,6 +32,36 @@ import {
 /// deep mode is real: the simulation runs in three dimensions and the
 /// result is projected here, rather than the whole drawing layer being
 /// swapped for a 3D engine to arrive at the same picture.
+///
+/// Full-bleed rather than a box in the content column, since 2026-09-22:
+/// this used to sit in a bordered `min(62vh, 620px)` rectangle under three
+/// rows of toolbar, which is not what "a graph you can walk" was supposed
+/// to feel like. The search, mode switches and type legend that used to
+/// sit above it are now a floating panel over the canvas instead, and can
+/// be hidden entirely.
+///
+/// A weak same-type attraction was added to the layout itself, in
+/// `graphLayout.ts`: pure repulsion plus a pull to the centre has only
+/// one stable shape once a graph has enough nodes and few enough edges to
+/// dominate it — a uniform shell around the origin — which is the literal
+/// reason deep mode always looked like a ball regardless of what the data
+/// said.
+///
+/// A glow-and-particle treatment was tried here first and taken back out
+/// the same day: on a corpus of 70-odd nodes almost everything ends up
+/// glowing, which is a picture where nothing stands out any more than
+/// before, and the particles drifting along edges carried no information
+/// — motion for its own sake. What is left leans on the one thing that
+/// still says something: `nodeRadius` (unchanged, mentions and degree),
+/// on flat colour from the app's own accents (`entityColor`), with no
+/// outline except on hover and focus.
+///
+/// Highlighting a node or an edge lights up two tiers, not one: `direct`
+/// is who touches it by a single edge, at full brightness with their
+/// names shown, same as before. `chain` is new — the rest of the same
+/// connected component, however many hops away, dimmed less than a truly
+/// unrelated node. The question a click is usually asking ("what is this
+/// tangled up with") reaches further than one hop.
 
 /// How far the pointer may travel between press and release and still
 /// count as a click rather than a drag.
@@ -52,15 +85,20 @@ const DRIFT_PER_FRAME = 0.0016;
 /// tooltip.
 const MAX_EDGE_LABEL = 26;
 /// How far a relation name sits off its own edge, perpendicular to it.
-const EDGE_LABEL_OFFSET = 9;
+const EDGE_LABEL_OFFSET = 13;
 /// How many entities the search offers at once.
 const MAX_MATCHES = 6;
 /// How many entity types get a chip before the rest are folded away. The
 /// extraction invents a type per capture, so a real corpus has thirty of
 /// them and twenty are one-offs — all of them at once is three lines of
-/// legend above a picture, which is the wrong way round. The same cap
-/// exists on the entities screen, for the same reason.
+/// legend above a picture, which is the wrong way round.
 const MAX_TYPE_CHIPS = 10;
+/// How many labels are shown without being asked for — by hovering,
+/// focusing, searching, or being next to whichever of those is
+/// happening. A sky is meant to be looked at before it is read; a name
+/// on every busy node is the wall of text that undid that the first time
+/// this screen went full-bleed.
+const MAX_LABELLED = 9;
 
 export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) => void }) {
   const [graph, setGraph] = useState<Graph | null>(null);
@@ -118,6 +156,13 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
   const [minMentions, setMinMentions] = useState(1);
   const [connectedOnly, setConnectedOnly] = useState(false);
   const [allTypes, setAllTypes] = useState(false);
+
+  /// Collapsed by default is wrong for a screen nobody has seen before,
+  /// and open by default is wrong for what this screen is trying to be —
+  /// so it opens once, and stays wherever it was left after that. A panel
+  /// that reopens itself every visit never earns the "look into the sky"
+  /// moment it is meant to protect.
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const frame = useRef<number | null>(null);
   const nodesRef = useRef<LaidOutNode[]>([]);
@@ -325,15 +370,45 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
     [animate],
   );
 
-  const neighbours = useMemo(() => {
+  /// Two tiers around whatever is focused or hovered, not one.
+  ///
+  /// `direct` is what used to be the only tier: the centre and whatever
+  /// touches it by one edge — still the ones that get full brightness and
+  /// their names shown. `chain` is new: the rest of the same connected
+  /// component, however many edges away. The user's own framing: "nicht
+  /// nur die nächsten Nachbarn... die komplette Kette, die komplette
+  /// Route". A relation two hops away is still part of the story a click
+  /// was asking about; only a different, disconnected part of the graph
+  /// should read as unrelated.
+  const { direct, chain } = useMemo(() => {
     const centre = focused ?? hovered;
-    if (!centre) return null;
-    const near = new Set<string>([centre]);
+    if (!centre) return { direct: null, chain: null };
+
+    const adjacency = new Map<string, string[]>();
     for (const edge of edges) {
-      if (edge.from === centre) near.add(edge.to);
-      if (edge.to === centre) near.add(edge.from);
+      (adjacency.get(edge.from) ?? adjacency.set(edge.from, []).get(edge.from)!).push(edge.to);
+      (adjacency.get(edge.to) ?? adjacency.set(edge.to, []).get(edge.to)!).push(edge.from);
     }
-    return near;
+
+    const direct = new Set<string>([centre]);
+    for (const edge of edges) {
+      if (edge.from === centre) direct.add(edge.to);
+      if (edge.to === centre) direct.add(edge.from);
+    }
+
+    const chain = new Set<string>([centre]);
+    const queue = [centre];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      for (const next of adjacency.get(id) ?? []) {
+        if (!chain.has(next)) {
+          chain.add(next);
+          queue.push(next);
+        }
+      }
+    }
+
+    return { direct, chain };
   }, [focused, hovered, edges]);
 
   /// Entities whose name contains what was typed. The graph is not
@@ -490,12 +565,12 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
     }
   }
 
-  if (error) return <p className="dim">Couldn't load the graph: {error}</p>;
-  if (!graph) return <p className="dim">Laying out your graph…</p>;
+  if (error) return <p className="dim graph-fallback">Couldn't load the graph: {error}</p>;
+  if (!graph) return <p className="dim graph-fallback">Laying out your graph…</p>;
 
   if (graph.nodes.length === 0) {
     return (
-      <p className="dim">
+      <p className="dim graph-fallback">
         Nothing to draw yet. Entities and the relations between them are derived from what you
         capture — a handful of notes and there will be something here.
       </p>
@@ -527,134 +602,75 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
   const alwaysLabelled = new Set(
     [...nodes]
       .sort((a, b) => b.mentionCount + b.degree - (a.mentionCount + a.degree))
-      .slice(0, 24)
+      .slice(0, MAX_LABELLED)
       .map((n) => n.id),
   );
 
+  /// Every label that will actually be drawn this frame, as boxes in
+  /// graph space, collected before any of them are placed — this is what
+  /// makes `declutterLabels` possible at all. A formula that offsets each
+  /// label from its own anchor, independently, has no way to know what
+  /// some other label already claimed; only seeing the whole set at once
+  /// does. Rebuilt every render rather than memoised: it depends on
+  /// almost everything that can change (`view`, `zoom`, `focused`,
+  /// `hovered`, filters), and at the handful of labels actually on
+  /// screen the cost of doing that is not worth tracking separately from
+  /// the cost of the render itself.
+  const labelBoxes: LabelBox[] = [];
+
+  for (const { node, at } of placed) {
+    const showLabel =
+      alwaysLabelled.has(node.id) ||
+      hovered === node.id ||
+      matchIds.has(node.id) ||
+      (direct?.has(node.id) ?? false);
+    if (!showLabel) continue;
+    const radius = nodeRadius(node) * at.scale;
+    const fontSize = 10 * at.scale;
+    const y = at.y + radius + 12 * at.scale;
+    labelBoxes.push({
+      id: `node-${node.id}`,
+      x: at.x,
+      y,
+      width: labelWidth(node.name, fontSize),
+      height: fontSize * 1.5,
+    });
+  }
+
+  const focusedEdges = focused
+    ? edges.filter((edge) => edge.from === focused || edge.to === focused)
+    : [];
+  focusedEdges.forEach((edge, i, all) => {
+    const a = byId.get(edge.from);
+    const b = byId.get(edge.to);
+    if (!a || !b) return;
+    const dx = b.at.x - a.at.x;
+    const dy = b.at.y - a.at.y;
+    const length = Math.hypot(dx, dy) || 1;
+    // Anchored past the midpoint, toward the far end — away from the
+    // one point every one of these edges shares, the focused node —
+    // and spread across the full set rather than cycling through a
+    // handful of buckets. Neither has to be exact any more: it only
+    // has to give `declutterLabels` a reasonable starting point, not
+    // solve the overlap itself.
+    const along = all.length > 1 ? 0.68 + (i / (all.length - 1) - 0.5) * 0.34 : 0.62;
+    const label =
+      edge.relationType.length > MAX_EDGE_LABEL
+        ? `${edge.relationType.slice(0, MAX_EDGE_LABEL - 1)}…`
+        : edge.relationType;
+    labelBoxes.push({
+      id: `edge-${edge.from}-${edge.to}-${edge.relationType}`,
+      x: a.at.x + dx * along + (-dy / length) * EDGE_LABEL_OFFSET,
+      y: a.at.y + dy * along + (dx / length) * EDGE_LABEL_OFFSET,
+      width: labelWidth(label, 8.5),
+      height: 8.5 * 1.5,
+    });
+  });
+
+  const labelPositions = declutterLabels(labelBoxes);
+
   return (
-    <>
-      <div className="graph-toolbar">
-        <span className="dim">
-          {visible.nodes.length} {visible.nodes.length === 1 ? "entity" : "entities"},{" "}
-          {visible.edges.length} {visible.edges.length === 1 ? "relation" : "relations"}
-          {hidden > 0 && ` — ${hidden} filtered out`}
-          {graph.omitted_nodes > 0 && `, ${graph.omitted_nodes} rarer ones never fetched`}
-        </span>
-        <span className="dim graph-hint">
-          {deep ? "drag to turn" : "drag to move"} · scroll to zoom · click a node, then click
-          it again to open
-        </span>
-      </div>
-
-      <div className="graph-search">
-        <span className="kicker">&gt;</span>
-        <input
-          className="search-input"
-          value={query}
-          placeholder="Find an entity in the graph…"
-          onChange={(e) => setQuery(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setQuery("");
-            if (e.key === "Enter" && matches.length > 0) {
-              setFocused(matches[0].id);
-              setQuery("");
-            }
-          }}
-        />
-        {matches.length > 0 && (
-          <span className="graph-matches">
-            {matches.map((match) => (
-              <span
-                key={match.id}
-                className="filter-chip graph-chip"
-                style={{ borderColor: entityColor(match.entity_type) }}
-                onClick={() => {
-                  setFocused(match.id);
-                  setQuery("");
-                }}
-              >
-                <span
-                  className="graph-chip-dot"
-                  style={{ background: entityColor(match.entity_type) }}
-                />
-                {match.name}
-              </span>
-            ))}
-          </span>
-        )}
-      </div>
-
-      {/* What the graph is, on one row, always in the same place — the
-          type chips below it are a legend that grows with the corpus, and
-          a switch that moves is a switch you have to look for. */}
-      <div className="graph-modes">
-        <span
-          className={`filter-chip${minMentions > 1 ? " active" : ""}`}
-          onClick={() => setMinMentions((m) => (m > 1 ? 1 : 2))}
-          title="Entities mentioned only once are usually a passing remark"
-        >
-          {minMentions > 1 ? "[x]" : "[ ]"} said more than once
-        </span>
-
-        <span
-          className={`filter-chip${connectedOnly ? " active" : ""}`}
-          onClick={() => setConnectedOnly((c) => !c)}
-          title="Hide entities with no relation to anything else"
-        >
-          {connectedOnly ? "[x]" : "[ ]"} connected only
-        </span>
-
-        <span
-          className={`filter-chip${deep ? " active" : ""}`}
-          onClick={() => setDepth(!deep)}
-          title="Let the layout use depth as well. Drag the background to turn it."
-        >
-          {deep ? "[x]" : "[ ]"} depth
-        </span>
-
-        {(hiddenTypes.size > 0 || minMentions > 1 || connectedOnly) && (
-          <span
-            className="dim link graph-reset"
-            onClick={() => {
-              setHiddenTypes(new Set());
-              setMinMentions(1);
-              setConnectedOnly(false);
-            }}
-          >
-            [ show everything ]
-          </span>
-        )}
-      </div>
-
-      <div className="graph-filters">
-        {shownTypes.map(([type, count]) => {
-          const off = hiddenTypes.has(type);
-          return (
-            <span
-              key={type}
-              className={`filter-chip graph-chip${off ? " graph-chip-off" : ""}`}
-              onClick={() =>
-                setHiddenTypes((previous) => {
-                  const next = new Set(previous);
-                  if (next.has(type)) next.delete(type);
-                  else next.add(type);
-                  return next;
-                })
-              }
-            >
-              <span className="graph-chip-dot" style={{ background: entityColor(type) }} />
-              {type} {count}
-            </span>
-          );
-        })}
-
-        {types.length > MAX_TYPE_CHIPS && (
-          <span className="filter-chip dim" onClick={() => setAllTypes((a) => !a)}>
-            {allTypes ? "[ fewer types ]" : `[ ${types.length - MAX_TYPE_CHIPS} more types ]`}
-          </span>
-        )}
-      </div>
-
+    <div className="graph-stage">
       <svg
         ref={svgRef}
         className="relations-graph"
@@ -679,16 +695,42 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
             const a = byId.get(edge.from);
             const b = byId.get(edge.to);
             if (!a || !b) return null;
-            const dimmed =
-              neighbours && !(neighbours.has(edge.from) && neighbours.has(edge.to));
+            const bothInChain = chain && chain.has(edge.from) && chain.has(edge.to);
+            const dimmed = chain !== null && !bothInChain;
+            const chainOnly =
+              chain !== null &&
+              bothInChain &&
+              !(direct && direct.has(edge.from) && direct.has(edge.to));
             const title = `${a.node.name} — ${edge.relationType} → ${b.node.name}${
               edge.weight > 1 ? ` (said ${edge.weight}×)` : ""
             }`;
+
             return (
               <g
                 key={`${edge.from}-${edge.to}-${edge.relationType}`}
-                className={dimmed ? "graph-dimmed" : undefined}
+                className={`graph-edge-group${dimmed ? " graph-dimmed" : ""}${
+                  chainOnly ? " graph-chain" : ""
+                }`}
+                // An edge answers to the same hover/click as a node: it
+                // is a relation between two of them, not a separate kind
+                // of thing, so marking it means marking one of its ends
+                // and asking the usual question of what is connected to
+                // that.
+                onPointerEnter={() => setHovered(edge.from)}
+                onPointerLeave={() => setHovered(null)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNodeClick(edge.from);
+                }}
               >
+                <line
+                  className="graph-edge-hit"
+                  x1={a.at.x}
+                  y1={a.at.y}
+                  x2={b.at.x}
+                  y2={b.at.y}
+                  strokeWidth={12}
+                />
                 <line
                   className="graph-edge"
                   x1={a.at.x}
@@ -707,27 +749,26 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
 
           {placed.map(({ node, at }) => {
             const radius = nodeRadius(node) * at.scale;
-            const dimmed = neighbours && !neighbours.has(node.id);
+            const inChain = chain !== null && chain.has(node.id);
+            const dimmed = chain !== null && !inChain;
+            const chainOnly = inChain && !(direct && direct.has(node.id));
             const isFocused = focused === node.id;
             const isMatch = matchIds.has(node.id);
-            const showLabel =
-              alwaysLabelled.has(node.id) ||
-              hovered === node.id ||
-              isMatch ||
-              (neighbours?.has(node.id) ?? false);
+            const labelAt = labelPositions.get(`node-${node.id}`);
+            const color = entityColor(node.entityType);
             return (
               <g
                 key={node.id}
                 className={`graph-node${dimmed ? " graph-dimmed" : ""}${
-                  isFocused ? " graph-node-focused" : ""
-                }`}
+                  chainOnly ? " graph-chain" : ""
+                }${isFocused ? " graph-node-focused" : ""}`}
                 // Depth as fading on top of depth as size. Either alone is
                 // ambiguous at a glance — a small circle is either far
                 // away or rarely mentioned — and together they read as
                 // distance. Only with depth on: flat, every node is at
                 // the same scale, and fading them all equally would just
                 // make the whole graph paler.
-                opacity={dimmed || !deep ? undefined : depthOpacity(at.scale)}
+                opacity={dimmed || chainOnly || !deep ? undefined : depthOpacity(at.scale)}
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   onPointerDown(e, node.id);
@@ -746,17 +787,17 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
                     cy={at.y}
                     r={radius + 5}
                     fill="none"
-                    stroke={entityColor(node.entityType)}
+                    stroke={color}
                   />
                 )}
-                <circle cx={at.x} cy={at.y} r={radius} fill={entityColor(node.entityType)}>
+                <circle cx={at.x} cy={at.y} r={radius} fill={color}>
                   <title>{`${node.name} · ${node.entityType} · mentioned ${node.mentionCount}×`}</title>
                 </circle>
-                {showLabel && (
+                {labelAt && (
                   <text
                     className="graph-label"
-                    x={at.x}
-                    y={at.y + radius + 12 * at.scale}
+                    x={labelAt.x}
+                    y={labelAt.y}
                     fontSize={10 * at.scale}
                   >
                     {node.name}
@@ -766,115 +807,251 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
             );
           })}
 
-          {/* Relation names last, so they sit above the nodes. They are
-              written only for the edges touching the focused node: every
-              edge labelled at once is a wall of text over a picture,
-              where the one you asked about is a sentence.
-
-              Offset perpendicular to the edge rather than sitting on it.
-              Several relations leaving one node run close together near
-              that node, and a label centred on each line lands on the
-              others and on the neighbours' own names; pushing each one
-              sideways off its own line separates them by the one thing
-              that is guaranteed to differ — direction. */}
-          {focused &&
-            edges
-              .filter((edge) => edge.from === focused || edge.to === focused)
-              .map((edge, i, all) => {
-                const a = byId.get(edge.from);
-                const b = byId.get(edge.to);
-                if (!a || !b) return null;
-                const dx = b.at.x - a.at.x;
-                const dy = b.at.y - a.at.y;
-                const length = Math.hypot(dx, dy) || 1;
-                // Two edges leaving the same node in almost the same
-                // direction cannot be separated sideways — they would just
-                // be pushed the same way. Sliding each along its own line
-                // by a different amount separates them anyway.
-                const along = all.length > 1 ? 0.5 + ((i % 3) - 1) * 0.11 : 0.5;
-                const label =
-                  edge.relationType.length > MAX_EDGE_LABEL
-                    ? `${edge.relationType.slice(0, MAX_EDGE_LABEL - 1)}…`
-                    : edge.relationType;
-                return (
-                  <text
-                    key={`label-${edge.from}-${edge.to}-${edge.relationType}`}
-                    className="graph-edge-label"
-                    x={a.at.x + dx * along + (-dy / length) * EDGE_LABEL_OFFSET}
-                    y={a.at.y + dy * along + (dx / length) * EDGE_LABEL_OFFSET}
-                  >
-                    {label}
-                    <title>{`${a.node.name} — ${edge.relationType} → ${b.node.name}`}</title>
-                  </text>
-                );
-              })}
+          {/* Relation names last, so they sit above the nodes. Only ever
+              for the edges touching the focused node: every edge
+              labelled at once is a wall of text over a picture, where
+              the one you asked about is a sentence. Positions come from
+              `labelPositions` — computed once, above, over every visible
+              label at once — rather than from an offset that only knows
+              about its own edge. */}
+          {focusedEdges.map((edge) => {
+            const a = byId.get(edge.from);
+            const b = byId.get(edge.to);
+            const labelAt = labelPositions.get(`edge-${edge.from}-${edge.to}-${edge.relationType}`);
+            if (!a || !b || !labelAt) return null;
+            const label =
+              edge.relationType.length > MAX_EDGE_LABEL
+                ? `${edge.relationType.slice(0, MAX_EDGE_LABEL - 1)}…`
+                : edge.relationType;
+            return (
+              <text
+                key={`label-${edge.from}-${edge.to}-${edge.relationType}`}
+                className="graph-edge-label"
+                x={labelAt.x}
+                y={labelAt.y}
+              >
+                {label}
+                <title>{`${a.node.name} — ${edge.relationType} → ${b.node.name}`}</title>
+              </text>
+            );
+          })}
         </g>
       </svg>
 
-      {focusedNode && (
-        <div className="graph-focus">
-          <span
-            className="graph-chip-dot"
-            style={{ background: entityColor(focusedNode.node.entityType) }}
-          />
-          <strong>{focusedNode.node.name}</strong>
-          <span className="dim">
-            {focusedNode.node.entityType} · mentioned {focusedNode.node.mentionCount}× ·{" "}
-            {focusedNode.node.degree}{" "}
-            {focusedNode.node.degree === 1 ? "relation" : "relations"}
-          </span>
-          <span className="link" onClick={() => onOpenEntity(focusedNode.node.id)}>
-            [ open ]
-          </span>
-          <span
-            className="dim link"
-            title="Fold this into another entity. Reversible, and nothing is deleted."
-            onClick={() => {
-              setMergeSource(focusedNode.node.id);
-              setMergeTarget(null);
-            }}
-          >
-            [ merge into… ]
-          </span>
-          <span className="dim link" onClick={() => setFocused(null)}>
-            [ back to everything ]
-          </span>
+      <button
+        className="graph-panel-toggle"
+        onClick={() => setPanelOpen((o) => !o)}
+        title={panelOpen ? "Hide the search and filters" : "Show the search and filters"}
+      >
+        {panelOpen ? "[ × ]" : "[ ☰ ]"}
+      </button>
+
+      {panelOpen && (
+        <div className="graph-panel">
+          <div className="graph-panel-row">
+            <span className="dim">
+              {visible.nodes.length} {visible.nodes.length === 1 ? "entity" : "entities"},{" "}
+              {visible.edges.length} {visible.edges.length === 1 ? "relation" : "relations"}
+              {hidden > 0 && ` — ${hidden} filtered out`}
+              {graph.omitted_nodes > 0 && `, ${graph.omitted_nodes} rarer ones never fetched`}
+            </span>
+            <span className="dim graph-hint">
+              {deep ? "drag to turn" : "drag to move"} · scroll to zoom · click a node, then
+              click it again to open
+            </span>
+          </div>
+
+          <div className="graph-search">
+            <span className="kicker">&gt;</span>
+            <input
+              className="search-input"
+              value={query}
+              placeholder="Find an entity in the graph…"
+              onChange={(e) => setQuery(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setQuery("");
+                if (e.key === "Enter" && matches.length > 0) {
+                  setFocused(matches[0].id);
+                  setQuery("");
+                }
+              }}
+            />
+            {matches.length > 0 && (
+              <span className="graph-matches">
+                {matches.map((match) => (
+                  <span
+                    key={match.id}
+                    className="filter-chip graph-chip"
+                    style={{ borderColor: entityColor(match.entity_type) }}
+                    onClick={() => {
+                      setFocused(match.id);
+                      setQuery("");
+                    }}
+                  >
+                    <span
+                      className="graph-chip-dot"
+                      style={{ background: entityColor(match.entity_type) }}
+                    />
+                    {match.name}
+                  </span>
+                ))}
+              </span>
+            )}
+          </div>
+
+          {/* What the graph is, on one row, always in the same place — the
+              type chips below it are a legend that grows with the corpus,
+              and a switch that moves is a switch you have to look for. */}
+          <div className="graph-modes">
+            <span
+              className={`filter-chip${minMentions > 1 ? " active" : ""}`}
+              onClick={() => setMinMentions((m) => (m > 1 ? 1 : 2))}
+              title="Entities mentioned only once are usually a passing remark"
+            >
+              {minMentions > 1 ? "[x]" : "[ ]"} said more than once
+            </span>
+
+            <span
+              className={`filter-chip${connectedOnly ? " active" : ""}`}
+              onClick={() => setConnectedOnly((c) => !c)}
+              title="Hide entities with no relation to anything else"
+            >
+              {connectedOnly ? "[x]" : "[ ]"} connected only
+            </span>
+
+            <span
+              className={`filter-chip${deep ? " active" : ""}`}
+              onClick={() => setDepth(!deep)}
+              title="Let the layout use depth as well. Drag the background to turn it."
+            >
+              {deep ? "[x]" : "[ ]"} depth
+            </span>
+
+            {(hiddenTypes.size > 0 || minMentions > 1 || connectedOnly) && (
+              <span
+                className="dim link graph-reset"
+                onClick={() => {
+                  setHiddenTypes(new Set());
+                  setMinMentions(1);
+                  setConnectedOnly(false);
+                }}
+              >
+                [ show everything ]
+              </span>
+            )}
+          </div>
+
+          <div className="graph-filters">
+            {shownTypes.map(([type, count]) => {
+              const off = hiddenTypes.has(type);
+              return (
+                <span
+                  key={type}
+                  className={`filter-chip graph-chip${off ? " graph-chip-off" : ""}`}
+                  onClick={() =>
+                    setHiddenTypes((previous) => {
+                      const next = new Set(previous);
+                      if (next.has(type)) next.delete(type);
+                      else next.add(type);
+                      return next;
+                    })
+                  }
+                >
+                  <span className="graph-chip-dot" style={{ background: entityColor(type) }} />
+                  {type}
+                  {/* Its own span, dimmer and parenthesised, rather than a
+                      bare trailing number — "Thema 9" reads as though
+                      types were numbered; "Thema (9)" cannot. */}
+                  <span className="graph-chip-count">({count})</span>
+                </span>
+              );
+            })}
+
+            {types.length > MAX_TYPE_CHIPS && (
+              <span className="filter-chip dim" onClick={() => setAllTypes((a) => !a)}>
+                {allTypes ? "[ fewer types ]" : `[ ${types.length - MAX_TYPE_CHIPS} more types ]`}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Two steps, and the second one spells out which way round it
-          goes. "Merge A and B" is ambiguous in exactly the way that
-          matters here — one of the two names is the one that survives. */}
-      {mergeSource && (
-        <div className="graph-merge">
-          {mergeTarget ? (
-            <>
-              <span>
-                Fold <strong>{nameOf(mergeSource)}</strong> into{" "}
-                <strong>{nameOf(mergeTarget)}</strong>?
-              </span>
+      {/* Both bottom cards live in one stack rather than each claiming its
+          own absolute corner — this used to put them at opposite edges of
+          the whole window (nothing between here and the viewport was
+          `position: relative`, so "bottom-left"/"bottom-right" meant the
+          window's, not the graph's), and the sidebar sat inside that gap.
+          `.graph-stage` is the positioned ancestor now, and the two cards
+          simply stack when both are open. */}
+      {(focusedNode || mergeSource) && (
+        <div className="graph-overlays">
+          {focusedNode && (
+            <div className="graph-focus">
+              <span
+                className="graph-chip-dot"
+                style={{ background: entityColor(focusedNode.node.entityType) }}
+              />
+              <strong>{focusedNode.node.name}</strong>
               <span className="dim">
-                Everything said about it moves across, and “{nameOf(mergeSource)}” stays
-                searchable. You can take this back.
+                {focusedNode.node.entityType} · mentioned {focusedNode.node.mentionCount}× ·{" "}
+                {focusedNode.node.degree}{" "}
+                {focusedNode.node.degree === 1 ? "relation" : "relations"}
               </span>
-              <span className="link" onClick={() => void confirmMerge()}>
-                [ {merging ? "folding…" : `Yes, keep ${nameOf(mergeTarget)}`} ]
+              <span className="link" onClick={() => onOpenEntity(focusedNode.node.id)}>
+                [ open ]
               </span>
-              <span className="dim link" onClick={() => setMergeTarget(null)}>
-                [ pick another ]
+              <span
+                className="dim link"
+                title="Fold this into another entity. Reversible, and nothing is deleted."
+                onClick={() => {
+                  setMergeSource(focusedNode.node.id);
+                  setMergeTarget(null);
+                }}
+              >
+                [ merge into… ]
               </span>
-            </>
-          ) : (
-            <span>
-              Click the entity that <strong>{nameOf(mergeSource)}</strong> should be folded
-              into.
-            </span>
+              <span className="dim link" onClick={() => setFocused(null)}>
+                [ back to everything ]
+              </span>
+            </div>
           )}
-          <span className="dim link" onClick={cancelMerge}>
-            [ cancel ]
-          </span>
+
+          {/* Two steps, and the second one spells out which way round it
+              goes. "Merge A and B" is ambiguous in exactly the way that
+              matters here — one of the two names is the one that
+              survives. */}
+          {mergeSource && (
+            <div className="graph-merge">
+              {mergeTarget ? (
+                <>
+                  <span>
+                    Fold <strong>{nameOf(mergeSource)}</strong> into{" "}
+                    <strong>{nameOf(mergeTarget)}</strong>?
+                  </span>
+                  <span className="dim">
+                    Everything said about it moves across, and “{nameOf(mergeSource)}” stays
+                    searchable. You can take this back.
+                  </span>
+                  <span className="link" onClick={() => void confirmMerge()}>
+                    [ {merging ? "folding…" : `Yes, keep ${nameOf(mergeTarget)}`} ]
+                  </span>
+                  <span className="dim link" onClick={() => setMergeTarget(null)}>
+                    [ pick another ]
+                  </span>
+                </>
+              ) : (
+                <span>
+                  Click the entity that <strong>{nameOf(mergeSource)}</strong> should be folded
+                  into.
+                </span>
+              )}
+              <span className="dim link" onClick={cancelMerge}>
+                [ cancel ]
+              </span>
+            </div>
+          )}
         </div>
       )}
-    </>
+    </div>
   );
 }

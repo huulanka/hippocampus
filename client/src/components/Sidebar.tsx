@@ -62,17 +62,6 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    id: "entities",
-    label: "Entities",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 15 15">
-        <circle cx="4" cy="4" r="2.4" fill="currentColor" />
-        <circle cx="11" cy="4" r="2.4" fill="currentColor" />
-        <circle cx="7.5" cy="11" r="2.4" fill="currentColor" />
-      </svg>
-    ),
-  },
-  {
     id: "relations",
     label: "Relations",
     icon: (

@@ -237,6 +237,14 @@ a:hover {
   overflow: auto;
   padding: 24px;
 }
+/* The graph alone: a canvas to look into rather than a document to read,
+   so the padding every other screen gets would just shrink it back into
+   a box. */
+.app-content-bleed {
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
 
 /* — capture screen — */
 .capture-idle {
@@ -401,17 +409,189 @@ a:hover {
 }
 
 /* — relations — */
-.graph-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
+/* The stage is what makes every floating thing on top of it (the panel,
+   the toggle, the focus and merge cards) position against the graph
+   rather than against the window — without this, `position: absolute`
+   on any of them resolves against the nearest positioned ancestor, which
+   used to be nothing nearer than the viewport, and "bottom-left" meant
+   the window's bottom-left, sidebar included. */
+.graph-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* A dark sky of its own rather than the theme's background — the whole
+     point is embers against near-black, which does not survive switching
+     to the light theme, and a page that deliberately commits to one
+     visual world is allowed to. Warm-black rather than neutral or blue:
+     the same hue as `--hpo-bg`, just carried much further down, so the
+     one part of this screen that cannot use the theme's tokens directly
+     still reads as the same app's dark rather than a different one's.
+     The scanline texture is the same rule, same reason. */
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.22) 0px,
+      rgba(0, 0, 0, 0.22) 1px,
+      transparent 1px,
+      transparent 3px
+    ),
+    radial-gradient(ellipse 75% 60% at 50% 38%, hsl(20 24% 7%), hsl(20 26% 3%) 75%);
+}
+.graph-fallback {
+  padding: 24px;
+}
+.relations-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The graph is dragged, so the pointer should say so — and the browser
+     must not try to scroll the page out from under a drag. */
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.relations-graph:active {
+  cursor: grabbing;
+}
+.graph-edge {
+  stroke: hsl(30 20% 70% / 0.16);
+}
+.graph-edge-group {
+  cursor: pointer;
+}
+/* The visible line is 1-3px, an unreasonable target to hover or click
+   accurately; this transparent twin under it is the actual hit area. */
+.graph-edge-hit {
+  stroke: transparent;
+  fill: none;
+}
+.graph-node {
+  cursor: pointer;
+}
+/* No hairline by default. Kept only for hover and focus, where it is a
+   deliberate outline rather than ambient noise on every one of 70-odd
+   circles at once. `:not(.graph-ring)` is load-bearing: a CSS rule beats
+   a presentation attribute, so without it this would also repaint the
+   focus/search ring — whose colour is set as an attribute — in whatever
+   colour is set here. */
+.graph-node circle:not(.graph-ring) {
+  transition:
+    r 120ms ease-out,
+    stroke 120ms ease-out;
+}
+.graph-node:hover circle:not(.graph-ring) {
+  stroke: #fdf6ea;
+  stroke-width: 1.5;
+}
+/* A name, bold and at full brightness — the noun in the sentence a
+   focused node and its edges spell out. `.graph-edge-label` is the verb,
+   and needs to read as a different kind of word on sight, not just sit
+   at a different spot; the two used near-identical type before, which is
+   why "everything looks the same" was a fair complaint. */
+.graph-label {
+  fill: #f2e8d8;
+  font-weight: 700;
+  font-size: 10px;
+  text-anchor: middle;
+  paint-order: stroke;
+  /* Drawn behind the glyphs, so a label crossing an edge stays readable
+     without a box around it. */
+  stroke: hsl(20 26% 3%);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+/* Three tiers around whatever is focused or hovered, not two. A truly
+   unrelated node or edge fades almost away; the rest of its connected
+   component (`.graph-chain`) dims less, still readable as part of the
+   same story; whatever touches the centre directly stays at full
+   strength with no class of its own. */
+.graph-dimmed {
+  opacity: 0.14;
+  transition: opacity 120ms ease-out;
+}
+.graph-chain {
+  opacity: 0.55;
+  transition: opacity 120ms ease-out;
+}
+/* Drawn around the focused node and around search hits. */
+.graph-ring {
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  opacity: 0.9;
+}
+.graph-node-focused circle:not(.graph-ring) {
+  stroke: #fdf6ea;
+  stroke-width: 1.5;
+}
+/* Only ever shown for the edges touching the focused node, so it can
+   afford to be readable rather than tiny. */
+/* The verb: italic, smaller, and dimmer rather than bold and bright, so
+   an entity's name and a relation's name never read as the same kind of
+   text even before either is parsed. */
+.graph-edge-label {
+  fill: hsl(35 22% 68%);
+  font-style: italic;
+  font-size: 8.5px;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: hsl(20 26% 3%);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* The toggle sits outside the panel so it survives collapsing it — a
+   control that disappears along with the thing it opens has no way back.
+   Solid `--hpo-panel`/`--hpo-border`, the same as `.panel` everywhere
+   else in the app, not a bespoke glass style: this is a panel floating
+   over a dedicated dark canvas (the sky commits to its own world; the
+   chrome around it does not), the same way a photo or video editor's
+   tool panels stay themed even though the canvas in the middle does not. */
+.graph-panel-toggle {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  background: var(--hpo-panel);
+  border: 1px solid var(--hpo-border);
+  color: var(--hpo-text);
+  font-family: inherit;
   font-size: 12px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.graph-panel-toggle:hover {
+  color: var(--hpo-accent);
+}
+/* A panel over the sky rather than a bar above it: the whole reason this
+   screen is full-bleed is so looking at it is the default state, and a
+   panel that permanently claims a strip at the top would just be the old
+   toolbar with better lighting. */
+.graph-panel {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 1;
+  width: min(420px, calc(100% - 28px));
+  padding: 40px 14px 14px;
+  background: var(--hpo-panel);
+  border: 1px solid var(--hpo-border);
+  color: var(--hpo-text);
+  font-size: 12px;
+}
+.graph-panel-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--hpo-border);
 }
 .graph-hint {
   font-size: 11px;
+  color: var(--hpo-dim);
 }
 /* Legend and filter in one row. Column-gap larger than row-gap: the
    chips have no boxes around them — nothing else in this interface does
@@ -422,8 +602,6 @@ a:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 14px;
-  margin-bottom: 8px;
-  font-size: 12px;
   color: var(--hpo-dim);
 }
 .graph-modes {
@@ -431,8 +609,7 @@ a:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 14px;
-  margin-bottom: 8px;
-  font-size: 12px;
+  margin-bottom: 10px;
   color: var(--hpo-dim);
 }
 .graph-chip {
@@ -446,6 +623,13 @@ a:hover {
   border-radius: 50%;
   flex: 0 0 auto;
 }
+/* Its own element rather than a trailing number in the chip's own text —
+   "Thema 9" reads as though types were numbered ("Thema 1", "Thema 5",
+   ...); dimmer and parenthesised cannot be misread that way. */
+.graph-chip-count {
+  opacity: 0.7;
+  margin-left: 2px;
+}
 /* Switched off rather than removed: the chip stays in place with its
    colour drained, so turning a type back on is where you left it. */
 .graph-chip-off {
@@ -456,95 +640,18 @@ a:hover {
   font-size: 11px;
   margin-left: 4px;
 }
-.relations-graph {
-  display: block;
-  width: 100%;
-  height: min(62vh, 620px);
-  border: 1px solid var(--hpo-border);
-  border-radius: 2px;
-  /* The graph is dragged, so the pointer should say so — and the browser
-     must not try to scroll the page out from under a drag. */
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-.relations-graph:active {
-  cursor: grabbing;
-}
-.graph-edge {
-  stroke: var(--hpo-border);
-  stroke-opacity: 0.85;
-}
-.graph-node {
-  cursor: pointer;
-}
-/* `:not(.graph-ring)` is load-bearing. A CSS rule beats a presentation
-   attribute, so without it this hairline also repainted the focus and
-   search rings — whose colour comes from the entity type and is set as an
-   attribute — in the background colour, i.e. invisibly. */
-.graph-node circle:not(.graph-ring) {
-  /* A hairline in the page's own background colour, so overlapping nodes
-     stay countable instead of merging into one blob. */
-  stroke: var(--hpo-bg);
-  stroke-width: 1.5;
-  transition: r 120ms ease-out;
-}
-.graph-node:hover circle:not(.graph-ring) {
-  stroke: var(--hpo-text);
-}
-.graph-label {
-  fill: var(--hpo-text);
-  font-size: 10px;
-  text-anchor: middle;
-  paint-order: stroke;
-  /* Drawn behind the glyphs, so a label crossing an edge stays readable
-     without a box around it. */
-  stroke: var(--hpo-bg);
-  stroke-width: 3;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-/* Hovering or focusing one node answers "what is this connected to" by
-   taking everything else out of the way rather than by drawing more. */
-.graph-dimmed {
-  opacity: 0.16;
-  transition: opacity 120ms ease-out;
-}
-/* Drawn around the focused node and around search hits. A ring rather
-   than a glow: everything else on this screen is a line or a letter, and
-   a soft halo would be the only lit thing in the whole interface. */
-.graph-ring {
-  stroke-width: 1.5;
-  stroke-dasharray: 3 3;
-  opacity: 0.9;
-}
-.graph-node-focused circle:not(.graph-ring) {
-  stroke: var(--hpo-text);
-}
-/* Only ever shown for the edges touching the focused node, so it can
-   afford to be readable rather than tiny. */
-.graph-edge-label {
-  fill: var(--hpo-muted);
-  font-size: 9px;
-  text-anchor: middle;
-  paint-order: stroke;
-  stroke: var(--hpo-bg);
-  stroke-width: 3;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
 .graph-search {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 /* Fixed width rather than greedy: letting the field fill the row pushed
-   the matches to the far edge of the window, where they read as part of
+   the matches to the far edge of the panel, where they read as part of
    the hint line above instead of as answers to what was typed. */
 .graph-search .search-input {
-  flex: 0 1 320px;
+  flex: 0 1 240px;
   min-width: 0;
 }
 .graph-matches {
@@ -552,19 +659,29 @@ a:hover {
   flex-wrap: wrap;
   gap: 6px;
 }
-/* Under the graph rather than over it: a panel floating on top would
-   cover the neighbourhood it is describing. */
+.graph-overlays {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .graph-focus {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
-  padding: 6px 10px;
-  border: 1px solid var(--hpo-border);
-  border-radius: 2px;
+  padding: 8px 12px;
   background: var(--hpo-panel);
+  border: 1px solid var(--hpo-border);
+  color: var(--hpo-text);
   font-size: 12px;
+}
+.graph-focus strong {
+  color: var(--hpo-text);
 }
 
 /* — chat — */
@@ -1091,14 +1208,14 @@ a:hover {
   opacity: 0.75;
 }
 
-/* Aiming a merge in the graph. Sits opposite the focus panel so the two
-   never cover each other — you are reading one while acting on the
-   other. */
+/* Aiming a merge in the graph. A flex child of `.graph-overlays`, not
+   independently positioned — see the comment above `.graph-overlays` in
+   the relations section for why that used to put this at the corners of
+   the whole window rather than the graph. Same solid panel tokens as
+   `.graph-panel` and `.graph-focus` — see the comment there for why this
+   floating chrome uses the app's real theme colours rather than its own,
+   even though the canvas underneath does not. */
 .graph-merge {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  right: 16px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1106,6 +1223,7 @@ a:hover {
   padding: 10px 12px;
   background: var(--hpo-panel);
   border: 1px solid var(--hpo-accent);
+  color: var(--hpo-text);
   font-size: 12px;
 }
 .graph-merge .link {

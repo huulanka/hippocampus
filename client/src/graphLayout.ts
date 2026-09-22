@@ -69,6 +69,23 @@ const REPULSION = 5200;
 /// Rest length of an edge. Long enough that labels have room.
 const SPRING_LENGTH = 92;
 const SPRING_STRENGTH = 0.035;
+/// A weak pull between any two nodes that share a type, independent of
+/// whether a relation connects them.
+///
+/// Without this, the only forces are isotropic repulsion and a pull to
+/// the origin — and a graph with nothing else structuring it settles onto
+/// a uniform shell around the centre (the Thomson problem: points that
+/// only push each other apart spread out evenly over a sphere) regardless
+/// of what the data actually says. In deep mode that shell is the "always
+/// a ball" the graph was criticised for.
+///
+/// An order of magnitude weaker than `SPRING_STRENGTH`: a real, asserted
+/// relation must still win every argument about where a node sits. This
+/// only breaks the tie for everything a relation does not already decide
+/// — same-type entities drift into loose neighbourhoods instead of
+/// scattering uniformly, which is what turns the shell into something
+/// that looks read rather than generated.
+const TYPE_CLUSTER_STRENGTH = 0.0028;
 /// Pull toward the middle, so disconnected islands do not drift away.
 const GRAVITY = 0.012;
 /// What holds the graph flat. Far stronger than `GRAVITY`, because this
@@ -165,6 +182,23 @@ export function tick(nodes: LaidOutNode[], edges: LaidOutEdge[], deep: boolean):
       b.vx += fx;
       b.vy += fy;
       b.vz += fz;
+
+      // Same loop, same pair, so this costs nothing extra to compute —
+      // a Hookean pull toward each other with no rest length, scaled by
+      // how far apart they already are so it never fights the repulsion
+      // above at close range.
+      if (a.entityType === b.entityType) {
+        const pull = distance * TYPE_CLUSTER_STRENGTH;
+        const tfx = (dx / distance) * pull;
+        const tfy = (dy / distance) * pull;
+        const tfz = (dz / distance) * pull;
+        a.vx += tfx;
+        a.vy += tfy;
+        a.vz += tfz;
+        b.vx -= tfx;
+        b.vy -= tfy;
+        b.vz -= tfz;
+      }
     }
   }
 
@@ -297,4 +331,94 @@ export function unproject(
   };
 }
 
+
 export const SETTLED_THRESHOLD = SETTLED;
+
+/// A label's rectangle, in the graph's own coordinate space, centred at
+/// `(x, y)` — the anchor a hand-tuned offset used to point at without
+/// ever checking whether anything else was already sitting there.
+export interface LabelBox {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/// Roughly the advance width of one Space Mono character at 1px, which
+/// is what the whole app is set in (`App.css`). Monospace is what makes
+/// this worth doing at all: measuring real text needs a mounted DOM node
+/// (`getBBox`), which means rendering once to find out where to render —
+/// a fixed em-fraction is exact enough for a font where every glyph is
+/// the same width, and costs nothing to compute ahead of the first paint.
+const CHAR_WIDTH_EM = 0.62;
+
+export function labelWidth(text: string, fontSize: number): number {
+  return text.length * fontSize * CHAR_WIDTH_EM;
+}
+
+/// Separates overlapping label boxes by actually detecting and resolving
+/// collisions, rather than by a formula that guesses how many labels
+/// might land near each other. Each box is still pinned close to the
+/// point it is labelling — `maxDrift` away at most — because a label
+/// free to drift wherever there's room stops pointing at anything.
+///
+/// Axis-aligned rectangle separation, the same technique any 2D physics
+/// engine uses for non-penetration: on each pass, two overlapping boxes
+/// are pushed apart along whichever axis has the smaller overlap, which
+/// is the cheapest way to stop overlapping. Repeated for a fixed budget
+/// of iterations rather than until settled — with graphs busy enough
+/// that not every overlap can be resolved inside `maxDrift`, "settled"
+/// might never come, and a busy view is exactly where this must not hang.
+export function declutterLabels(
+  boxes: LabelBox[],
+  maxDrift = 26,
+  iterations = 40,
+): Map<string, { x: number; y: number }> {
+  const points = boxes.map((b) => ({ ...b, anchorX: b.x, anchorY: b.y }));
+
+  for (let iter = 0; iter < iterations; iter += 1) {
+    let moved = false;
+
+    for (let i = 0; i < points.length; i += 1) {
+      const a = points[i];
+      for (let j = i + 1; j < points.length; j += 1) {
+        const b = points[j];
+        const overlapX = (a.width + b.width) / 2 - Math.abs(a.x - b.x);
+        const overlapY = (a.height + b.height) / 2 - Math.abs(a.y - b.y);
+        if (overlapX <= 0 || overlapY <= 0) continue;
+
+        moved = true;
+        if (overlapX < overlapY) {
+          const push = overlapX / 2 + 0.5;
+          const dir = a.x <= b.x ? -1 : 1;
+          a.x += push * dir;
+          b.x -= push * dir;
+        } else {
+          const push = overlapY / 2 + 0.5;
+          const dir = a.y <= b.y ? -1 : 1;
+          a.y += push * dir;
+          b.y -= push * dir;
+        }
+      }
+    }
+
+    if (!moved) break;
+
+    // Pulled back toward the anchor every pass, not only at the end —
+    // otherwise a box that needed the whole budget to escape one
+    // overlap has already spent it and can't also escape the next.
+    for (const p of points) {
+      const dx = p.x - p.anchorX;
+      const dy = p.y - p.anchorY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > maxDrift) {
+        const scale = maxDrift / dist;
+        p.x = p.anchorX + dx * scale;
+        p.y = p.anchorY + dy * scale;
+      }
+    }
+  }
+
+  return new Map(points.map((p) => [p.id, { x: p.x, y: p.y }]));
+}

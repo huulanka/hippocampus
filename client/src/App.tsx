@@ -8,7 +8,6 @@ import { CaptureDetailScreen } from "./screens/CaptureDetailScreen";
 import { EntityDetailScreen } from "./screens/EntityDetailScreen";
 import { TimelineScreen } from "./screens/TimelineScreen";
 import { SearchScreen } from "./screens/SearchScreen";
-import { EntitiesScreen } from "./screens/EntitiesScreen";
 import { RelationsScreen } from "./screens/RelationsScreen";
 import { ChangesScreen } from "./screens/ChangesScreen";
 import { ChatScreen } from "./screens/ChatScreen";
@@ -16,7 +15,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 import { LockGate } from "./components/LockGate";
 import { lockStatus, onLocked, onSummonCapture, type LockStatus } from "./desktop";
 
-export type TabId = "capture" | "resurface" | "timeline" | "search" | "entities" | "relations" | "changes" | "chat" | "settings";
+export type TabId = "capture" | "resurface" | "timeline" | "search" | "relations" | "changes" | "chat" | "settings";
 
 /// A thing being looked at, layered over whichever tab you were on.
 /// Details are not tabs: you always arrive at one *from* somewhere, and
@@ -41,7 +40,6 @@ const TAB_NAMES: Partial<Record<TabId, string>> = {
   resurface: "What you said before",
   timeline: "Your timeline",
   search: "Search",
-  entities: "The things you have mentioned",
   relations: "Your graph",
   changes: "How this got organised",
   chat: "Chat",
@@ -121,7 +119,13 @@ function Shell() {
         lock={lock}
         onLockChange={setLock}
       />
-      <main className="app-content">
+      {/* The graph is full-bleed: a canvas you look into rather than a
+          document you read, so the padding every other screen gets would
+          just be a border shrinking it back into a box. No detail view
+          ever opens over it without a capture or entity id, and neither
+          of those is the graph, so gating this on the tab alone (not on
+          `current`) is enough. */}
+      <main className={`app-content${!current && activeTab === "relations" ? " app-content-bleed" : ""}`}>
         {locked ? (
           <LockGate
             status={lock!}
@@ -182,8 +186,6 @@ function Screen({
       return <TimelineScreen onOpenCapture={onOpenCapture} />;
     case "search":
       return <SearchScreen onOpenCapture={onOpenCapture} onOpenEntity={onOpenEntity} />;
-    case "entities":
-      return <EntitiesScreen onOpenEntity={onOpenEntity} />;
     case "relations":
       return <RelationsScreen onOpenEntity={onOpenEntity} />;
     case "changes":
