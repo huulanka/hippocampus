@@ -1,3 +1,10 @@
+## [1.5.2](https://github.com/huulanka/hippocampus/compare/v1.5.1...v1.5.2) (2026-09-22)
+
+
+### Bug Fixes
+
+* the cask never actually landed in the tap ([#42](https://github.com/huulanka/hippocampus/issues/42)) ([d207694](https://github.com/huulanka/hippocampus/commit/d20769435a5cb91aef5662b0f9c4d360c661444c))
+
 ## [1.5.1](https://github.com/huulanka/hippocampus/compare/v1.5.0...v1.5.1) (2026-09-21)
 
 
