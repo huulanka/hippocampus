@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/huulanka/hippocampus/compare/v1.10.0...v1.11.0) (2026-09-22)
+
+
+### Features
+
+* the graph is the only view now, and it fills the window ([#50](https://github.com/huulanka/hippocampus/issues/50)) ([eaa6cfc](https://github.com/huulanka/hippocampus/commit/eaa6cfcf0cec11024fe465113b08686a0e1f39c0))
+
 # [1.10.0](https://github.com/huulanka/hippocampus/compare/v1.9.1...v1.10.0) (2026-09-22)
 
 
