@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useTheme } from "../theme";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
+  FORESIGHT_LEADS,
   acceleratorFromEvent,
   autostartEnabled,
+  calendarAccess,
+  listCalendars,
+  openCalendarPrivacy,
+  requestCalendarAccess,
+  setForesight,
+  type CalendarAccess,
+  type CalendarInfo,
+  type ForesightSettings,
   checkBackend,
   formatAccelerator,
   getSettings,
@@ -23,6 +32,7 @@ import {
   type LockStatus,
 } from "../desktop";
 import { getApiBaseUrl, getBackendVersion, setApiBaseUrl } from "../api";
+import { useForesight } from "../useForesight";
 
 const GITHUB_URL = "https://github.com/huulanka/hippocampus";
 
@@ -495,6 +505,8 @@ export function SettingsScreen() {
         </Section>
       )}
 
+      {runningInDesktopApp() && <MeetingsSection />}
+
       <Section
         title="Speech"
         note={
@@ -597,6 +609,161 @@ function Row({
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/// Which calendars this Mac reads for meetings, how far ahead, and
+/// whether with a banner.
+///
+/// Its own component because it is its own conversation with macOS: the
+/// permission, then the list the permission unlocks. Nothing is ticked
+/// until you tick it — the private Mac and the work Mac each choose their
+/// own, and a work meeting must never show up on the private one.
+function MeetingsSection() {
+  const [access, setAccess] = useState<CalendarAccess | null>(null);
+  const [calendars, setCalendars] = useState<CalendarInfo[]>([]);
+  const [foresight, setForesightState] = useState<ForesightSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [asking, setAsking] = useState(false);
+  const status = useForesight();
+
+  useEffect(() => {
+    getSettings().then((s) => setForesightState(s.foresight));
+    calendarAccess().then(setAccess);
+  }, []);
+
+  useEffect(() => {
+    if (access === "granted") listCalendars().then(setCalendars);
+  }, [access]);
+
+  function save(next: ForesightSettings) {
+    setError(null);
+    setForesightState(next);
+    setForesight(next)
+      .then((s) => setForesightState(s.foresight))
+      .catch((err) => setError(String(err)));
+  }
+
+  async function ask() {
+    setAsking(true);
+    setError(null);
+    try {
+      setAccess(await requestCalendarAccess());
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  // Grouped by account: two calendars both called "Kalender" are the
+  // exact choice this section exists for, and only the account tells them
+  // apart.
+  const byAccount = useMemo(() => {
+    const groups = new Map<string, CalendarInfo[]>();
+    for (const calendar of calendars) {
+      const list = groups.get(calendar.account) ?? [];
+      list.push(calendar);
+      groups.set(calendar.account, list);
+    }
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [calendars]);
+
+  if (!foresight || access === null) return null;
+  const watching = new Set(foresight.calendar_ids);
+
+  return (
+    <Section
+      title="Meetings"
+      note="Shortly before a meeting with someone you have talked about, Hippocampus brings up what you meant to say — and afterwards asks whether you did. Only the calendars ticked here are read, only on this Mac, and a meeting is matched against what you know and then forgotten: it never becomes part of your notes. The banner says which meeting, never what is in your notes."
+    >
+      {access === "granted" ? (
+        <>
+          <div className="settings-row settings-row-block">
+            <span className="settings-label">Read on this Mac</span>
+            <div className="calendar-groups">
+              {byAccount.length === 0 && <span className="meta">No calendars on this Mac.</span>}
+              {byAccount.map(([account, list]) => (
+                <div key={account} className="calendar-group">
+                  <span className="label-micro">{account || "On this Mac"}</span>
+                  {list.map((calendar) => (
+                    <label key={calendar.id} className="check calendar-check">
+                      <input
+                        type="checkbox"
+                        checked={watching.has(calendar.id)}
+                        onChange={() => {
+                          const ids = new Set(watching);
+                          if (ids.has(calendar.id)) ids.delete(calendar.id);
+                          else ids.add(calendar.id);
+                          save({ ...foresight, calendar_ids: [...ids] });
+                        }}
+                      />
+                      <span
+                        className="chip-dot calendar-dot"
+                        style={{ background: calendar.color ?? "var(--text-dim)" }}
+                      />
+                      {calendar.title}
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+          <Row label="Bring it up">
+            <div className="settings-choices">
+              {FORESIGHT_LEADS.map((minutes) => (
+                <button
+                  key={minutes}
+                  type="button"
+                  className="chip"
+                  aria-pressed={foresight.lead_minutes === minutes}
+                  onClick={() => save({ ...foresight, lead_minutes: minutes })}
+                >
+                  {minutes} min before
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row label="With a banner">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={foresight.banner}
+                onChange={() => save({ ...foresight, banner: !foresight.banner })}
+              />
+              <span className="sr-only">Show a banner before a meeting</span>
+            </label>
+          </Row>
+        </>
+      ) : access === "denied" || access === "write_only" ? (
+        <Row label="Calendar access">
+          <span className="settings-inline">
+            <span className="meta">
+              {access === "denied" ? "Refused" : "Can add, but not read"}
+            </span>
+            <button type="button" className="btn btn-secondary" onClick={() => void openCalendarPrivacy()}>
+              Open System Settings
+            </button>
+          </span>
+        </Row>
+      ) : access === "restricted" ? (
+        <Row label="Calendar access">
+          <span className="meta">Not allowed on this Mac</span>
+        </Row>
+      ) : (
+        <Row label="Calendar access">
+          <button type="button" className="btn btn-secondary" disabled={asking} onClick={ask}>
+            {asking ? "Asking…" : "Allow…"}
+          </button>
+        </Row>
+      )}
+      {error && <Problem>{error}</Problem>}
+      {/* Said here because nowhere else would say it: a brief that never
+          arrives looks exactly like a meeting about nothing. */}
+      {status?.error && (
+        <Problem>Meetings can't be checked right now — {status.error}</Problem>
+      )}
+    </Section>
+  );
+}
 
 function Problem({ children }: { children: React.ReactNode }) {
   return <p className="settings-problem">{children}</p>;

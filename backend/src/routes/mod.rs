@@ -1,6 +1,7 @@
 pub mod captures;
 pub mod entities;
 mod graph;
+pub mod intentions;
 pub mod resurface;
 pub mod review;
 pub mod search;
@@ -47,6 +48,12 @@ pub fn router() -> Router<AppState> {
         .route("/captures/{id}/echo", get(captures::echo_for))
         .route("/captures/{id}/retry", post(captures::retry_capture))
         .route("/captures/{id}/audio", get(captures::audio_for))
+        .route("/captures/{id}/intentions", get(intentions::for_capture))
+        .route("/intentions", get(intentions::open))
+        .route("/intentions/{id}/dismiss", post(intentions::dismiss))
+        .route("/intentions/{id}/fulfil", post(intentions::fulfil))
+        .route("/intentions/{id}/reopen", post(intentions::reopen))
+        .route("/brief", post(intentions::brief))
         .route("/entities", get(entities::list))
         .route("/entities/{id}", get(entities::detail))
         .route("/entities/{id}/merge", post(entities::merge_entities))

@@ -1,0 +1,417 @@
+/* What you still mean to do, and the meetings it comes back in.
+ *
+ * One visual idea, used everywhere this feature appears: the sparkle.
+ * It is the menu bar's lit state, drawn again at the size of a line of
+ * text, in the same ember — so the thing that caught your eye in the bar
+ * is recognisably the thing waiting on the page. Everything else here is
+ * the app's ordinary furniture; the sparkle and a faint ember wash are the
+ * only new things, and they are kept rare so they keep meaning something.
+ */
+
+@layer screens {
+  /* — the mark — ----------------------------------------------------- */
+
+  .sparkle {
+    flex: none;
+    fill: var(--spark);
+    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--spark) 55%, transparent));
+  }
+  /* Arriving: it grows out of nothing, turns a quarter into place, and
+     settles with the app's one overshoot. Once. */
+  .sparkle-arrive {
+    animation: sparkle-arrive 720ms var(--ease-settle) both;
+    transform-origin: 50% 50%;
+  }
+  @keyframes sparkle-arrive {
+    0% {
+      opacity: 0;
+      transform: scale(0.2) rotate(-50deg);
+    }
+    60% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+    }
+  }
+
+  .intention-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    color: var(--spark);
+  }
+  .intention-label .dim {
+    color: var(--text-dim);
+  }
+
+  /* — one intention — ------------------------------------------------ */
+
+  .intention {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    column-gap: var(--space-3);
+    align-items: start;
+    padding: var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    /* The wash fades out before the words start: it marks the card as
+       this kind of thing without tinting what you said. */
+    background:
+      linear-gradient(90deg, var(--spark-wash), transparent 42%),
+      var(--surface);
+    text-align: left;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .intention:has(.sparkle-arrive) {
+    animation: intention-arrive var(--dur-slow) var(--ease-out) both;
+  }
+  @keyframes intention-arrive {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .intention-mark {
+    display: flex;
+    padding-top: 5px;
+  }
+  .intention-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  /* Your own words: the serif, as everywhere they appear. */
+  .intention-quote {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    line-height: var(--leading-snug);
+    color: var(--text-bright);
+  }
+  /* No quote could be found, so the machine's phrasing is the headline —
+     in the interface face, not dressed up as something you said. */
+  .intention-text {
+    font-size: var(--text-md);
+    line-height: var(--leading-snug);
+    color: var(--text);
+  }
+  .intention-reading {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+  }
+
+  .intention-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    margin: var(--space-1) 0 0 calc(var(--space-3) * -1);
+  }
+  .intention-entity,
+  .intention-said {
+    min-height: 28px;
+    font-size: var(--text-sm);
+  }
+  /* Flex, or the dot — an empty inline span — has no width at all. */
+  .intention-entity,
+  .brief-entity-name {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .intention-said {
+    color: var(--text-dim);
+  }
+  .intention-entity:disabled,
+  .intention-said:disabled {
+    cursor: default;
+  }
+
+  .intention-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .intention-done {
+    min-height: 32px;
+    padding: 0 var(--space-3);
+    font-size: var(--text-sm);
+  }
+  .intention-dismiss {
+    color: var(--text-dim);
+  }
+  .intention-outcome {
+    color: var(--text-dim);
+    padding-right: var(--space-1);
+  }
+  .intention-error {
+    grid-column: 2 / -1;
+    margin-top: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text-dim);
+  }
+
+  /* Settled — done, or not one after all. Still there, so the undo is,
+     but visibly no longer asking anything. */
+  .intention-settled {
+    opacity: 0.58;
+    background: var(--surface);
+  }
+  .intention-settled .sparkle {
+    fill: var(--text-dim);
+    filter: none;
+  }
+  .intention[data-status="fulfilled"] .intention-quote,
+  .intention[data-status="fulfilled"] .intention-text {
+    text-decoration: line-through;
+    text-decoration-color: var(--line-strong);
+    text-decoration-thickness: 1px;
+  }
+
+  /* Inside the capture sheet the cards sit in a panel of their own. */
+  .intention-panel {
+    min-height: 0;
+  }
+  .intention-panel .intention {
+    padding: var(--space-3);
+  }
+
+  /* — a meeting on Today — ------------------------------------------- */
+
+  .today-meeting {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-5);
+    padding: var(--space-4);
+  }
+  .today-meeting-lit {
+    border-color: var(--spark-edge);
+    background:
+      radial-gradient(120% 160% at 0% 0%, var(--spark-wash), transparent 55%),
+      var(--surface);
+    box-shadow: 0 10px 30px -22px var(--spark);
+  }
+  button.today-meeting-lit:hover {
+    border-color: var(--spark);
+    background:
+      radial-gradient(120% 160% at 0% 0%, var(--spark-wash), transparent 55%),
+      var(--surface-hover);
+  }
+  .today-meeting-clock {
+    display: block;
+    margin-top: 2px;
+    color: var(--text-dim);
+  }
+  .today-meeting-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  .today-meeting-title {
+    font-size: var(--text-xl);
+  }
+  .today-meeting-detail {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+  .today-meeting-lit .today-meeting-detail {
+    color: var(--spark);
+  }
+
+  /* — a meeting's brief — -------------------------------------------- */
+
+  .brief {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+  }
+  .brief-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .brief-when {
+    color: var(--spark);
+  }
+  .brief-when[data-phase="after"] {
+    color: var(--text-dim);
+  }
+  .brief-title {
+    font-family: var(--font-display);
+    font-size: var(--text-5xl);
+    font-weight: 400;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-bright);
+    max-width: 22ch;
+  }
+  .brief-people {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .brief-person {
+    color: var(--text-muted);
+  }
+  .brief-person-known {
+    color: var(--text-bright);
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .brief-person-known:hover {
+    border-color: var(--text-dim);
+  }
+
+  .brief-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .brief-note {
+    font-size: var(--text-sm);
+    color: var(--text-dim);
+  }
+
+  /* What you meant to bring up: the one part of the page that asks
+     something of you, so the one part that is set apart. */
+  .brief-bring {
+    padding: var(--space-5);
+    border: 1px solid var(--spark-edge);
+    border-radius: var(--radius-xl);
+    background:
+      radial-gradient(90% 120% at 0% 0%, var(--spark-wash), transparent 60%),
+      var(--surface-quiet);
+  }
+  .brief-bring .intention {
+    background: var(--surface);
+  }
+  .brief-bring .intention-quote {
+    font-size: var(--text-xl);
+  }
+  .brief-answer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .brief-closed {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--spark);
+  }
+
+  .brief-entities {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+  }
+  .brief-entity {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .brief-entity-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin-left: calc(var(--space-3) * -1);
+  }
+  .brief-entity-name .name {
+    font-size: var(--text-xl);
+  }
+  .brief-said {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+  }
+  .brief-said-words {
+    font-family: var(--font-display);
+    font-size: var(--text-md);
+    line-height: var(--leading-relaxed);
+    color: var(--text-quiet);
+    /* Enough to recall the whole note; the rest is one click away. */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* The passage an intention was heard in, inside the whole note: an
+     ember underline, like a pencil mark in a margin — not a highlighter,
+     which would shout over the rest of what you said. */
+  .said-mark {
+    background: none;
+    color: var(--text-bright);
+    text-decoration: underline;
+    text-decoration-color: var(--spark);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+  }
+
+  /* — Settings: which calendars — ------------------------------------ */
+
+  /* Two classes: settings.css comes later in the same layer. */
+  .settings-row.settings-row-block {
+    align-items: flex-start;
+    padding: var(--space-4) 0;
+  }
+  .calendar-groups {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+  .calendar-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .calendar-check {
+    gap: var(--space-2);
+  }
+  .calendar-dot {
+    width: 9px;
+    height: 9px;
+  }
+  .settings-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  @media (max-width: 620px) {
+    .intention {
+      grid-template-columns: 18px minmax(0, 1fr);
+    }
+    .intention-actions {
+      grid-column: 2;
+      margin-top: var(--space-2);
+    }
+    .today-meeting {
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .brief-title {
+      font-size: var(--text-4xl);
+    }
+  }
+}

@@ -1161,6 +1161,12 @@ pub async fn redact(
     .execute(&mut *tx)
     .await?;
 
+    // An intention is the capture's words in the model's phrasing, plus a
+    // verbatim quote of them. Both go with the words.
+    sqlx::query!(r#"delete from intentions where source_event_id = $1"#, id)
+        .execute(&mut *tx)
+        .await?;
+
     let relations_removed = sqlx::query!(r#"delete from relations where source_event_id = $1"#, id)
         .execute(&mut *tx)
         .await?

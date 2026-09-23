@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into intention_entities (intention_id, entity_id) values ($1, $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8d2bfb43bb7a079c2e28ec0fb5febc1e9fb7fac0f2c14b8131971646b42bc80e"
+}

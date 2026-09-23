@@ -86,6 +86,44 @@ pub struct Stored {
     /// is announced once a week and not on every check after the time.
     #[serde(default)]
     pub review_announced_week: Option<String>,
+    /// Which calendars *this* Mac reads for meetings ([`crate::foresight`]),
+    /// by EventKit identifier. `None` and empty both mean none: the
+    /// private Mac and the work Mac each tick their own, and nothing is
+    /// read until something is (docs/prospective-memory.md, F4).
+    #[serde(default)]
+    pub watched_calendars: Option<Vec<String>>,
+    /// How long before a meeting it is brought up.
+    #[serde(default)]
+    pub foresight_lead_minutes: Option<u32>,
+    /// Whether a meeting with something to bring up also gets a banner.
+    #[serde(default)]
+    pub foresight_banner: Option<bool>,
+}
+
+/// The lead times Settings offers. Anything else in the file is read as
+/// the default rather than trusted.
+pub const FORESIGHT_LEADS: [u32; 4] = [5, 10, 15, 30];
+
+/// How meetings are brought up. The webview sees all of it.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ForesightSettings {
+    pub calendar_ids: Vec<String>,
+    pub lead_minutes: u32,
+    pub banner: bool,
+}
+
+impl Default for ForesightSettings {
+    /// Ten minutes: long enough to read three sentences and walk to the
+    /// meeting room, short enough that it is still on your mind when the
+    /// meeting starts. Banner on, because the menu bar alone is easy to
+    /// miss (F6) — and switching it off is one toggle.
+    fn default() -> Self {
+        Self {
+            calendar_ids: Vec::new(),
+            lead_minutes: 10,
+            banner: true,
+        }
+    }
 }
 
 /// When the weekly review is announced. The webview sees this; the
@@ -111,6 +149,18 @@ impl Default for ReviewSchedule {
 }
 
 impl Stored {
+    pub fn foresight(&self) -> ForesightSettings {
+        let default = ForesightSettings::default();
+        ForesightSettings {
+            calendar_ids: self.watched_calendars.clone().unwrap_or_default(),
+            lead_minutes: self
+                .foresight_lead_minutes
+                .filter(|m| FORESIGHT_LEADS.contains(m))
+                .unwrap_or(default.lead_minutes),
+            banner: self.foresight_banner.unwrap_or(default.banner),
+        }
+    }
+
     pub fn review_schedule(&self) -> ReviewSchedule {
         let default = ReviewSchedule::default();
         ReviewSchedule {
@@ -149,6 +199,9 @@ impl Default for Stored {
             review_weekday: None,
             review_time: None,
             review_announced_week: None,
+            watched_calendars: None,
+            foresight_lead_minutes: None,
+            foresight_banner: None,
         }
     }
 }
@@ -164,6 +217,7 @@ pub struct SettingsView {
     pub cf_access_configured: bool,
     pub lock: crate::lock::LockStatus,
     pub review: ReviewSchedule,
+    pub foresight: ForesightSettings,
 }
 
 /// The Keychain read is lazy, so a local or LAN install — which never
@@ -269,6 +323,7 @@ impl SettingsState {
     pub fn view(&self, lock: &crate::lock::LockState) -> SettingsView {
         let stored = self.snapshot();
         let review = stored.review_schedule();
+        let foresight = stored.foresight();
         SettingsView {
             capture_shortcut: stored.capture_shortcut,
             backend_url: stored.backend_url,
@@ -276,6 +331,7 @@ impl SettingsState {
             cf_access_configured: self.secret().is_some(),
             lock: self.lock_status(lock),
             review,
+            foresight,
         }
     }
 
@@ -646,6 +702,48 @@ pub fn set_review_schedule(
     if let Err(err) = state.persist(&updated) {
         log::warn!("could not write settings: {err}");
     }
+
+    Ok(state.view(&lock))
+}
+
+/// Sets how meetings are brought up on this Mac: which calendars are
+/// read, how far ahead, and whether with a banner.
+///
+/// One command for all three, because Settings changes them in one place
+/// and the watcher should act on the whole new picture at once — ticking
+/// a calendar should light the menu bar now, not at the next tick.
+#[tauri::command]
+pub fn set_foresight(
+    state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
+    foresight: tauri::State<'_, crate::foresight::ForesightState>,
+    calendar_ids: Vec<String>,
+    lead_minutes: u32,
+    banner: bool,
+) -> Result<SettingsView, String> {
+    if !FORESIGHT_LEADS.contains(&lead_minutes) {
+        return Err(format!(
+            "{lead_minutes} minutes is not one of the offered leads"
+        ));
+    }
+    let mut calendar_ids = calendar_ids;
+    calendar_ids.sort();
+    calendar_ids.dedup();
+
+    let updated = {
+        let mut current = state
+            .current
+            .lock()
+            .map_err(|_| "settings lock poisoned".to_string())?;
+        current.watched_calendars = Some(calendar_ids);
+        current.foresight_lead_minutes = Some(lead_minutes);
+        current.foresight_banner = Some(banner);
+        current.clone()
+    };
+    if let Err(err) = state.persist(&updated) {
+        log::warn!("could not write settings: {err}");
+    }
+    foresight.poke();
 
     Ok(state.view(&lock))
 }

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "delete from intentions where source_event_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d59e6d627c5e5451ea462c7d5a5cbfeaf6faf5dcf93edcbc1f78405c3e1d0bb8"
+}

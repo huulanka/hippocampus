@@ -1,5 +1,6 @@
 mod audio;
 mod auth;
+mod brief;
 mod config;
 mod consolidation;
 mod echo;

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select distinct i.id\n        from intentions i\n        join intention_entities ie on ie.intention_id = i.id\n        join entities start on start.id = ie.entity_id\n        where i.status = 'open'\n          and i.source_event_id <> $1\n          and coalesce(start.merged_into, start.id) in (\n              select entity_id from observations where source_event_id = $1\n          )\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "intentions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9a9e8fafee58f248057c191fce630c6302e6bf077406d217076af873aa9fc52a"
+}

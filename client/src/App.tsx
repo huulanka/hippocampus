@@ -9,6 +9,7 @@ import { NotepadScreen } from "./screens/NotepadScreen";
 import { CaptureDetailScreen } from "./screens/CaptureDetailScreen";
 import { EntityDetailScreen } from "./screens/EntityDetailScreen";
 import { ReviewScreen } from "./screens/ReviewScreen";
+import { BriefScreen } from "./screens/BriefScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { RelationsScreen } from "./screens/RelationsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
@@ -16,9 +17,12 @@ import { LockGate } from "./components/LockGate";
 import {
   lockStatus,
   onLocked,
+  onOpenBrief,
   onOpenReview,
   onReviewDue,
   onSummonCapture,
+  onUnlocked,
+  onWriteNote,
   type LockStatus,
 } from "./desktop";
 
@@ -40,7 +44,10 @@ type View =
   /// A week looked back on. Not a sixth place in the rail: the five are a
   /// decision (docs/design.md), and a week is something you arrive at —
   /// from Today, the tray, or the weekly notification.
-  | { kind: "review"; week?: string };
+  | { kind: "review"; week?: string }
+  /// A meeting and what you know about it — from the lit menu bar, or
+  /// from Today. Like the review, something you arrive at, not a place.
+  | { kind: "brief"; key: string };
 
 function Shell() {
   const [place, setPlace] = useState<Place>("today");
@@ -81,6 +88,20 @@ function Shell() {
       live = false;
       stop?.();
     };
+  }, []);
+
+  /// Unlocked from the menu-bar menu: the gate here goes too, rather than
+  /// asking for Touch ID a second time. And "Write a Note…" from the same
+  /// menu opens the capture sheet — without bumping `summons`, which is
+  /// what would start the microphone.
+  useEffect(() => {
+    const offs: Promise<() => void>[] = [
+      onUnlocked((status) => setLock(status)),
+      onWriteNote(() =>
+        setStack((s) => [...s.filter((v) => v.kind !== "capture"), { kind: "capture" }]),
+      ),
+    ];
+    return () => offs.forEach((off) => off.then((stop) => stop()));
   }, []);
 
   useEffect(
@@ -136,6 +157,40 @@ function Shell() {
     };
   }, []);
 
+  /// The lit menu bar was clicked. Same rule as the review: never on top
+  /// of a capture in progress — speaking comes first.
+  useEffect(() => {
+    let live = true;
+    let stop: (() => void) | undefined;
+    let pending: string | null = null;
+    const open = (key: string) =>
+      setStack((s) => {
+        const top = s[s.length - 1];
+        if (top?.kind === "capture") {
+          pending = key;
+          return s;
+        }
+        if (top?.kind === "brief" && top.key === key) return s;
+        return [...s.filter((v) => v.kind !== "brief"), { kind: "brief", key }];
+      });
+    const onFocus = () => {
+      if (pending === null) return;
+      const key = pending;
+      pending = null;
+      open(key);
+    };
+    window.addEventListener("focus", onFocus);
+    onOpenBrief(open).then((off) => {
+      if (live) stop = off;
+      else off();
+    });
+    return () => {
+      live = false;
+      window.removeEventListener("focus", onFocus);
+      stop?.();
+    };
+  }, []);
+
   function go(next: Place) {
     setStack([]);
     setPlace(next);
@@ -150,6 +205,7 @@ function Shell() {
   const openCapture = (id: string) => setStack((s) => [...s, { kind: "captureDetail", id }]);
   const openEntity = (id: string) => setStack((s) => [...s, { kind: "entity", id }]);
   const openReview = (week?: string) => setStack((s) => [...s, { kind: "review", week }]);
+  const openBrief = (key: string) => setStack((s) => [...s, { kind: "brief", key }]);
   const back = () => setStack((s) => s.slice(0, -1));
 
   const view = stack[stack.length - 1];
@@ -181,6 +237,7 @@ function Shell() {
           <CaptureScreen
             summons={summons}
             onOpenCapture={openCapture}
+            onOpenEntity={openEntity}
             onClose={back}
             locked={lock?.locked ?? false}
           />
@@ -200,6 +257,14 @@ function Shell() {
             onOpenCapture={openCapture}
             onBack={back}
           />
+        ) : view?.kind === "brief" ? (
+          <BriefScreen
+            key={view.key}
+            meetingKey={view.key}
+            onOpenCapture={openCapture}
+            onOpenEntity={openEntity}
+            onBack={back}
+          />
         ) : view?.kind === "review" ? (
           <ReviewScreen
             key={view.week ?? "this"}
@@ -214,6 +279,7 @@ function Shell() {
             onOpenCapture={openCapture}
             onOpenEntity={openEntity}
             onOpenReview={openReview}
+            onOpenBrief={openBrief}
             onGo={go}
           />
         )}
@@ -227,12 +293,14 @@ function Here({
   onOpenCapture,
   onOpenEntity,
   onOpenReview,
+  onOpenBrief,
   onGo,
 }: {
   place: Place;
   onOpenCapture: (eventId: string) => void;
   onOpenEntity: (id: string) => void;
   onOpenReview: () => void;
+  onOpenBrief: (key: string) => void;
   onGo: (place: Place) => void;
 }) {
   switch (place) {
@@ -242,6 +310,7 @@ function Here({
           onOpenCapture={onOpenCapture}
           onOpenEntity={onOpenEntity}
           onOpenReview={onOpenReview}
+          onOpenBrief={onOpenBrief}
           onGo={onGo}
         />
       );

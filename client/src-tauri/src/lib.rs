@@ -6,8 +6,10 @@
 
 mod asr;
 mod backend;
+mod calendar;
 mod capture;
 mod draft;
+mod foresight;
 mod keychain;
 mod lock;
 pub mod microphone;
@@ -202,6 +204,14 @@ pub fn run() {
             settings::set_lock_enabled,
             settings::set_lock_idle_seconds,
             settings::set_review_schedule,
+            settings::set_foresight,
+            foresight::foresight_status,
+            foresight::foresight_answered,
+            foresight::foresight_refresh,
+            foresight::calendar_access,
+            foresight::request_calendar_access,
+            foresight::list_calendars,
+            foresight::open_calendar_privacy,
             settings::autostart_enabled,
             settings::set_autostart_enabled,
             lock::lock_status,
@@ -241,6 +251,12 @@ pub fn run() {
 
             watch_for_idleness(app.handle().clone());
             review::watch(app.handle().clone());
+
+            // Before the tray, which asks it whether to sparkle.
+            app.manage(foresight::ForesightState::load(foresight::state_path(
+                app.handle(),
+            )?));
+            foresight::watch(app.handle().clone());
 
             // No Dock icon, no Cmd+Tab entry: the menu bar is now the
             // one place this app lives when its window is not open,

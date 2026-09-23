@@ -12,6 +12,40 @@ der Nutzer hat es am 21.09.2026 selbst geprüft.
 
 ## Offen — braucht einen Menschen
 
+### Zukunft erinnern im gebündelten Build
+Alles, was an macOS hängt, geht nur in der echten App (wie Mikrofon und
+Touch ID):
+
+1. Settings → Meetings → *Allow…*. Erwartet: der System-Dialog mit dem
+   Text aus `Info.plist`, danach die Kalender, nach Konto gruppiert und in
+   ihrer Farbe. Auf dem privaten Mac nur iCloud anhaken, auf dem
+   Arbeits-Mac nur Exchange.
+2. Einen Termin in 9 Minuten anlegen, Titel mit einem bekannten Namen
+   („Jour fixe Paul"), und vorher etwas über Paul sagen, das eine Absicht
+   ist. Erwartet: das Gehirn in der Menüleiste wird clay, zwei Funken
+   funkeln ~40 s und bleiben dann ruhig stehen; ein Banner „In 9 min: …"
+   (nicht im Fokus-Modus); ein Klick aufs Icon öffnet das Menü mit dem
+   Termin oben, gesperrt nur „Something to bring up", nach „Unlock…" das
+   Zitat; der Termin-Eintrag öffnet die Brief-Seite, „Write a Note…" das
+   Capture-Sheet zum Tippen.
+3. Nach Terminende: Banner „… is over — Did you bring it up?", das Icon
+   leuchtet weiter, bis auf der Brief-Seite geantwortet ist.
+4. Auf heller und dunkler Menüleiste ansehen — die zwei Paletten sind nur
+   als Pixel geprüft (`tray::tests::tray_preview`), nie in der echten Bar.
+
+Geprüft ist: Abgleich Termin ↔ Entität (8 Tests plus echte Namen der
+Dev-DB), die Phasen und Banner-Entscheidungen (`foresight::tests`), die
+Routen gegen Postgres (`routes::intentions::db_tests`), und alle Seiten im
+Browser gegen echte Daten mit einem Tauri-Stub.
+
+### Die Absichts-Erkennung gegen das echte Modell
+Der Prompt ist neu und **nie gegen OpenRouter gelaufen** — lokal liegt kein
+Schlüssel. Geprüft sind Parser (fehlender Schlüssel, leerer Text,
+unbekanntes `about`) und die Zitat-Prüfung. Offen: wie oft das Modell eine
+Absicht erkennt, die keine ist, und wie oft es eine übersieht. Nach dem
+Deploy an einer Woche echter Notizen ansehen — die [x] in der UI sind
+dafür die Messung (`intention.dismissed` im Log zählen).
+
 ### Der aufgezeichnete Shortcut
 In den Einstellungen `[ Change ]` drücken, eine Kombination tippen,
 danach aus einer anderen App heraus auslösen. Erwartet: greift sofort,

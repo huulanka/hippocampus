@@ -23,6 +23,7 @@ the language the project is thought through in. Those are marked (de).
 - **[Interface](design.md)** (de) — Where every function lives, and why it looks the way it does
 - **[Consolidation](consolidation.md)** (de) — Reconciling the graph after the fact
 - **[Entity resolution](entity-resolution.md)** (de) — Telling a duplicate from a relation
+- **[Remembering ahead](prospective-memory.md)** (de) — Intentions that come back with the people they are about, before a meeting
 - **[Work packages](issues.md)** (de) — The backlog, cut into pieces that can be built one at a time
 
 ## Architecture Decision Records
@@ -39,3 +40,4 @@ the language the project is thought through in. Those are marked (de).
 - **[0010](adr/0010-echo-is-judged-once-and-remembered.md)** — Echo is judged once, remembered, and judged off the machine
 - **[0011](adr/0011-reading-is-guarded-capturing-is-not.md)** — Reading is guarded, capturing is not
 - **[0012](adr/0012-the-shortcut-is-the-record-button-nothing-else-summons-recording.md)** — The app lives in the menu bar; only the shortcut starts a recording
+- **[0013](adr/0013-the-calendar-stays-on-the-mac.md)** — The calendar stays on the Mac; the backend only matches

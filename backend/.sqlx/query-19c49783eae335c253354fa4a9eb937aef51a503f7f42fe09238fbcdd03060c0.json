@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into capture_search (event_id, transcript, occurred_at) values ($1, $2, now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19c49783eae335c253354fa4a9eb937aef51a503f7f42fe09238fbcdd03060c0"
+}

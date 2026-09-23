@@ -79,4 +79,10 @@ keyring = { version = "4", default-features = false, features = ["v1"] }
 # than two. `tauri-plugin-biometric` is not an option: it exists only for
 # Android and iOS.
 objc2-local-authentication = { version = "0.3.2", default-features = false, features = ["LAContext", "LAError", "LABiometryType", "block2", "std"] }
-objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString", "NSError", "std"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSString", "NSError", "std", "NSDate", "NSArray", "NSPredicate", "NSSet", "NSURL", "NSUserDefaults", "NSObject"] }
+# EventKit, for the calendars this Mac is told to watch ([`crate::calendar`]).
+# Read-only: nothing here ever writes to a calendar. `objc2-app-kit` only
+# for `NSColor`, so the Settings list can show each calendar in its own
+# colour — the fastest way to tell "Arbeit" from "Privat" at a glance.
+objc2-event-kit = { version = "0.3.2", default-features = false, features = ["EKEventStore", "EKCalendar", "EKEvent", "EKCalendarItem", "EKParticipant", "EKSource", "EKTypes", "EKObject", "block2", "std", "objc2-app-kit"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSColor", "NSColorSpace", "std"] }

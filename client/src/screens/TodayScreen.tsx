@@ -2,13 +2,19 @@ import { useEffect, useState } from "react";
 import {
   getResurfaced,
   listCaptures,
+  listIntentions,
   type CaptureListItem,
+  type Intention,
   type Resurfaced,
   type ThreadItem,
   type UpcomingItem,
 } from "../api";
+import { IntentionCard, Sparkle } from "../components/Intention";
+import type { MeetingView } from "../desktop";
 import { entityColor } from "../entityType";
 import { whenLabel } from "../whenLabel";
+import { ago, clock, until } from "../ago";
+import { useForesight, useMinute } from "../useForesight";
 import type { Place } from "../places";
 
 /// The only screen that speaks first.
@@ -32,16 +38,21 @@ export function TodayScreen({
   onOpenCapture,
   onOpenEntity,
   onOpenReview,
+  onOpenBrief,
   onGo,
 }: {
   onOpenCapture: (eventId: string) => void;
   onOpenEntity: (id: string) => void;
   onOpenReview: () => void;
+  onOpenBrief: (key: string) => void;
   onGo: (place: Place) => void;
 }) {
   const [data, setData] = useState<Resurfaced | null>(null);
   const [recent, setRecent] = useState<CaptureListItem[] | null>(null);
+  const [intentions, setIntentions] = useState<Intention[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const foresight = useForesight();
+  const now = useMinute();
 
   useEffect(() => {
     let live = true;
@@ -51,6 +62,11 @@ export function TodayScreen({
     listCaptures()
       .then((c) => live && setRecent(c.slice(0, 4)))
       .catch(() => live && setRecent([]));
+    // Quiet on failure: a backend from before intentions has no such
+    // route, and Today without this section is still Today.
+    listIntentions()
+      .then((i) => live && setIntentions(i))
+      .catch(() => live && setIntentions([]));
     return () => {
       live = false;
     };
@@ -59,11 +75,14 @@ export function TodayScreen({
   if (error) return <p className="today-note">Couldn't load that: {error}</p>;
   if (!data) return <p className="today-note">Looking…</p>;
 
+  const next = nextMeeting(foresight?.meetings ?? []);
+  const shownIntentions = intentions.slice(0, MAX_INTENTIONS);
+
   return (
     <div className="column today">
       <header className="today-head">
         <p className="label-micro">{longDate()}</p>
-        <h1 className="today-lead">{lead(data)}</h1>
+        <h1 className="today-lead">{next ? meetingLead(next, now) : lead(data, intentions.length)}</h1>
         <button type="button" className="btn-quiet today-week" onClick={() => onOpenReview()}>
           Look back on the week
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -71,6 +90,40 @@ export function TodayScreen({
           </svg>
         </button>
       </header>
+
+      {(foresight?.meetings.length ?? 0) > 0 && (
+        <section className="today-section">
+          <h2 className="label-micro">From your calendar</h2>
+          <div className="stack stack-tight">
+            {foresight!.meetings.map((meeting) => (
+              <MeetingCard key={meeting.key} meeting={meeting} now={now} onOpen={() => onOpenBrief(meeting.key)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {shownIntentions.length > 0 && (
+        <section className="today-section">
+          <h2 className="label-micro intention-label">
+            <Sparkle size={10} /> Still on your mind
+          </h2>
+          <div className="stack stack-tight">
+            {shownIntentions.map((intention) => (
+              <IntentionCard
+                key={intention.id}
+                intention={intention}
+                onOpenEntity={onOpenEntity}
+                onOpenCapture={onOpenCapture}
+              />
+            ))}
+          </div>
+          {intentions.length > MAX_INTENTIONS && (
+            <p className="today-note">
+              And {intentions.length - MAX_INTENTIONS} more — each is on the page of whoever it is about.
+            </p>
+          )}
+        </section>
+      )}
 
       {data.upcoming.length > 0 && (
         <section className="today-section">
@@ -120,7 +173,7 @@ export function TodayScreen({
         </section>
       )}
 
-      {data.upcoming.length === 0 && data.threads.length === 0 && (
+      {data.upcoming.length === 0 && data.threads.length === 0 && intentions.length === 0 && (
         <section className="today-empty">
           <p className="prose">
             Nothing has come up twice yet, and nothing you have said names a date.
@@ -139,12 +192,82 @@ export function TodayScreen({
   );
 }
 
+/// How many open intentions Today lists. The rest live on their entities'
+/// pages; a to-do list that grows without bound is the thing this app
+/// exists to not be.
+const MAX_INTENTIONS = 5;
+
+/// The meeting the lead should be about: the soonest one about to start
+/// or running, with something to bring up. Only then does a meeting
+/// outrank everything else on the screen — one with nothing to say is a
+/// line further down, not the headline.
+function nextMeeting(meetings: MeetingView[]): MeetingView | null {
+  return (
+    meetings.find((m) => (m.phase === "ahead" || m.phase === "now") && m.intentions.length > 0) ??
+    null
+  );
+}
+
+function meetingLead(meeting: MeetingView, now: number): string {
+  const n = meeting.intentions.length;
+  const what = n === 1 ? "something" : `${count(n)} things`;
+  const when =
+    new Date(meeting.starts_at).getTime() > now ? until(meeting.starts_at, now) : "now";
+  return `${meeting.title}, ${when} — you meant to bring ${what} up.`;
+}
+
+/// One meeting from the calendar, as a line you can open.
+function MeetingCard({
+  meeting,
+  now,
+  onOpen,
+}: {
+  meeting: MeetingView;
+  now: number;
+  onOpen: () => void;
+}) {
+  const lit = meeting.intentions.length > 0 && !(meeting.phase === "after" && meeting.answered);
+  const started = new Date(meeting.starts_at).getTime() <= now;
+  const ended = new Date(meeting.ends_at).getTime() <= now;
+  const when = ended ? "earlier" : started ? "now" : until(meeting.starts_at, now);
+  const n = meeting.intentions.length;
+  const detail = ended
+    ? "Did you bring it up?"
+    : n > 0
+      ? sentence(n === 1 ? "something to bring up" : `${count(n)} things to bring up`)
+      : sentence(
+          meeting.known === 1
+            ? "something you've talked about before"
+            : `${count(meeting.known)} things you've talked about before`,
+        );
+  return (
+    <button type="button" className={`card today-meeting${lit ? " today-meeting-lit" : ""}`} onClick={onOpen}>
+      <span className="today-when meta">
+        {when}
+        <span className="today-meeting-clock">{clock(meeting.starts_at)}</span>
+      </span>
+      <span className="today-meeting-body">
+        <span className="name today-meeting-title">{meeting.title}</span>
+        <span className="today-meeting-detail">
+          {lit && <Sparkle size={11} />}
+          {detail}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /// The sentence at the top. Assembled from what is actually there rather
 /// than picked from a list of cheerful greetings — if it says two things
 /// are coming, two things are coming.
-function lead(data: Resurfaced): string {
+function lead(data: Resurfaced, intentions: number): string {
   const ahead = data.upcoming.length;
   const threads = data.threads.length;
+  if (ahead === 0 && threads === 0 && intentions > 0) {
+    return intentions === 1
+      ? "One thing you meant to do, and it will come back when it matters."
+      : `${sentence(count(intentions))} things you meant to do, each waiting for its moment.`;
+  }
   if (ahead === 0 && threads === 0) return "Nothing is waiting for you.";
   if (ahead === 0) {
     return sentence(
@@ -220,18 +343,6 @@ function Thread({ thread, onOpenEntity }: { thread: ThreadItem; onOpenEntity: (i
       {thread.current_summary && <span className="today-thread-summary">{thread.current_summary}</span>}
     </button>
   );
-}
-
-/// Relative rather than absolute: "three weeks ago" is the fact that
-/// matters about a thread, and a date makes the reader do the arithmetic.
-function ago(iso: string): string {
-  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 31) return `${Math.round(days / 7)} weeks ago`;
-  if (days < 365) return `${Math.round(days / 30)} months ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", year: "numeric" });
 }
 
 function when(iso: string): string {

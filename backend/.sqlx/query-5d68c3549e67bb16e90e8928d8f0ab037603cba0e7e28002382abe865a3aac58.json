@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into observations (entity_id, source_event_id, text, model) values ($1, $2, 'observed', 'test-model')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5d68c3549e67bb16e90e8928d8f0ab037603cba0e7e28002382abe865a3aac58"
+}

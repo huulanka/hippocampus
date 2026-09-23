@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update intentions set status = $2, resolved_at = $3 where id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3f847ff403d93161deb53b74d790c6293475f4095abddda59a2d7578b259672a"
+}

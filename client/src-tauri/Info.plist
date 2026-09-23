@@ -10,5 +10,12 @@
 	<string>com.andreasbauer.hippocampus</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Hippocampus records what you say so the original recording is kept alongside its transcript. Audio is transcribed on this Mac and never leaves it.</string>
+	<!-- Asked for from Settings, never at launch. Without these macOS does
+	     not show a dialog when access is requested: it terminates the app.
+	     The first is the macOS 14+ key; the second covers older systems. -->
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Hippocampus reads only the calendars you tick in Settings, so it can bring up what you meant to say shortly before a meeting with the people it concerns. It never changes your calendar.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Hippocampus reads only the calendars you tick in Settings, so it can bring up what you meant to say shortly before a meeting with the people it concerns. It never changes your calendar.</string>
 </dict>
 </plist>

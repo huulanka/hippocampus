@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select structured_at, abandoned_at from capture_pipeline where capture_event_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "structured_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_pipeline",
+            "name": "structured_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "abandoned_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_pipeline",
+            "name": "abandoned_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "598ab9db1ebf32d706cbf6fe33751768c3eb83621ddf06802046380848759439"
+}

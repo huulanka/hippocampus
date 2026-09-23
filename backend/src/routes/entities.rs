@@ -149,6 +149,8 @@ pub async fn detail(
     .fetch_all(&state.pool)
     .await?;
 
+    let intentions = super::intentions::for_entity(&state.pool, id).await?;
+
     Ok(Json(EntityDetail {
         id: entity.id,
         entity_type: entity.entity_type,
@@ -181,6 +183,7 @@ pub async fn detail(
                 source_event_id: r.source_event_id,
             })
             .collect(),
+        intentions,
     }))
 }
 

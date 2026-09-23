@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Mascot } from "../brand/Mascot";
 import { createCapture } from "../api";
 import { useEcho } from "../useEcho";
+import { useIntentions } from "../useIntentions";
+import { IntentionCard } from "../components/Intention";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   cancelRecording,
@@ -55,11 +57,13 @@ type Phase = "idle" | "recording" | "working";
 export function CaptureScreen({
   summons = 0,
   onOpenCapture,
+  onOpenEntity,
   onClose,
   locked = false,
 }: {
   summons?: number;
   onOpenCapture: (eventId: string) => void;
+  onOpenEntity?: (id: string) => void;
   /// Back to whatever was on screen when the shortcut was pressed.
   ///
   /// Capture is not a place any more — it opens over wherever you already
@@ -147,6 +151,11 @@ export function CaptureScreen({
   /// note is confirmed the moment it is safe on disk; the earlier
   /// thoughts it recalls follow a second or two later.
   const echo = useEcho(saved?.eventId ?? null, saved?.echoPending ?? false);
+
+  /// What this note meant for your intentions: anything it noted, and
+  /// anything still open about what it mentions. Reading, so only while
+  /// unlocked — the same rule as the echo.
+  const intentions = useIntentions(saved?.eventId ?? null, !locked);
 
   /// Safe on this Mac, not yet at the backend. Kept as its own word
   /// because every branch below has to treat it as success — the whole
@@ -353,6 +362,46 @@ export function CaptureScreen({
             Nothing close enough in your earlier captures. That's the honest answer, not an
             empty one.
           </p>
+        )}
+
+        {!queued && !locked && intentions.noted.length > 0 && (
+          <div className="panel transcript-card intention-panel">
+            <div className="label-micro intention-label">
+              NOTED FOR LATER{" "}
+              <span className="dim">— it comes back when they do</span>
+            </div>
+            <div className="stack stack-tight">
+              {intentions.noted.map((intention) => (
+                <IntentionCard
+                  key={intention.id}
+                  intention={intention}
+                  actions="noted"
+                  arriving
+                  onOpenEntity={onOpenEntity}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!queued && !locked && intentions.reminded.length > 0 && (
+          <div className="panel transcript-card intention-panel">
+            <div className="label-micro intention-label">
+              YOU MEANT TO{" "}
+              <span className="dim">— still open, and this note is about them</span>
+            </div>
+            <div className="stack stack-tight">
+              {intentions.reminded.map((intention) => (
+                <IntentionCard
+                  key={intention.id}
+                  intention={intention}
+                  arriving
+                  onOpenEntity={onOpenEntity}
+                  onOpenCapture={onOpenCapture}
+                />
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="capture-actions">

@@ -97,6 +97,13 @@
     --accent: var(--clay);
     --accent-text: #17130f; /* what sits legibly on a clay fill */
     --focus-ring: var(--ember);
+    /* Something you still mean to do. Ember, because ember already means
+     * time here — when it was said, when it is due — and an intention is
+     * a thing waiting for its moment. The same pair lights the menu bar
+     * (tray.rs), so the window and the bar speak one colour. */
+    --spark: var(--ember);
+    --spark-wash: color-mix(in srgb, var(--ember) 9%, transparent);
+    --spark-edge: color-mix(in srgb, var(--ember) 38%, var(--line));
 
     /* — type — -------------------------------------------------------
      * Three families, three jobs, and the job is the reason to reach for
@@ -216,6 +223,9 @@
     --accent: var(--clay-deep);
     --accent-text: #fffaf4;
     --focus-ring: var(--ember-deep);
+    --spark: var(--ember-deep);
+    --spark-wash: color-mix(in srgb, var(--ember) 13%, transparent);
+    --spark-edge: color-mix(in srgb, var(--ember-deep) 42%, var(--line));
 
     --entity-lightness: 38%;
 

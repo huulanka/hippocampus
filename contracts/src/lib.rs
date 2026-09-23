@@ -315,6 +315,11 @@ pub struct EntityDetail {
     /// Newest first: an entity is read from what was last said about it.
     pub mentions: Vec<EntityCapture>,
     pub relations: Vec<EntityEdge>,
+    /// What you still mean to do about it. Open ones only — a page about
+    /// Paul is where "ask him about the deadline" belongs until it is
+    /// done, and nowhere after.
+    #[serde(default)]
+    pub intentions: Vec<Intention>,
 }
 
 /// A capture that said something about an entity, with the observation
@@ -653,9 +658,141 @@ pub struct WriteStoryRequest {
     pub timezone: Option<String>,
 }
 
+/// Something you said you would do, say or ask later — and have not yet.
+///
+/// Heard in passing, not dictated: "beim Paul muss ich noch die Deadline
+/// ansprechen" is one, and nobody had to say "remind me". It hangs on the
+/// people and things it is about rather than on a time, which is what lets
+/// it come back when one of them does (docs/prospective-memory.md).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Intention {
+    pub id: Uuid,
+    /// The model's short phrasing of it, in the speaker's language.
+    pub text: String,
+    /// Your own words, verbatim, when they could be found in the
+    /// transcript. Shown in preference to `text` wherever there is room:
+    /// the phrasing is the machine's reading, the quote is what was said.
+    pub quote: Option<String>,
+    /// "open", "fulfilled" or "dismissed".
+    pub status: String,
+    pub capture_event_id: Uuid,
+    /// When you said it.
+    pub said_at: DateTime<Utc>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    /// Who and what it is about, merges followed. Can be empty: an
+    /// intention about nothing the graph knows still counts, it just has
+    /// nothing to be reminded by.
+    pub entities: Vec<IntentionEntity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntentionEntity {
+    pub id: Uuid,
+    pub name: String,
+    pub entity_type: String,
+}
+
+/// What a capture meant for your intentions — the answer to
+/// `GET /captures/{id}/intentions`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureIntentions {
+    /// The capture has not been structured yet, so nothing can be said
+    /// either way. Empty lists without this mean "none", which is the
+    /// common answer.
+    pub pending: bool,
+    /// Intentions heard in this capture.
+    pub noted: Vec<Intention>,
+    /// Open intentions from earlier captures about something this one
+    /// talks about — the "next time you mention Paul" trigger.
+    pub reminded: Vec<Intention>,
+}
+
+/// Body of `POST /intentions/{id}/fulfil`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FulfilIntentionRequest {
+    /// "calendar" when it was confirmed after a meeting, "manual" when
+    /// ticked off by hand. Kept on the event so the log says how it ended.
+    #[serde(default)]
+    pub via: Option<String>,
+}
+
+/// Body of `POST /brief` — a calendar event about to happen, as far as the
+/// backend needs to know it.
+///
+/// Sent by the client once per meeting, matched against the graph, and
+/// **not stored**: the calendar is the user's, not the memory's, and a
+/// meeting never becomes part of what Hippocampus knows (ADR 0013).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BriefRequest {
+    pub title: String,
+    /// Attendee display names, as the calendar has them.
+    #[serde(default)]
+    pub people: Vec<String>,
+}
+
+/// What you know about a meeting's people and subjects — the answer to
+/// `POST /brief`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Brief {
+    /// What in the meeting was recognised, strongest first.
+    pub entities: Vec<BriefEntity>,
+    /// Open intentions about any of them. The reason the menu bar sparkles
+    /// at all: a meeting with known people and nothing to bring up gets a
+    /// page, not a signal.
+    pub intentions: Vec<Intention>,
+    /// Your last few sentences about each of them, verbatim, newest first.
+    pub said: Vec<BriefQuote>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BriefEntity {
+    pub id: Uuid,
+    pub name: String,
+    pub entity_type: String,
+    /// "title" or "attendee": where the match was found.
+    pub matched_on: String,
+    /// The words that matched, as they appear in the calendar — so the
+    /// page can say *why* Paul is on it.
+    pub matched_text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BriefQuote {
+    pub entity_id: Uuid,
+    pub capture_event_id: Uuid,
+    pub transcript_text: String,
+    pub observation: String,
+    pub occurred_at: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An entity page from a backend that predates intentions has no such
+    /// field, and must still load.
+    #[test]
+    fn an_entity_without_intentions_still_parses() {
+        let detail: EntityDetail = serde_json::from_str(
+            r#"{
+                "id": "00000000-0000-0000-0000-000000000001",
+                "entity_type": "Person",
+                "name": "Paul",
+                "current_summary": null,
+                "created_at": "2026-01-01T00:00:00Z",
+                "mentions": [],
+                "relations": []
+            }"#,
+        )
+        .unwrap();
+        assert!(detail.intentions.is_empty());
+    }
+
+    #[test]
+    fn a_brief_request_needs_only_a_title() {
+        let req: BriefRequest = serde_json::from_str(r#"{"title":"Jour fixe"}"#).unwrap();
+        assert!(req.people.is_empty());
+    }
 
     #[test]
     fn search_query_defaults_limit_when_omitted() {

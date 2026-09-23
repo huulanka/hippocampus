@@ -310,6 +310,7 @@ pub fn lock_status(
 /// app's commands with it.
 #[tauri::command]
 pub async fn unlock(
+    app: tauri::AppHandle,
     settings: tauri::State<'_, crate::settings::SettingsState>,
     lock: tauri::State<'_, LockState>,
 ) -> Result<LockStatus, String> {
@@ -324,8 +325,29 @@ pub async fn unlock(
 
     if granted {
         lock.unlock();
+        // There are two windows now — the app and the menu-bar panel —
+        // and unlocking in either opens both. The other one would
+        // otherwise still show its gate and ask for Touch ID a second time.
+        announce_unlocked(&app, settings.lock_status(&lock));
     }
     Ok(settings.lock_status(&lock))
+}
+
+/// Tells the window the notes were just unlocked — from its own gate or
+/// from the menu-bar menu — so neither asks for Touch ID a second time.
+pub const UNLOCKED_EVENT: &str = "hippocampus://unlocked";
+
+/// Everything that has to happen once the notes are open: the window
+/// drops its gate, and the menu-bar menu fetches the words it may now
+/// show rather than waiting for its next look.
+pub fn announce_unlocked(app: &tauri::AppHandle, status: LockStatus) {
+    use tauri::{Emitter, Manager};
+    if let Err(err) = app.emit(UNLOCKED_EVENT, status) {
+        log::warn!("could not tell the window it is unlocked: {err}");
+    }
+    if let Some(foresight) = app.try_state::<crate::foresight::ForesightState>() {
+        foresight.poke();
+    }
 }
 
 /// Closes the gate by hand, for leaving the desk without waiting out the

@@ -134,6 +134,63 @@ export interface EntityDetail {
   created_at: string;
   mentions: EntityCapture[];
   relations: EntityEdge[];
+  /// Open ones only. Missing from a backend older than intentions.
+  intentions?: Intention[];
+}
+
+/// Something you said you would do, say or ask later, and have not yet.
+/// Mirrors `contracts::Intention`; see docs/prospective-memory.md.
+export interface Intention {
+  id: string;
+  /// The model's short phrasing of it.
+  text: string;
+  /// Your own words, verbatim, when they were found in the transcript.
+  /// Shown in preference to `text` wherever there is room.
+  quote: string | null;
+  status: "open" | "fulfilled" | "dismissed";
+  capture_event_id: string;
+  said_at: string;
+  resolved_at: string | null;
+  entities: IntentionEntity[];
+}
+
+export interface IntentionEntity {
+  id: string;
+  name: string;
+  entity_type: string;
+}
+
+/// What a capture meant for your intentions.
+export interface CaptureIntentions {
+  /// Not structured yet. Empty lists with this set mean "not yet".
+  pending: boolean;
+  /// Heard in this capture.
+  noted: Intention[];
+  /// Still open, from earlier, about something this capture mentions.
+  reminded: Intention[];
+}
+
+/// What you know about a meeting's people and subjects.
+export interface Brief {
+  entities: BriefEntity[];
+  intentions: Intention[];
+  said: BriefQuote[];
+}
+
+export interface BriefEntity {
+  id: string;
+  name: string;
+  entity_type: string;
+  matched_on: "title" | "attendee";
+  matched_text: string;
+}
+
+export interface BriefQuote {
+  entity_id: string;
+  capture_event_id: string;
+  transcript_text: string;
+  observation: string;
+  occurred_at: string;
 }
 
 export interface EntityCapture {
@@ -664,6 +721,44 @@ export function getFoldCandidates(id: string, query?: string): Promise<EntityLis
 
 export function getEntity(id: string): Promise<EntityDetail> {
   return request<EntityDetail>(`/entities/${id}`);
+}
+
+export function getCaptureIntentions(eventId: string): Promise<CaptureIntentions> {
+  return request<CaptureIntentions>(`/captures/${eventId}/intentions`);
+}
+
+/// Everything still open, newest first.
+export function listIntentions(): Promise<Intention[]> {
+  return request<Intention[]>("/intentions");
+}
+
+/// "That was not an intention." Reversible with `reopenIntention`.
+export function dismissIntention(id: string): Promise<Intention> {
+  return request<Intention>(`/intentions/${id}/dismiss`, { method: "POST" });
+}
+
+/// Done — `via` says whether after a meeting or by hand, and the log
+/// keeps which.
+export function fulfilIntention(id: string, via: "calendar" | "manual"): Promise<Intention> {
+  return request<Intention>(`/intentions/${id}/fulfil`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ via }),
+  });
+}
+
+export function reopenIntention(id: string): Promise<Intention> {
+  return request<Intention>(`/intentions/${id}/reopen`, { method: "POST" });
+}
+
+/// What you know about a meeting's people and subjects. The meeting is
+/// matched and forgotten; nothing about it is stored (ADR 0013).
+export function getBrief(title: string, people: string[]): Promise<Brief> {
+  return request<Brief>("/brief", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title, people }),
+  });
 }
 
 /// What the system has to say without being asked.

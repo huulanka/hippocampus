@@ -215,7 +215,68 @@ export interface Settings {
   cf_access_configured: boolean;
   lock: LockStatus;
   review: ReviewSchedule;
+  foresight: ForesightSettings;
 }
+
+/// How meetings are brought up on this Mac. Mirrors
+/// `settings::ForesightSettings`.
+export interface ForesightSettings {
+  /// EventKit identifiers of the calendars *this* Mac reads. Empty means
+  /// none — nothing is read until something is ticked.
+  calendar_ids: string[];
+  lead_minutes: number;
+  banner: boolean;
+}
+
+export const FORESIGHT_LEADS = [5, 10, 15, 30] as const;
+
+const DEFAULT_FORESIGHT: ForesightSettings = { calendar_ids: [], lead_minutes: 10, banner: true };
+
+/// Whether the calendar may be read, as macOS sees it.
+export type CalendarAccess = "not_determined" | "denied" | "restricted" | "granted" | "write_only";
+
+export interface CalendarInfo {
+  id: string;
+  title: string;
+  /// The account — "iCloud", "Exchange", an address.
+  account: string;
+  color: string | null;
+}
+
+/// Where a meeting stands, seen from now.
+export type MeetingPhase = "ahead" | "now" | "after";
+
+/// One meeting worth showing. Mirrors `foresight::MeetingView`: the
+/// meeting and ids only — the words about it are fetched through the
+/// gated request path by whoever shows them.
+export interface MeetingView {
+  key: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  people: string[];
+  phase: MeetingPhase;
+  known: number;
+  intentions: string[];
+  answered: boolean;
+}
+
+export interface ForesightStatus {
+  access: CalendarAccess;
+  watching: number;
+  meetings: MeetingView[];
+  /// The meeting the menu bar is lit for.
+  attention: string | null;
+  error: string | null;
+}
+
+const NO_FORESIGHT: ForesightStatus = {
+  access: "restricted",
+  watching: 0,
+  meetings: [],
+  attention: null,
+  error: null,
+};
 
 /// When the weekly review is announced. Mirrors `settings::ReviewSchedule`.
 export interface ReviewSchedule {
@@ -266,6 +327,7 @@ export async function getSettings(): Promise<Settings> {
       lock: NO_LOCK,
       // Off: the browser build has no way to announce anything.
       review: DEFAULT_REVIEW,
+      foresight: DEFAULT_FORESIGHT,
     };
   return await invoke<Settings>("get_settings");
 }
@@ -370,6 +432,82 @@ export function onReviewDue(handler: () => void): Promise<() => void> {
 export function onOpenReview(handler: () => void): Promise<() => void> {
   if (!isTauri()) return Promise.resolve(() => {});
   return listen("hippocampus://open-review", () => handler());
+}
+
+/// The meetings this Mac is watching, as far as they are worth showing.
+/// In the browser there is no calendar, so there are none.
+export async function foresightStatus(): Promise<ForesightStatus> {
+  if (!isTauri()) return NO_FORESIGHT;
+  return await invoke<ForesightStatus>("foresight_status");
+}
+
+export function onForesight(handler: (status: ForesightStatus) => void): Promise<() => void> {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return listen<ForesightStatus>("hippocampus://foresight", (event) => handler(event.payload));
+}
+
+/// Open a meeting's brief — the lit menu bar was clicked.
+export function onOpenBrief(handler: (key: string) => void): Promise<() => void> {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return listen<string>("hippocampus://open-brief", (event) => handler(event.payload));
+}
+
+/// "Did you bring it up?" has been answered for this meeting.
+export async function foresightAnswered(key: string): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("foresight_answered", { key });
+}
+
+/// Ask the backend about the meetings again now — after something was
+/// ticked off, so the menu bar goes quiet without waiting for its tick.
+export async function foresightRefresh(): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("foresight_refresh");
+}
+
+export async function calendarAccess(): Promise<CalendarAccess> {
+  if (!isTauri()) return "restricted";
+  return await invoke<CalendarAccess>("calendar_access");
+}
+
+/// Puts up macOS's own permission dialog. Resolves with the answer.
+export function requestCalendarAccess(): Promise<CalendarAccess> {
+  return invoke<CalendarAccess>("request_calendar_access");
+}
+
+/// System Settings, at the calendar permission — the only way back once
+/// access was refused.
+export async function openCalendarPrivacy(): Promise<void> {
+  if (!isTauri()) return;
+  await invoke("open_calendar_privacy");
+}
+
+export async function listCalendars(): Promise<CalendarInfo[]> {
+  if (!isTauri()) return [];
+  return await invoke<CalendarInfo[]>("list_calendars");
+}
+
+export function setForesight(foresight: ForesightSettings): Promise<Settings> {
+  return invoke<Settings>("set_foresight", {
+    calendarIds: foresight.calendar_ids,
+    leadMinutes: foresight.lead_minutes,
+    banner: foresight.banner,
+  });
+}
+
+/// Unlocked from somewhere other than this window's own gate — the
+/// menu-bar menu's "Unlock…". The gate here drops without asking for
+/// Touch ID a second time.
+export function onUnlocked(handler: (status: LockStatus) => void): Promise<() => void> {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return listen<LockStatus>("hippocampus://unlocked", (event) => handler(event.payload));
+}
+
+/// The menu's "Write a Note…": open the capture sheet for typing, without
+/// the microphone.
+export function onWriteNote(handler: () => void): Promise<() => void> {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return listen("hippocampus://write-note", () => handler());
 }
 
 export function onLocked(handler: () => void): Promise<() => void> {

@@ -130,12 +130,35 @@ pub struct ExtractedRelation {
     pub relation_type: String,
 }
 
+/// Something the speaker means to do, say or ask later.
+///
+/// Heard, not commanded: nobody says "remind me" into a note about their
+/// day, they say "muss ich Paul noch fragen". That sentence has no date,
+/// so it never reached `upcoming`; it hangs on Paul instead, and this is
+/// what lets it come back when Paul does (docs/prospective-memory.md).
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct ExtractedIntention {
+    /// Short, imperative, in the speaker's language: "Paul nach der
+    /// Hafenportal-Deadline fragen".
+    pub text: String,
+    /// The speaker's own words it was heard in. Checked against the
+    /// transcript before it is kept — see `structuring::verbatim`.
+    #[serde(default)]
+    pub quote: Option<String>,
+    /// Names from this extraction's own `entities` list. Anything else is
+    /// dropped on the way in, the same rule relations follow.
+    #[serde(default)]
+    pub about: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 pub struct ExtractionResult {
     #[serde(default)]
     pub entities: Vec<ExtractedEntity>,
     #[serde(default)]
     pub relations: Vec<ExtractedRelation>,
+    #[serde(default)]
+    pub intentions: Vec<ExtractedIntention>,
 }
 
 const SYSTEM_PROMPT: &str = r#"You extract structured knowledge from a short personal voice-note transcript. The transcript may be in German or English.
@@ -152,12 +175,14 @@ For each entity, write a short first-person observation capturing what was just 
 
 Also list relations between entities mentioned in the same transcript. Each relation has EXACTLY these three keys: "from", "to", "relation_type" (never "entity_type" — that key belongs only to entities). Use the exact same `name` values as in your entities list for "from"/"to".
 
+Also list the speaker's intentions: things they say they still mean to do, say, ask, bring up, check or send later, and have not done yet ("muss ich Paul noch fragen", "beim nächsten Termin mit Northwind ansprechen", "sollte ich mal ausprobieren", "remind me to…"). Each intention has "text" (a short imperative phrase in the transcript's language that names who or what it is about, e.g. "Paul nach der Hafenportal-Deadline fragen"), "quote" (the exact words from the transcript it comes from, copied character for character, never paraphrased), and "about" (the `name` values from your entities list it concerns — the people, projects or things it would come up with). Only intentions the speaker actually expresses: a plan already carried out, a wish with no intent to act, or something someone else will do is not one. Most transcripts contain none; then return an empty list.
+
 Every entity may additionally carry "when" and "when_precision" when the observation is about a point in time. Resolve relative expressions ("morgen", "nächsten Dienstag", "letzte Woche", "im Sommer") against the moment given in the user message, and write the result as ISO 8601: "2026-09-22" for a day, "2026-09-22T19:00" only when a time of day was actually named. "when_precision" is one of "time", "day", "week", "month", "year" — use the coarsest one that is still honest. Omit both keys entirely when the observation is not about a point in time; most are not.
 
 Respond with ONLY a JSON object of this exact shape, no prose, no markdown fences:
-{"entities": [{"name": "...", "entity_type": "...", "observation": "...", "when": "...", "when_precision": "..."}], "relations": [{"from": "...", "to": "...", "relation_type": "..."}]}
+{"entities": [{"name": "...", "entity_type": "...", "observation": "...", "when": "...", "when_precision": "..."}], "relations": [{"from": "...", "to": "...", "relation_type": "..."}], "intentions": [{"text": "...", "quote": "...", "about": ["..."]}]}
 
-If nothing is worth extracting, respond with {"entities": [], "relations": []}."#;
+If nothing is worth extracting, respond with {"entities": [], "relations": [], "intentions": []}."#;
 
 pub struct OpenRouterClient {
     http: reqwest::Client,
@@ -245,6 +270,8 @@ struct RawExtraction {
     entities: Vec<Value>,
     #[serde(default)]
     relations: Vec<Value>,
+    #[serde(default)]
+    intentions: Vec<Value>,
 }
 
 /// Parses the model's JSON response. Split out from `extract` so it can be
@@ -290,9 +317,27 @@ fn parse_extraction(raw: &str) -> anyhow::Result<ExtractionResult> {
         )
         .collect();
 
+    let intentions = raw
+        .intentions
+        .into_iter()
+        .filter_map(
+            |v| match serde_json::from_value::<ExtractedIntention>(v.clone()) {
+                // An intention with no words is not one, whatever else it
+                // carries.
+                Ok(intention) if !intention.text.trim().is_empty() => Some(intention),
+                Ok(_) => None,
+                Err(err) => {
+                    tracing::warn!(?err, value = %v, "skipping malformed intention in extraction response");
+                    None
+                }
+            },
+        )
+        .collect();
+
     Ok(ExtractionResult {
         entities,
         relations,
+        intentions,
     })
 }
 
@@ -318,6 +363,35 @@ mod tests {
         let result = parse_extraction(raw).unwrap();
         assert_eq!(result.entities.len(), 2);
         assert_eq!(result.relations.len(), 0);
+    }
+
+    #[test]
+    fn parses_an_intention_alongside_its_entities() {
+        let raw = r#"{"entities":[{"name":"Paul","entity_type":"Person","observation":"soll nach der Deadline gefragt werden"}],"relations":[],"intentions":[{"text":"Paul nach der Hafenportal-Deadline fragen","quote":"muss ich Paul noch nach der Deadline fragen","about":["Paul"]}]}"#;
+        let result = parse_extraction(raw).unwrap();
+        assert_eq!(result.intentions.len(), 1);
+        assert_eq!(result.intentions[0].about, vec!["Paul".to_string()]);
+        assert_eq!(
+            result.intentions[0].quote.as_deref(),
+            Some("muss ich Paul noch nach der Deadline fragen")
+        );
+    }
+
+    #[test]
+    fn a_response_from_before_intentions_still_parses() {
+        // The key is new. A model that leaves it out has found none, not
+        // produced a malformed answer.
+        let raw = r#"{"entities":[],"relations":[]}"#;
+        assert!(parse_extraction(raw).unwrap().intentions.is_empty());
+    }
+
+    #[test]
+    fn an_intention_without_words_is_dropped() {
+        let raw = r#"{"entities":[],"relations":[],"intentions":[{"text":"  ","about":["Paul"]},{"about":["Paul"]},{"text":"Zahnarzt anrufen"}]}"#;
+        let result = parse_extraction(raw).unwrap();
+        assert_eq!(result.intentions.len(), 1);
+        assert_eq!(result.intentions[0].text, "Zahnarzt anrufen");
+        assert!(result.intentions[0].about.is_empty());
     }
 
     #[test]

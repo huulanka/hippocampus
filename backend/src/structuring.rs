@@ -295,6 +295,7 @@ async fn structure_capture(
         pool,
         embedder,
         source_event_id,
+        transcript,
         &extraction,
         client.model_name(),
         spoken_at.timezone,
@@ -306,6 +307,7 @@ async fn apply_extraction(
     pool: &PgPool,
     embedder: &Embedder,
     source_event_id: Uuid,
+    transcript: &str,
     extraction: &ExtractionResult,
     model: &str,
     timezone: Tz,
@@ -355,7 +357,188 @@ async fn apply_extraction(
         .await?;
     }
 
+    record_intentions(
+        pool,
+        source_event_id,
+        transcript,
+        &extraction.intentions,
+        &entity_ids,
+        model,
+    )
+    .await?;
+
     Ok(())
+}
+
+/// Writes down what the speaker said they still mean to do.
+///
+/// Once per capture. A capture is structured again only after a failure,
+/// and a failure partway through can leave its intentions already
+/// written; noting them a second time would put every one of them in
+/// front of the user twice. So a capture that already has intentions is
+/// left alone.
+///
+/// The words go into `intentions`, the event carries ids only — the log
+/// is never modified, so nothing written into it could be redacted later
+/// (see migration 0012).
+pub(crate) async fn record_intentions(
+    pool: &PgPool,
+    source_event_id: Uuid,
+    transcript: &str,
+    intentions: &[crate::openrouter::ExtractedIntention],
+    entity_ids: &std::collections::HashMap<String, Uuid>,
+    model: &str,
+) -> anyhow::Result<()> {
+    if intentions.is_empty() {
+        return Ok(());
+    }
+    let already = sqlx::query_scalar!(
+        r#"select exists (select 1 from intentions where source_event_id = $1) as "exists!""#,
+        source_event_id,
+    )
+    .fetch_one(pool)
+    .await?;
+    if already {
+        tracing::info!(%source_event_id, "intentions already noted for this capture; not noting them twice");
+        return Ok(());
+    }
+
+    for intention in intentions {
+        let id = Uuid::new_v4();
+        // Only names from this extraction's own list, the same rule
+        // relations follow: an `about` the model did not also extract as
+        // an entity is a name with nothing behind it.
+        let mut about: Vec<Uuid> = intention
+            .about
+            .iter()
+            .filter_map(|name| entity_ids.get(name).copied())
+            .collect();
+        about.sort();
+        about.dedup();
+        let quote = intention
+            .quote
+            .as_deref()
+            .and_then(|quote| verbatim(quote, transcript));
+
+        // One step: an intention on screen whose event never landed
+        // could not be dismissed, because dismissing appends to its
+        // stream.
+        let mut tx = pool.begin().await?;
+        let noted = events::append_tx(
+            &mut tx,
+            id,
+            1,
+            "intention.noted",
+            &json!({
+                "intention_id": id,
+                "source_event_id": source_event_id,
+                "entity_ids": about,
+            }),
+            model,
+        )
+        .await?;
+        sqlx::query!(
+            r#"
+            insert into intentions (id, source_event_id, text, quote, model, noted_event_id)
+            values ($1, $2, $3, $4, $5, $6)
+            "#,
+            id,
+            source_event_id,
+            intention.text.trim(),
+            quote,
+            model,
+            noted.id,
+        )
+        .execute(&mut *tx)
+        .await?;
+        for entity_id in &about {
+            sqlx::query!(
+                r#"insert into intention_entities (intention_id, entity_id) values ($1, $2)"#,
+                id,
+                entity_id,
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+
+        tracing::info!(%source_event_id, about = about.len(), quoted = quote.is_some(), "intention noted");
+    }
+
+    Ok(())
+}
+
+/// The passage of `transcript` that `quote` claims to be, if it really is
+/// one — returned as it stands in the transcript, not as the model wrote
+/// it.
+///
+/// Forgiving about what a model changes without meaning to (case, runs of
+/// whitespace, the punctuation at either end, typographic quote marks) and
+/// about nothing else. A quote that is not in the transcript is a
+/// paraphrase, and a paraphrase shown between quote marks is the one
+/// thing this system must never do: it would put words in the speaker's
+/// mouth that they can check and find they never said.
+pub fn verbatim(quote: &str, transcript: &str) -> Option<String> {
+    let trim = |c: char| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '"' | '\''
+                    | '„'
+                    | '“'
+                    | '”'
+                    | '‚'
+                    | '‘'
+                    | '’'
+                    | '«'
+                    | '»'
+                    | '.'
+                    | ','
+                    | '!'
+                    | '?'
+                    | ';'
+                    | ':'
+                    | '…'
+            )
+    };
+    let needle: Vec<char> = fold(quote.trim_matches(trim)).0;
+    if needle.len() < 3 {
+        return None;
+    }
+    let (hay, positions) = fold(transcript);
+
+    let start = hay
+        .windows(needle.len())
+        .position(|window| window == needle.as_slice())?;
+    let end = start + needle.len() - 1;
+    let from = positions[start];
+    let to = positions[end] + transcript[positions[end]..].chars().next()?.len_utf8();
+    Some(transcript[from..to].to_string())
+}
+
+/// Lowercases and collapses whitespace, remembering for every folded
+/// character the byte offset it came from — so a match found in the folded
+/// text can be cut out of the original.
+fn fold(text: &str) -> (Vec<char>, Vec<usize>) {
+    let mut chars = Vec::with_capacity(text.len());
+    let mut positions = Vec::with_capacity(text.len());
+    let mut in_space = false;
+    for (offset, c) in text.char_indices() {
+        if c.is_whitespace() {
+            if !in_space && !chars.is_empty() {
+                chars.push(' ');
+                positions.push(offset);
+            }
+            in_space = true;
+            continue;
+        }
+        in_space = false;
+        for lower in c.to_lowercase() {
+            chars.push(lower);
+            positions.push(offset);
+        }
+    }
+    (chars, positions)
 }
 
 /// The vector for an entity, or `None` when the model could not be asked.
@@ -756,6 +939,59 @@ mod tests {
             assert_eq!(happened.on, NaiveDate::from_ymd_opt(2026, 9, 22).unwrap());
             assert!(happened.at.is_some(), "{raw}");
         }
+    }
+
+    const SPOKEN: &str = "Heute war viel los. Beim Paul  muss ich noch die Hafenportal-Deadline ansprechen, sonst rutscht das wieder.";
+
+    #[test]
+    fn a_quote_is_cut_out_of_the_transcript_as_it_stands() {
+        // Case and a double space differ; the answer is the transcript's
+        // own spelling, not the model's.
+        assert_eq!(
+            verbatim(
+                "beim paul muss ich noch die hafenportal-deadline ansprechen",
+                SPOKEN
+            )
+            .as_deref(),
+            Some("Beim Paul  muss ich noch die Hafenportal-Deadline ansprechen")
+        );
+    }
+
+    #[test]
+    fn quote_marks_and_end_punctuation_are_forgiven() {
+        assert_eq!(
+            verbatim("„muss ich noch die Hafenportal-Deadline ansprechen.“", SPOKEN).as_deref(),
+            Some("muss ich noch die Hafenportal-Deadline ansprechen")
+        );
+    }
+
+    #[test]
+    fn a_paraphrase_is_not_a_quote() {
+        assert_eq!(verbatim("Paul nach der Deadline fragen", SPOKEN), None);
+        assert_eq!(
+            verbatim("muss ich noch die Deadline ansprechen", SPOKEN),
+            None
+        );
+    }
+
+    #[test]
+    fn a_fragment_too_short_to_mean_anything_is_refused() {
+        assert_eq!(verbatim("„ ab “", SPOKEN), None);
+    }
+
+    #[test]
+    fn umlauts_survive_the_cut() {
+        let transcript = "Ich sollte Günter fragen, ob die Größe passt.";
+        assert_eq!(
+            verbatim("GÜNTER FRAGEN, OB DIE GRÖSSE PASST", transcript),
+            // "ß" lowercases to itself, not "ss": no match, and no
+            // pretending there was one.
+            None
+        );
+        assert_eq!(
+            verbatim("günter fragen, ob die größe passt", transcript).as_deref(),
+            Some("Günter fragen, ob die Größe passt")
+        );
     }
 
     #[test]

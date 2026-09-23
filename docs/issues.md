@@ -311,6 +311,33 @@ eine Zusammenfassung und die Beschriftung ändert sich mit.
 Kurzbefehl mit Apple-Diktat gegen `POST /captures`, später ggf. eigene App
 mit lokalem Whisper. Setzt Phase 0 voraus.
 
+### [P4] Zukunft erinnern
+**Erledigt** (23.09.2026). Zuschnitt: `docs/prospective-memory.md`,
+Architektur: ADR 0013.
+
+- **Backend:** Extraktion liefert `intentions` (Text, wörtliches Zitat,
+  `about`), das Zitat wird nur behalten, wenn es wirklich im Transkript
+  steht (`structuring::verbatim`). Migration 0012 (`intentions`,
+  `intention_entities`), Events `intention.noted/dismissed/fulfilled/
+  reopened`, der Wortlaut nur in der Tabelle (redigierbar). Routen:
+  `GET /intentions`, `GET /captures/{id}/intentions`,
+  `POST /intentions/{id}/dismiss|fulfil|reopen`, `POST /brief` (Termin ↔
+  Entitäten über ganze Wörter und Aliase, nichts gespeichert). Merges
+  werden beim Lesen gefolgt.
+- **Mac:** `calendar.rs` (EventKit, nur angehakte Kalender, nur lesend),
+  `foresight.rs` (Phasen vorher/läuft/danach, Brief alle 2 min,
+  Banner einmal je Termin und Phase, `foresight.json` gegen doppelte
+  Banner nach Neustart). Menüleiste: eigener Zustand *lit* — Gehirn clay
+  mit Glühen, zwei Funken in Ember, 40 s funkeln, dann ruhig. Klick öffnet
+  die Brief-Seite.
+- **Oberfläche:** „Noted for later" und „You meant to" im Capture-Sheet;
+  Today mit Termin als Hauptsatz, „From your calendar" und „Still on your
+  mind"; Brief-Seite mit „Did you bring it up?"; offene Absichten auf der
+  Entitätsseite; Settings → Meetings.
+
+Ungeprüft: Erkennung gegen das echte Modell und alles, was den
+gebündelten Build braucht — siehe `docs/verification.md`.
+
 ### [P4] Wöchentliche Rückschau
 **Erledigt.** Eine Kalenderwoche Mo–So in der Zeitzone des Geräts,
 blätterbar, erreichbar über Today, das Tray-Menü und die eine Mitteilung

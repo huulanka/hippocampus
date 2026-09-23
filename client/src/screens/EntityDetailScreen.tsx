@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getEntity, type EntityCapture, type EntityDetail, type EntityEdge } from "../api";
 import { BackButton } from "../components/BackButton";
+import { IntentionCard, Sparkle } from "../components/Intention";
 import { entityColor } from "../entityType";
 import { whenLabel } from "../whenLabel";
 
@@ -80,6 +81,27 @@ export function EntityDetailScreen({
       </header>
 
       {spansDays(entity.mentions) && <MentionStrip mentions={entity.mentions} />}
+
+      {/* First after the header: of everything on this page, what you
+          still mean to do about it is the one part that asks something of
+          you. */}
+      {(entity.intentions?.length ?? 0) > 0 && (
+        <section className="entity-section">
+          <h2 className="label-micro intention-label">
+            <Sparkle size={10} /> You meant to
+          </h2>
+          <div className="stack stack-tight">
+            {entity.intentions!.map((intention) => (
+              <IntentionCard
+                key={intention.id}
+                intention={intention}
+                onOpenEntity={(id) => id !== entity.id && onOpenEntity(id)}
+                onOpenCapture={onOpenCapture}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {relations.length > 0 && (
         <section className="entity-section">

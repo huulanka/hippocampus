@@ -67,6 +67,12 @@ nicht gezeigt hätte.
 - iOS: Kurzbefehl mit Apple-Diktat, oder eigene App mit lokalem Whisper.
 - ~~Wöchentliche Rückschau, gekoppelt an den ohnehin nötigen Review-Termin.~~
   **Gebaut**, siehe `docs/issues.md`.
+- ~~Zukunft erinnern: Absichten, die an Menschen und Themen hängen, und
+  das Kontext-Echo vor Terminen.~~ **Gebaut** (23.09.2026), Zuschnitt in
+  [`docs/prospective-memory.md`](prospective-memory.md), Architektur in
+  ADR 0013. Danach vorgemerkt: iPhone-App (Tauri iOS über SideStore, mit
+  der Frage nach Apples On-Device-Modell) und „Wie sich mein Denken
+  ändert".
 - Neu bewerten: Chat, MCP, Dokumente. Alle drei mit der Frage, ob sie ein
   Problem lösen, das dann tatsächlich existiert.
 - Konsolidierungslauf: nicht mehr offen, sondern geschnitten. Zuschnitt,
