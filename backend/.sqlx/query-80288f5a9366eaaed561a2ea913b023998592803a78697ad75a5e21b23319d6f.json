@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select date_trunc('week', cs.occurred_at at time zone $3)::date as \"week_start!\", count(*) as \"n!\"\n        from capture_search cs\n        where cs.occurred_at >= $1 and cs.occurred_at < $2\n        group by 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "week_start!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "80288f5a9366eaaed561a2ea913b023998592803a78697ad75a5e21b23319d6f"
+}

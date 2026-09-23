@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select extract(isodow from cs.occurred_at at time zone $3)::int as \"weekday!\", count(*) as \"n!\"\n        from capture_search cs\n        where cs.occurred_at >= $1 and cs.occurred_at < $2\n        group by 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "weekday!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "e7ae5265768e3cecf902c5883c67f130e4369c5eba5c063b8e0843f2b6e48f0d"
+}

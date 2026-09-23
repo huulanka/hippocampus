@@ -551,6 +551,108 @@ pub struct ConsolidationApplyRequest {
     pub exclude: Vec<String>,
 }
 
+/// One calendar week, Monday to Sunday, looked back on.
+///
+/// Everything here but `story` is counted, not written: numbers and your
+/// own sentences, computed fresh on every read, so they are never stale
+/// and never wrong in a way a model could make them wrong. The story is
+/// the one written part, and it names its sources.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeeklyReview {
+    /// Monday, in `timezone`.
+    pub week_start: NaiveDate,
+    /// Sunday, in `timezone`. Inclusive.
+    pub week_end: NaiveDate,
+    /// The IANA zone the week's edges were drawn in. A week is a local
+    /// thing: Sunday 23:30 in Berlin is Monday in UTC.
+    pub timezone: String,
+    /// Whether Sunday has ended. A week still running is counted up to
+    /// now, and says so.
+    pub complete: bool,
+    pub stock: WeekStock,
+    /// Subjects spoken about noticeably more this week than before.
+    pub growing: Vec<ReviewTopic>,
+    /// Subjects spoken about for the first time this week.
+    pub new_topics: Vec<ReviewTopic>,
+    /// Things you said would happen, whose day has passed, and about which
+    /// nothing has been said since. Not a verdict that they did not happen
+    /// — only that the notes do not know.
+    pub open_ends: Vec<UpcomingItem>,
+    /// What the notes say is coming in the week after this one.
+    pub next_week: Vec<UpcomingItem>,
+    /// Subjects that used to come up and have not for weeks.
+    pub quiet: Vec<ReviewTopic>,
+    pub story: Option<WeeklyStory>,
+    /// Whether a paragraph can be written at all — false on a backend
+    /// with no model configured, where asking would only ever fail.
+    pub can_write: bool,
+}
+
+/// How much was said, and when.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeekStock {
+    pub captures: i64,
+    pub spoken: i64,
+    pub typed: i64,
+    /// Every capture up to the end of this week.
+    pub total: i64,
+    /// Captures per day, Monday first. Always seven entries.
+    pub days: Vec<i64>,
+    /// This week and the seven before it, oldest first — enough to see a
+    /// habit forming or fading, not so much that it becomes a chart to study.
+    pub recent_weeks: Vec<WeekCount>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeekCount {
+    pub week_start: NaiveDate,
+    pub captures: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewTopic {
+    pub entity_id: Uuid,
+    pub name: String,
+    pub entity_type: String,
+    /// Separate captures that touched it this week.
+    pub this_week: i64,
+    /// Separate captures that touched it in the eight weeks before.
+    pub before: i64,
+    pub last_seen: DateTime<Utc>,
+}
+
+/// The week in a few sentences, each carrying the notes it came from.
+///
+/// Written once and kept (`review.written`), not on every read: it costs a
+/// model call, and a paragraph that rewrote itself each time it was opened
+/// would be one nobody could quote back.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WeeklyStory {
+    pub sentences: Vec<StorySentence>,
+    pub model: String,
+    pub written_at: DateTime<Utc>,
+    /// How many of the week's captures existed when it was written. Fewer
+    /// than `stock.captures` means it was written before the week ended
+    /// and has not seen everything since.
+    pub captures_seen: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorySentence {
+    pub text: String,
+    /// Captures this sentence rests on. Never empty: a sentence the model
+    /// could not source is dropped rather than shown.
+    pub sources: Vec<Uuid>,
+}
+
+/// Body of `POST /review/story`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WriteStoryRequest {
+    /// Any day in the week; the Monday is worked out from it.
+    pub week: NaiveDate,
+    pub timezone: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

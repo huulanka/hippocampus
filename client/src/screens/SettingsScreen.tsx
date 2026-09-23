@@ -17,6 +17,8 @@ import {
   setCfAccessCredentials,
   setLockEnabled,
   setLockIdleSeconds,
+  setReviewSchedule,
+  type ReviewSchedule,
   speechAvailable,
   type LockStatus,
 } from "../desktop";
@@ -66,6 +68,9 @@ export function SettingsScreen() {
   const [lock, setLock] = useState<LockStatus | null>(null);
   const [lockError, setLockError] = useState<string | null>(null);
 
+  const [review, setReview] = useState<ReviewSchedule | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
   const [autostart, setAutostart] = useState(false);
   const [autostartError, setAutostartError] = useState<string | null>(null);
 
@@ -76,6 +81,7 @@ export function SettingsScreen() {
       setCfClientIdInput(settings.cf_access_client_id ?? "");
       setCfConfigured(settings.cf_access_configured);
       setLock(settings.lock);
+      setReview(settings.review);
     });
     speechAvailable().then(setCanSpeak);
     autostartEnabled().then(setAutostart);
@@ -84,6 +90,14 @@ export function SettingsScreen() {
       .then(setBackendVersion)
       .catch(() => setBackendVersion(null));
   }, []);
+
+  function saveReview(next: ReviewSchedule) {
+    setReviewError(null);
+    setReview(next);
+    setReviewSchedule(next)
+      .then((settings) => setReview(settings.review))
+      .catch((err) => setReviewError(String(err)));
+  }
 
   /// Only committed once `/health` actually answers — a typo here would
   /// otherwise strand every other screen against a backend that cannot be
@@ -431,6 +445,56 @@ export function SettingsScreen() {
         )}
       </Section>
 
+      {runningInDesktopApp() && review && (
+        <Section
+          title="Weekly review"
+          note="The one notification this app sends: once a week, at the time you set, saying the week is ready to look back on. It never shows what is in your notes — reading stays behind the lock."
+        >
+          <Row label="Announce it">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={review.enabled}
+                onChange={() => saveReview({ ...review, enabled: !review.enabled })}
+              />
+              <span className="sr-only">Announce the weekly review</span>
+            </label>
+          </Row>
+          {review.enabled && (
+            <>
+              <Row label="On">
+                <div className="settings-choices">
+                  {WEEKDAYS.map((name, index) => (
+                    <button
+                      key={name}
+                      type="button"
+                      className="chip"
+                      aria-pressed={review.weekday === index}
+                      onClick={() => saveReview({ ...review, weekday: index })}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </Row>
+              <Row label="At" htmlFor="review-time">
+                <input
+                  id="review-time"
+                  className="settings-input settings-time"
+                  type="time"
+                  value={review.time}
+                  onChange={(event) => {
+                    const time = event.currentTarget.value;
+                    if (time) saveReview({ ...review, time });
+                  }}
+                />
+              </Row>
+            </>
+          )}
+          {reviewError && <Problem>{reviewError}</Problem>}
+        </Section>
+      )}
+
       <Section
         title="Speech"
         note={
@@ -531,6 +595,8 @@ function Row({
     </div>
   );
 }
+
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function Problem({ children }: { children: React.ReactNode }) {
   return <p className="settings-problem">{children}</p>;

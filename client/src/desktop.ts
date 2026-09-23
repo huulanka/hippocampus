@@ -214,7 +214,20 @@ export interface Settings {
   /// render "a secret is saved" and offer to replace it.
   cf_access_configured: boolean;
   lock: LockStatus;
+  review: ReviewSchedule;
 }
+
+/// When the weekly review is announced. Mirrors `settings::ReviewSchedule`.
+export interface ReviewSchedule {
+  enabled: boolean;
+  /// 0 = Monday … 6 = Sunday.
+  weekday: number;
+  /// Local time, "HH:MM".
+  time: string;
+}
+
+/// Friday at four — the Rust side's default, for the browser build.
+const DEFAULT_REVIEW: ReviewSchedule = { enabled: false, weekday: 4, time: "16:00" };
 
 /// The guard in front of the notes. Mirrors `lock::LockStatus` in Rust.
 ///
@@ -251,6 +264,8 @@ export async function getSettings(): Promise<Settings> {
       cf_access_client_id: null,
       cf_access_configured: false,
       lock: NO_LOCK,
+      // Off: the browser build has no way to announce anything.
+      review: DEFAULT_REVIEW,
     };
   return await invoke<Settings>("get_settings");
 }
@@ -340,6 +355,23 @@ export function setAutostartEnabled(enabled: boolean): Promise<boolean> {
 /// Fires when the app locked itself after sitting unattended. Pushed from
 /// Rust rather than polled: the screen has to go away while nobody is
 /// asking it anything.
+export function setReviewSchedule(schedule: ReviewSchedule): Promise<Settings> {
+  return invoke<Settings>("set_review_schedule", { ...schedule });
+}
+
+/// The week's review has been announced (the notification went out). The
+/// app opens it the next time the window is in front.
+export function onReviewDue(handler: () => void): Promise<() => void> {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return listen("hippocampus://review-due", () => handler());
+}
+
+/// Open the review now — the tray's "Look Back on the Week".
+export function onOpenReview(handler: () => void): Promise<() => void> {
+  if (!isTauri()) return Promise.resolve(() => {});
+  return listen("hippocampus://open-review", () => handler());
+}
+
 export function onLocked(handler: () => void): Promise<() => void> {
   if (!isTauri()) return Promise.resolve(() => {});
   return listen("hippocampus://locked", () => handler());

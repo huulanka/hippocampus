@@ -72,6 +72,68 @@ pub struct Stored {
     /// How long the app may sit unattended before locking itself again.
     #[serde(default)]
     pub lock_idle_seconds: Option<u64>,
+    /// When the weekly review is announced ([`crate::review`]). `None`
+    /// fields mean the defaults in [`ReviewSchedule::default`].
+    #[serde(default)]
+    pub review_enabled: Option<bool>,
+    /// 0 = Monday … 6 = Sunday.
+    #[serde(default)]
+    pub review_weekday: Option<u8>,
+    /// Local time of day, "HH:MM".
+    #[serde(default)]
+    pub review_time: Option<String>,
+    /// The ISO week ("2026-W39") the review was last announced for, so it
+    /// is announced once a week and not on every check after the time.
+    #[serde(default)]
+    pub review_announced_week: Option<String>,
+}
+
+/// When the weekly review is announced. The webview sees this; the
+/// bookkeeping of which week was already announced it does not need.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct ReviewSchedule {
+    pub enabled: bool,
+    pub weekday: u8,
+    pub time: String,
+}
+
+impl Default for ReviewSchedule {
+    /// Friday at four: the end of a working week, while still at the desk
+    /// the app is used from — rather than a Sunday evening, when nobody
+    /// is at the machine to see it.
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            weekday: 4,
+            time: "16:00".to_string(),
+        }
+    }
+}
+
+impl Stored {
+    pub fn review_schedule(&self) -> ReviewSchedule {
+        let default = ReviewSchedule::default();
+        ReviewSchedule {
+            enabled: self.review_enabled.unwrap_or(default.enabled),
+            weekday: self
+                .review_weekday
+                .filter(|d| *d < 7)
+                .unwrap_or(default.weekday),
+            time: self
+                .review_time
+                .clone()
+                .filter(|t| parse_time(t).is_some())
+                .unwrap_or(default.time),
+        }
+    }
+}
+
+/// "HH:MM" as hours and minutes, or `None` if it is not a time of day.
+pub fn parse_time(value: &str) -> Option<(u32, u32)> {
+    let (hours, minutes) = value.split_once(':')?;
+    let hours: u32 = hours.parse().ok()?;
+    let minutes: u32 = minutes.parse().ok()?;
+    (hours < 24 && minutes < 60).then_some((hours, minutes))
 }
 
 impl Default for Stored {
@@ -83,6 +145,10 @@ impl Default for Stored {
             legacy_secret: None,
             lock_enabled: None,
             lock_idle_seconds: None,
+            review_enabled: None,
+            review_weekday: None,
+            review_time: None,
+            review_announced_week: None,
         }
     }
 }
@@ -97,6 +163,7 @@ pub struct SettingsView {
     pub cf_access_client_id: Option<String>,
     pub cf_access_configured: bool,
     pub lock: crate::lock::LockStatus,
+    pub review: ReviewSchedule,
 }
 
 /// The Keychain read is lazy, so a local or LAN install — which never
@@ -201,12 +268,14 @@ impl SettingsState {
 
     pub fn view(&self, lock: &crate::lock::LockState) -> SettingsView {
         let stored = self.snapshot();
+        let review = stored.review_schedule();
         SettingsView {
             capture_shortcut: stored.capture_shortcut,
             backend_url: stored.backend_url,
             cf_access_client_id: stored.cf_access_client_id,
             cf_access_configured: self.secret().is_some(),
             lock: self.lock_status(lock),
+            review,
         }
     }
 
@@ -289,6 +358,26 @@ impl SettingsState {
         parse(&self.snapshot().capture_shortcut).unwrap_or_else(|_| {
             parse(DEFAULT_CAPTURE_SHORTCUT).expect("the default shortcut must parse")
         })
+    }
+
+    /// Records that the review for `week` has been announced. Returns
+    /// false if it already had been — the check and the write are one
+    /// step under the lock, so two checks can never both announce it.
+    pub fn claim_review_announcement(&self, week: &str) -> bool {
+        let updated = {
+            let Ok(mut current) = self.current.lock() else {
+                return false;
+            };
+            if current.review_announced_week.as_deref() == Some(week) {
+                return false;
+            }
+            current.review_announced_week = Some(week.to_string());
+            current.clone()
+        };
+        if let Err(err) = self.persist(&updated) {
+            log::warn!("could not write settings: {err}");
+        }
+        true
     }
 
     fn persist(&self, settings: &Stored) -> anyhow::Result<()> {
@@ -517,6 +606,41 @@ pub fn set_lock_idle_seconds(
             .lock()
             .map_err(|_| "settings lock poisoned".to_string())?;
         current.lock_idle_seconds = Some(clamped);
+        current.clone()
+    };
+    if let Err(err) = state.persist(&updated) {
+        log::warn!("could not write settings: {err}");
+    }
+
+    Ok(state.view(&lock))
+}
+
+/// Sets when the weekly review is announced.
+#[tauri::command]
+pub fn set_review_schedule(
+    state: tauri::State<'_, SettingsState>,
+    lock: tauri::State<'_, crate::lock::LockState>,
+    enabled: bool,
+    weekday: u8,
+    time: String,
+) -> Result<SettingsView, String> {
+    if weekday > 6 {
+        return Err(format!(
+            "{weekday} is not a weekday (0 = Monday … 6 = Sunday)"
+        ));
+    }
+    if parse_time(&time).is_none() {
+        return Err(format!("{time} is not a time of day (HH:MM)"));
+    }
+
+    let updated = {
+        let mut current = state
+            .current
+            .lock()
+            .map_err(|_| "settings lock poisoned".to_string())?;
+        current.review_enabled = Some(enabled);
+        current.review_weekday = Some(weekday);
+        current.review_time = Some(time);
         current.clone()
     };
     if let Err(err) = state.persist(&updated) {

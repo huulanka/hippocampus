@@ -159,3 +159,10 @@
     }
   }
 }
+
+@layer screens {
+  .settings-time {
+    flex-grow: 0;
+    width: 120px;
+  }
+}

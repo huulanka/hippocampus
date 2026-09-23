@@ -50,6 +50,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-single-instance = "2.4.5"
+tauri-plugin-notification = "2"
 
 [dev-dependencies]
 # `macros` only here: the gated outbox round-trip test needs

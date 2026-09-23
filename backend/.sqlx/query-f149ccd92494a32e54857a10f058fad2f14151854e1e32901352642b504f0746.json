@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            en.id,\n            en.name,\n            en.entity_type,\n            count(distinct o.source_event_id) filter (where cs.occurred_at >= $1) as \"this_week!\",\n            count(distinct o.source_event_id)\n                filter (where cs.occurred_at < $1 and cs.occurred_at >= $3) as \"before!\",\n            count(distinct o.source_event_id) filter (where cs.occurred_at < $1) as \"ever_before!\",\n            max(cs.occurred_at) as \"last_seen!\"\n        from entities en\n        join observations o on o.entity_id = en.id\n        join capture_search cs on cs.event_id = o.source_event_id\n        where en.merged_into is null and cs.occurred_at < $2\n        group by en.id, en.name, en.entity_type\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "entity_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "entity_type"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "this_week!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "before!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "ever_before!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_seen!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "f149ccd92494a32e54857a10f058fad2f14151854e1e32901352642b504f0746"
+}

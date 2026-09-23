@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into events (stream_id, version, event_type, payload, source, occurred_at)\n               values (gen_random_uuid(), 1, 'capture.recorded', '{}'::jsonb, 'test', $1)\n               returning id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8fd70df2b38145f35d0ff96f793ad813dbcebc3af1e6764b350abeb1cf40cbb9"
+}

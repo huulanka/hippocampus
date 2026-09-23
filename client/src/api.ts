@@ -671,6 +671,70 @@ export function getResurfaced(): Promise<Resurfaced> {
   return request<Resurfaced>("/resurface");
 }
 
+/// One calendar week, Monday to Sunday, looked back on. See
+/// `contracts::WeeklyReview`: everything but `story` is counted on read.
+export interface WeeklyReview {
+  week_start: string;
+  week_end: string;
+  timezone: string;
+  complete: boolean;
+  stock: WeekStock;
+  growing: ReviewTopic[];
+  new_topics: ReviewTopic[];
+  open_ends: UpcomingItem[];
+  next_week: UpcomingItem[];
+  quiet: ReviewTopic[];
+  story: WeeklyStory | null;
+  /// False on a backend with no model configured.
+  can_write: boolean;
+}
+
+export interface WeekStock {
+  captures: number;
+  spoken: number;
+  typed: number;
+  total: number;
+  /// Monday first, always seven.
+  days: number[];
+  /// This week and the seven before, oldest first.
+  recent_weeks: { week_start: string; captures: number }[];
+}
+
+export interface ReviewTopic {
+  entity_id: string;
+  name: string;
+  entity_type: string;
+  this_week: number;
+  before: number;
+  last_seen: string;
+}
+
+export interface WeeklyStory {
+  sentences: { text: string; sources: string[] }[];
+  model: string;
+  written_at: string;
+  captures_seen: number;
+}
+
+const deviceTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/// `week` is any day in the week wanted, `YYYY-MM-DD`; none means this one.
+/// The week's edges are drawn in this device's timezone.
+export function getReview(week?: string): Promise<WeeklyReview> {
+  const params = new URLSearchParams({ timezone: deviceTimezone() });
+  if (week) params.set("week", week);
+  return request<WeeklyReview>(`/review?${params.toString()}`);
+}
+
+/// Has the week written up — one model call, kept until asked again.
+export function writeStory(week: string): Promise<WeeklyStory> {
+  return request<WeeklyStory>("/review/story", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ week, timezone: deviceTimezone() }),
+  });
+}
+
 /// The whole graph at once — see `contracts::Graph` for why it is not
 /// walked node by node.
 export function getGraph(options: { limit?: number; entityType?: string } = {}): Promise<Graph> {

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into entity_type_registry (entity_type) values ('Thema') on conflict do nothing",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "28fd83b18045fa6a924d8ee45a03d012d0302d1ce8ec0bbfe9ded46967124c49"
+}

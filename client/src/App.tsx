@@ -8,11 +8,19 @@ import { TodayScreen } from "./screens/TodayScreen";
 import { NotepadScreen } from "./screens/NotepadScreen";
 import { CaptureDetailScreen } from "./screens/CaptureDetailScreen";
 import { EntityDetailScreen } from "./screens/EntityDetailScreen";
+import { ReviewScreen } from "./screens/ReviewScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { RelationsScreen } from "./screens/RelationsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { LockGate } from "./components/LockGate";
-import { lockStatus, onLocked, onSummonCapture, type LockStatus } from "./desktop";
+import {
+  lockStatus,
+  onLocked,
+  onOpenReview,
+  onReviewDue,
+  onSummonCapture,
+  type LockStatus,
+} from "./desktop";
 
 /// Something you are looking at, layered over whichever place you were in.
 ///
@@ -28,7 +36,11 @@ import { lockStatus, onLocked, onSummonCapture, type LockStatus } from "./deskto
 type View =
   | { kind: "capture" }
   | { kind: "captureDetail"; id: string }
-  | { kind: "entity"; id: string };
+  | { kind: "entity"; id: string }
+  /// A week looked back on. Not a sixth place in the rail: the five are a
+  /// decision (docs/design.md), and a week is something you arrive at —
+  /// from Today, the tray, or the weekly notification.
+  | { kind: "review"; week?: string };
 
 function Shell() {
   const [place, setPlace] = useState<Place>("today");
@@ -80,6 +92,50 @@ function Shell() {
     [],
   );
 
+  /// The weekly review, announced by the notification or asked for from
+  /// the tray. Announced, it opens the next time the window is in front
+  /// rather than jumping in front of whatever is already there — and it
+  /// never lands on top of a capture in progress: speaking comes first
+  /// (ADR 0012), so it waits for the next time the window comes forward.
+  useEffect(() => {
+    let pending = false;
+    let live = true;
+    const offs: (() => void)[] = [];
+
+    const open = () =>
+      setStack((s) => {
+        const top = s[s.length - 1];
+        if (top?.kind === "capture") {
+          pending = true;
+          return s;
+        }
+        if (top?.kind === "review") return s;
+        return [...s, { kind: "review" }];
+      });
+    const onFocus = () => {
+      if (!pending) return;
+      pending = false;
+      open();
+    };
+    window.addEventListener("focus", onFocus);
+
+    const keep = (listening: Promise<() => void>) =>
+      listening.then((off) => (live ? offs.push(off) : off()));
+    keep(
+      onReviewDue(() => {
+        if (document.hasFocus()) open();
+        else pending = true;
+      }),
+    );
+    keep(onOpenReview(open));
+
+    return () => {
+      live = false;
+      window.removeEventListener("focus", onFocus);
+      offs.forEach((off) => off());
+    };
+  }, []);
+
   function go(next: Place) {
     setStack([]);
     setPlace(next);
@@ -93,6 +149,7 @@ function Shell() {
 
   const openCapture = (id: string) => setStack((s) => [...s, { kind: "captureDetail", id }]);
   const openEntity = (id: string) => setStack((s) => [...s, { kind: "entity", id }]);
+  const openReview = (week?: string) => setStack((s) => [...s, { kind: "review", week }]);
   const back = () => setStack((s) => s.slice(0, -1));
 
   const view = stack[stack.length - 1];
@@ -143,8 +200,22 @@ function Shell() {
             onOpenCapture={openCapture}
             onBack={back}
           />
+        ) : view?.kind === "review" ? (
+          <ReviewScreen
+            key={view.week ?? "this"}
+            week={view.week}
+            onOpenCapture={openCapture}
+            onOpenEntity={openEntity}
+            onBack={back}
+          />
         ) : (
-          <Here place={place} onOpenCapture={openCapture} onOpenEntity={openEntity} onGo={go} />
+          <Here
+            place={place}
+            onOpenCapture={openCapture}
+            onOpenEntity={openEntity}
+            onOpenReview={openReview}
+            onGo={go}
+          />
         )}
       </main>
     </div>
@@ -155,17 +226,24 @@ function Here({
   place,
   onOpenCapture,
   onOpenEntity,
+  onOpenReview,
   onGo,
 }: {
   place: Place;
   onOpenCapture: (eventId: string) => void;
   onOpenEntity: (id: string) => void;
+  onOpenReview: () => void;
   onGo: (place: Place) => void;
 }) {
   switch (place) {
     case "today":
       return (
-        <TodayScreen onOpenCapture={onOpenCapture} onOpenEntity={onOpenEntity} onGo={onGo} />
+        <TodayScreen
+          onOpenCapture={onOpenCapture}
+          onOpenEntity={onOpenEntity}
+          onOpenReview={onOpenReview}
+          onGo={onGo}
+        />
       );
     case "write":
       return <NotepadScreen onOpenCapture={onOpenCapture} />;

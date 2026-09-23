@@ -1,0 +1,126 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            en.id as entity_id,\n            en.name as entity_name,\n            en.entity_type,\n            o.text as observation,\n            o.happened_on as \"happened_on!\",\n            o.happened_at,\n            o.happened_precision,\n            o.source_event_id,\n            cs.occurred_at as said_at\n        from observations o\n        join entities en on en.id = o.entity_id\n        join capture_search cs on cs.event_id = o.source_event_id\n        where en.merged_into is null\n          and o.happened_on between $1 and $2\n          -- Said by the end of this week. \"Heute Mittag Leberkäse\", said\n          -- on the Monday it is about, is dated next week too — but it\n          -- was never something this week knew was coming.\n          and cs.occurred_at < $3\n        order by o.happened_on, o.happened_at nulls last\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "entity_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "entity_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "entity_type"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "observation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "text"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "happened_on!",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_on"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "happened_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "happened_precision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "happened_precision"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "source_event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "observations",
+            "name": "source_event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "said_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "occurred_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Date",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "aecfada973d58b881bb99c983cae6c82cd5feafecdea307cf2c46fd5cadb0b70"
+}

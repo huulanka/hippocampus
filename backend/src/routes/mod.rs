@@ -2,6 +2,7 @@ pub mod captures;
 pub mod entities;
 mod graph;
 pub mod resurface;
+pub mod review;
 pub mod search;
 
 use axum::Json;
@@ -68,6 +69,8 @@ pub fn router() -> Router<AppState> {
         .route("/entity-types", get(captures::entity_types))
         .route("/graph", get(graph::graph))
         .route("/resurface", get(resurface::resurface))
+        .route("/review", get(review::week))
+        .route("/review/story", post(review::write_story))
         .route("/search", get(search::search))
         .route("/pipeline", get(captures::pipeline_status))
         .route("/pipeline/retry", post(captures::retry_all))

@@ -28,7 +28,7 @@ use std::time::Duration;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// The resting mark: black plus alpha, for macOS to tint once the icon is
 /// marked as a template. Baked into the binary rather than read from disk
@@ -170,8 +170,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let frames = Frames::render()?;
 
     let show = MenuItem::with_id(app, "show", "Open Hippocampus", true, None::<&str>)?;
+    let review = MenuItem::with_id(app, "review", "Look Back on the Week", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Hippocampus", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &review, &PredefinedMenuItem::separator(app)?, &quit],
+    )?;
 
     let tray = TrayIconBuilder::with_id("main")
         .icon(frames.rest.clone())
@@ -180,6 +184,12 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => summon(app),
+            "review" => {
+                summon(app);
+                if let Err(err) = app.emit(crate::review::OPEN_REVIEW_EVENT, ()) {
+                    log::warn!("could not ask the webview to open the review: {err}");
+                }
+            }
             "quit" => app.exit(0),
             _ => {}
         })

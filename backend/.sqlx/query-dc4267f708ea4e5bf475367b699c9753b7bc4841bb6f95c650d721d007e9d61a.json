@@ -1,0 +1,45 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select\n            count(*) filter (where cs.occurred_at >= $1) as \"captures!\",\n            count(*) filter (where cs.occurred_at >= $1 and cc.origin = 'audio') as \"spoken!\",\n            count(*) filter (where cs.occurred_at >= $1 and cc.origin = 'text') as \"typed!\",\n            count(*) as \"total!\"\n        from capture_search cs\n        left join capture_content cc on cc.event_id = cs.event_id\n        where cs.occurred_at < $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "captures!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "spoken!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "typed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "dc4267f708ea4e5bf475367b699c9753b7bc4841bb6f95c650d721d007e9d61a"
+}

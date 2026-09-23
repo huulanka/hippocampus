@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into weekly_story (week_start, timezone, sentences, model, captures_seen, event_id, written_at)\n        values ($1, $2, $3, $4, $5, $6, $7)\n        on conflict (week_start) do update set\n            timezone = excluded.timezone,\n            sentences = excluded.sentences,\n            model = excluded.model,\n            captures_seen = excluded.captures_seen,\n            event_id = excluded.event_id,\n            written_at = excluded.written_at\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Int4",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52e632b528a19fe87191bc0978b6387f8a69315caacb060db53bbf14fddef2a0"
+}

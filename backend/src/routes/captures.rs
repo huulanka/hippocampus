@@ -22,7 +22,7 @@ use crate::structuring;
 /// Resolves which timezone a capture's relative time expressions should be
 /// read in: what the device said, or the server's fallback when the device
 /// said nothing or something unparseable.
-fn timezone_for(state: &AppState, claimed: Option<&str>) -> chrono_tz::Tz {
+pub(crate) fn timezone_for(state: &AppState, claimed: Option<&str>) -> chrono_tz::Tz {
     claimed
         .and_then(|name| match name.parse::<chrono_tz::Tz>() {
             Ok(tz) => Some(tz),

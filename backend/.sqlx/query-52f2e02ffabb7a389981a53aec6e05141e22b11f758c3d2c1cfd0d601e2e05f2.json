@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select sentences, model, captures_seen, written_at\n        from weekly_story\n        where week_start = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sentences",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "weekly_story",
+            "name": "sentences"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "weekly_story",
+            "name": "model"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "captures_seen",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "weekly_story",
+            "name": "captures_seen"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "written_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "weekly_story",
+            "name": "written_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "52f2e02ffabb7a389981a53aec6e05141e22b11f758c3d2c1cfd0d601e2e05f2"
+}

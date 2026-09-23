@@ -481,3 +481,84 @@ impl OpenRouterClient {
         Ok(serde_json::from_str(cleaned)?)
     }
 }
+
+/// One note of the week, as the model sees it.
+#[derive(Debug, Serialize)]
+pub struct StoryNote {
+    pub tag: String,
+    /// Weekday, date and time, spelled out — "Tuesday" is what lets the
+    /// model say "early in the week" without doing calendar arithmetic.
+    pub said: String,
+    pub text: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WrittenSentence {
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct WrittenWeek {
+    #[serde(default)]
+    sentences: Vec<WrittenSentence>,
+}
+
+const WEEK_PROMPT: &str = r#"You write a short look back on one person's week, from the notes they captured during it. They will read it once, at the end of the week, to see what the week was about.
+
+Write 3 to 4 sentences. Say what the week was about: the subjects that took up most of it, anything that changed or began, anything announced for later. Be concrete — name the things, people and places from the notes. Do not praise, advise, diagnose or speculate about feelings the notes do not state. Do not invent anything: every sentence must rest on specific notes, and you must cite them by tag.
+
+Write in the language the notes are written in. Address the person as "du" in German, "you" in English.
+
+Respond with ONLY this JSON object, no prose, no markdown fences:
+{"sentences": [{"text": "...", "sources": ["n3", "n7"]}]}"#;
+
+impl OpenRouterClient {
+    /// Writes the week up from its notes. Every sentence cites the tags it
+    /// rests on; the caller discards what it cannot trace back.
+    pub async fn write_week(&self, notes: &[StoryNote]) -> anyhow::Result<Vec<WrittenSentence>> {
+        let listing = serde_json::to_string_pretty(notes)?;
+
+        let body = json!({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": WEEK_PROMPT},
+                {"role": "user", "content": format!("Notes:\n{listing}")},
+            ],
+            "response_format": {"type": "json_object"},
+            "provider": {"zdr": self.zdr},
+        });
+
+        let started = std::time::Instant::now();
+        let response = match self
+            .http
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .bearer_auth(&self.api_key)
+            .json(&body)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+        {
+            Ok(response) => response.json::<Value>().await?,
+            Err(err) => {
+                crate::telemetry::model_call_failed("review", &self.model, started.elapsed(), &err);
+                return Err(err.into());
+            }
+        };
+        crate::telemetry::model_call("review", &self.model, &response, started.elapsed());
+
+        let content = response["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("review response had no content"))?;
+        let cleaned = content
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim();
+
+        Ok(serde_json::from_str::<WrittenWeek>(cleaned)?.sentences)
+    }
+}

@@ -13,6 +13,7 @@ mod lock;
 pub mod microphone;
 mod outbox;
 mod recorder;
+mod review;
 mod settings;
 mod sync;
 mod tray;
@@ -133,6 +134,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -199,6 +201,7 @@ pub fn run() {
             settings::set_cf_access_credentials,
             settings::set_lock_enabled,
             settings::set_lock_idle_seconds,
+            settings::set_review_schedule,
             settings::autostart_enabled,
             settings::set_autostart_enabled,
             lock::lock_status,
@@ -237,6 +240,7 @@ pub fn run() {
             sync::watch(app.handle().clone());
 
             watch_for_idleness(app.handle().clone());
+            review::watch(app.handle().clone());
 
             // No Dock icon, no Cmd+Tab entry: the menu bar is now the
             // one place this app lives when its window is not open,

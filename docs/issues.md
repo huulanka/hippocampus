@@ -312,8 +312,34 @@ Kurzbefehl mit Apple-Diktat gegen `POST /captures`, später ggf. eigene App
 mit lokalem Whisper. Setzt Phase 0 voraus.
 
 ### [P4] Wöchentliche Rückschau
-An den Review-Termin gekoppelt: was diese Woche erfasst wurde, welche
-Themen wiederkehren. Kein täglicher Brief.
+**Erledigt.** Eine Kalenderwoche Mo–So in der Zeitzone des Geräts,
+blätterbar, erreichbar über Today, das Tray-Menü und die eine Mitteilung
+pro Woche (Tag und Uhrzeit in Settings, Standard Freitag 16:00,
+abschaltbar — siehe P11). `GET /review`, `POST /review/story`.
+
+Alles außer dem Absatz wird bei jedem Lesen gezählt: Bestand und Verlauf
+(Anzahl, gesprochen/getippt, Tage, acht Wochen), wachsende Themen (mehr
+als das Doppelte des üblichen Wochenanteils der acht Wochen davor), neue,
+offene Enden (angekündigt, Tag vorbei, seitdem kein Wort mehr), was die
+Woche danach bringt, und still gewordene Themen (≥ 3 Captures, seit zwei
+Wochen nichts, aber jünger als zwölf Wochen). Gezählt in *Captures*, nicht
+Beobachtungen, und datiert nach dem Sprechzeitpunkt, nicht nach der
+Extraktion — sonst landet eine spät nachgeholte Strukturierung in der
+falschen Woche.
+
+Der Absatz ist das einzige Geschriebene: 3–4 Sätze, jeder mit den Notizen,
+auf denen er beruht (`n1`, `n2` … im Prompt, danach zurück in Capture-IDs).
+Ein Satz ohne gültige Quelle wird verworfen. Einmal geschrieben und als
+`review.written` gespeichert; eine abgeschlossene Woche bekommt ihn beim
+ersten Öffnen, eine laufende nur auf Nachfrage.
+
+Offene Enden zählen nur **Ankündigungen** — die Notiz muss vor dem Tag
+gesprochen sein, um den es geht. „Gestern war der Aufguss zu heiß" ist
+auch auf gestern datiert, hat sich aber im Moment des Sagens erledigt.
+
+Ungeprüft: der Absatz gegen ein echtes Modell — die lokale Umgebung hat
+keinen OpenRouter-Schlüssel. Die Zählungen sind per DB-Test belegt,
+weil die lokalen Daten keine einzige Ankündigung enthalten.
 
 ---
 

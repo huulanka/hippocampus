@@ -75,7 +75,7 @@ zeigen kann. Er muss sich seinen Platz verdienen.
 | P8 | Redaktion mit Tombstone möglich | Siehe ADR 0005 |
 | P9 | Zusammenführungen richten sich nach Beweisdichte, nicht nach Vorsicht allein | Was ohne Abwägen entscheidbar ist (gleicher Name, uneinheitlicher Typ), wird automatisch zusammengeführt und bleibt per Event umkehrbar. Was ein Urteil braucht, wartet, bis es etwas zu lesen gibt — siehe P12 |
 | P10 | Strukturierung über OpenRouter mit ZDR, bewusst akzeptiert | Die NAS (Celeron, keine GPU) kann kein LLM; das Event Log erlaubt späteren Wechsel auf lokal |
-| P11 | Kein Morning Brief, keine Push-Benachrichtigungen | Jede Benachrichtigung ist eine Gewohnheit, die extra aufgebaut werden muss |
+| P11 | Kein Morning Brief, keine Push-Benachrichtigungen — mit **einer** Ausnahme: die Wochenrückschau meldet sich einmal pro Woche, zu Tag und Uhrzeit, die der Nutzer selbst setzt, abschaltbar | Jede Benachrichtigung ist eine Gewohnheit, die extra aufgebaut werden muss. Die Ausnahme (vom Nutzer am 23.09.2026 gewählt) hängt an einem Termin, den er ohnehin hat, statt einen neuen zu erfinden, und kommt nie öfter als einmal pro Woche. Sie sagt nichts über den Inhalt der Notizen: Lesen ist hinter der Sperre, ein Mitteilungsbanner nicht |
 | P12 | Die Schwelle für automatische Urteile ist **Beobachtungen pro Entität**, nicht die Gesamtzahl der Captures | Am 22.09.2026 gemessen: bei 45 Captures hatten **70 von 78 Entitäten genau eine Beobachtung**. Ein Modell, das auf je einem Satz pro Seite entscheidet, ob zwei Dinge dasselbe sind, rät — und schreibt das Ergebnis automatisch in den Graphen |
 
 ## Functional Scope (MVP)

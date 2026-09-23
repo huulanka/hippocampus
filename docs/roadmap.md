@@ -65,7 +65,8 @@ nicht gezeigt hätte.
 ## Phase 4 — Ausbreitung
 
 - iOS: Kurzbefehl mit Apple-Diktat, oder eigene App mit lokalem Whisper.
-- Wöchentliche Rückschau, gekoppelt an den ohnehin nötigen Review-Termin.
+- ~~Wöchentliche Rückschau, gekoppelt an den ohnehin nötigen Review-Termin.~~
+  **Gebaut**, siehe `docs/issues.md`.
 - Neu bewerten: Chat, MCP, Dokumente. Alle drei mit der Frage, ob sie ein
   Problem lösen, das dann tatsächlich existiert.
 - Konsolidierungslauf: nicht mehr offen, sondern geschnitten. Zuschnitt,

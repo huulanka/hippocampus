@@ -33,6 +33,12 @@ Aus acht Reitern wurden fünf, plus ein Knopf.
 | **Graph** | „Womit hängt das zusammen?" |
 | **Settings** | alles, was keine Notiz ist |
 
+**Die Wochenrückschau ist auch kein Ort.** Sie ist eine Seite, an der man
+ankommt — über „Look back on the week" auf Today, das Tray-Menü oder die
+eine Mitteilung pro Woche — und schließt wie ein Detail zurück dorthin, wo
+man war. Ein sechster Reiter für etwas, das man einmal pro Woche öffnet,
+wäre die Leiste, die wieder wächst.
+
 **Capture ist kein Ort.** Der Shortcut ist der Aufnahmeknopf (ADR 0012),
 also öffnet Aufnehmen über dem, wo man gerade war, und schließt dorthin
 zurück. Als Reiter war die Handlung, die man zwanzigmal am Tag macht,

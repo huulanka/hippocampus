@@ -31,10 +31,12 @@ import type { Place } from "../places";
 export function TodayScreen({
   onOpenCapture,
   onOpenEntity,
+  onOpenReview,
   onGo,
 }: {
   onOpenCapture: (eventId: string) => void;
   onOpenEntity: (id: string) => void;
+  onOpenReview: () => void;
   onGo: (place: Place) => void;
 }) {
   const [data, setData] = useState<Resurfaced | null>(null);
@@ -62,6 +64,12 @@ export function TodayScreen({
       <header className="today-head">
         <p className="label-micro">{longDate()}</p>
         <h1 className="today-lead">{lead(data)}</h1>
+        <button type="button" className="btn-quiet today-week" onClick={() => onOpenReview()}>
+          Look back on the week
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9.5 5.5 16 12l-6.5 6.5" />
+          </svg>
+        </button>
       </header>
 
       {data.upcoming.length > 0 && (
@@ -170,7 +178,7 @@ function longDate(): string {
   });
 }
 
-function Upcoming({
+export function Upcoming({
   item,
   onOpenCapture,
   onOpenEntity,
