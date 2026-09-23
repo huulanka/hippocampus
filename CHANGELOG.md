@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/huulanka/hippocampus/compare/v1.12.0...v1.13.0) (2026-09-23)
+
+
+### Features
+
+* **graph:** choose what to fold into from a list, not by walking the graph ([#52](https://github.com/huulanka/hippocampus/issues/52)) ([e5e3b61](https://github.com/huulanka/hippocampus/commit/e5e3b618ff47d28d316fc652cb7c00ac6a8ab964)), closes [46/#49](https://github.com/huulanka/hippocampus/issues/49)
+
 # [1.12.0](https://github.com/huulanka/hippocampus/compare/v1.11.0...v1.12.0) (2026-09-23)
 
 
