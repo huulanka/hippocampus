@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/huulanka/hippocampus/compare/v1.11.0...v1.12.0) (2026-09-23)
+
+
+### Features
+
+* **client:** five places, a graph that opens on everything, one design throughout ([#51](https://github.com/huulanka/hippocampus/issues/51)) ([9f0c468](https://github.com/huulanka/hippocampus/commit/9f0c468b9d4cfef0eed378ca171ac945a70ee0bd))
+
 # [1.11.0](https://github.com/huulanka/hippocampus/compare/v1.10.0...v1.11.0) (2026-09-22)
 
 
