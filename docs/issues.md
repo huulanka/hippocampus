@@ -253,19 +253,46 @@ Daten ohne dieses Programm lesbar bleiben.
 ---
 
 ### [P3] Entitäts-Kandidatensuche
+**Erledigt** mit dem Konsolidierungslauf (#46): `pg_trgm` (Migration
+0006), Kandidaten über Namensähnlichkeit und Embedding-Nähe, entschieden
+von einem Modell mit vier Urteilen. Siehe `docs/entity-resolution.md`.
 `pg_trgm` aktivieren, Kandidaten über Namensähnlichkeit und Embedding-Nähe
 suchen, über Schwellwert `entity.merge_proposed` erzeugen. Ersetzt den
 exakten Vergleich in `structuring.rs:99`.
 
 ### [P3] Review-Queue
+**Erledigt** als Vorschau mit [x] pro Vorschlag (#49): Konsolidierung
+läuft nur auf Nachfrage, jeder Vorschlag lässt sich vor dem Anwenden
+streichen, Merges und Kanten sind im Tab „Changes" rücknehmbar.
 Eine Oberfläche für offene Merge-Vorschläge und unsichere Transkripte.
 Zustimmen/Ablehnen als Event, jede Verschmelzung per `entity.unmerged`
 umkehrbar.
 
 ### [P3] Relationen über Capture-Grenzen hinweg
+**Erledigt** mit dem Konsolidierungslauf (#46, Migration 0008:
+`relations.source_event_id` nullable, in der UI `[across notes]`).
 `structuring.rs:65-73` verwirft Relationen, deren Endpunkte nicht in
 derselben Extraktion stehen. Gegen bestehende Entitäten auflösen, statt zu
 verwerfen — sonst bleibt der Graph eine Menge unverbundener Sterne.
+
+### [P3] Von Hand zusammenführen: das Ziel nicht im Graphen suchen
+**Erledigt.** „Fold into…" verlangte, das Ziel im Graphen anzuklicken.
+Das ging nur, wenn es im Orbit lag — und eine Dublette liegt fast nie
+dort: zwei Namen für dasselbe wurden nie zusammen gesagt, sind also keine
+Nachbarn. Hinzulaufen zentrierte den Graphen neu, und das Ausgangs-Ding
+verschwand aus dem Bild.
+
+Jetzt wird das Ziel im Panel gewählt: `GET /entities/{id}/fold-candidates`
+schlägt ohne Eingabe die Doppelgänger vor, mit Eingabe sucht es nach Namen
+und Aliasen. Vor dem Bestätigen stehen beide Seiten mit je zwei
+Beobachtungen untereinander, und der Graph zeigt das Ziel gestrichelt an
+— als Linie, wenn es im Orbit liegt, sonst als Geisterknoten in der
+größten Lücke des inneren Rings.
+
+Gemessen an den echten Entitäten: e5 setzt fast jedes Paar kurzer Namen
+auf ~0,9 Kosinus („Aufguss" liegt so nah an „Rasenmäher" wie an
+„Finnischer Aufguss"). Deshalb sortiert der Endpunkt nach Name, dann Typ,
+und das Embedding bricht nur Gleichstände.
 
 ### [P3] `current_summary` klären
 `structuring.rs:151` überschreibt das Feld mit der jeweils letzten

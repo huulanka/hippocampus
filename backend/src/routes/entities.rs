@@ -369,6 +369,107 @@ pub async fn merge_entities(
     changelog(State(state)).await
 }
 
+#[derive(serde::Deserialize)]
+pub struct FoldCandidateParams {
+    /// What the person has typed so far. Without it, the answer is the
+    /// look-alikes; with it, whatever that name finds.
+    pub q: Option<String>,
+}
+
+/// How many candidates to offer. A picker, not a list: if the right one
+/// is not in the first handful, typing is quicker than scrolling.
+const FOLD_CANDIDATES: i64 = 6;
+
+/// What `{id}` might be folded into.
+///
+/// The graph cannot answer this. It draws neighbourhoods, and a duplicate
+/// is by nature *not* a neighbour — two names for one thing were never
+/// said in the same breath, which is why they were never joined. Picking
+/// the target by clicking it in the graph meant walking away from the
+/// entity being folded to find it. So the picker asks here instead.
+///
+/// Ranked by the name, then by the type, and only then by the embedding.
+/// Measured on the real entities: e5 puts almost any two short names at
+/// ~0.9 cosine — "Aufguss" sits as close to "Rasenmäher" as to "Finnischer
+/// Aufguss" — so as a first key the embedding sorted noise to the top.
+/// The name is what a duplicate actually shares ("Aufguss" in "Finnischer
+/// Aufguss"); the same type is the next most likely place for one; the
+/// embedding only breaks ties between those.
+pub async fn fold_candidates(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<Uuid>,
+    Query(params): Query<FoldCandidateParams>,
+) -> Result<Json<Vec<EntityListItem>>, AppError> {
+    let q = params
+        .q
+        .map(|q| q.trim().to_string())
+        .filter(|q| !q.is_empty());
+
+    let rows = sqlx::query!(
+        r#"
+        with anchor as (
+            select id, name, entity_type, embedding from entities where id = $1
+        ),
+        scored as (
+            select
+                e.id,
+                -- Against what was typed, if anything was; otherwise
+                -- against the anchor's own name. One name inside the
+                -- other counts as a strong match on its own: trigrams
+                -- score "Aufguss" in "Finnischer Aufguss" at only 0.42.
+                greatest(
+                    similarity(e.name, coalesce($2, a.name)),
+                    case when e.name ilike '%' || coalesce($2, a.name) || '%'
+                           or ($2::text is null and a.name ilike '%' || e.name || '%')
+                         then 0.6 else 0 end
+                ) as name_score,
+                e.entity_type = a.entity_type as same_type,
+                e.embedding <=> a.embedding as distance
+            from entities e, anchor a
+            where e.merged_into is null and e.id <> a.id
+        )
+        select
+            e.id,
+            e.entity_type,
+            e.name,
+            e.current_summary,
+            count(o.id) as "mention_count!",
+            max(o.created_at) as "last_seen?"
+        from scored s
+        join entities e on e.id = s.id
+        left join observations o on o.entity_id = e.id
+        where s.name_score > 0.3
+           -- Typed: a name that was merged away still finds what it became.
+           or ($2::text is not null and exists (
+                 select 1 from entity_alias al
+                 where al.entity_id = e.id and al.name ilike '%' || $2 || '%'))
+           -- Untyped: fill up with the same kind of thing.
+           or ($2::text is null and s.same_type)
+        group by e.id, e.entity_type, e.name, e.current_summary, s.name_score, s.same_type, s.distance
+        order by s.name_score desc, s.same_type desc, s.distance nulls last, count(o.id) desc
+        limit $3
+        "#,
+        id,
+        q,
+        FOLD_CANDIDATES,
+    )
+    .fetch_all(&state.pool)
+    .await?;
+
+    Ok(Json(
+        rows.into_iter()
+            .map(|r| EntityListItem {
+                id: r.id,
+                entity_type: r.entity_type,
+                name: r.name,
+                current_summary: r.current_summary,
+                mention_count: r.mention_count,
+                last_seen: r.last_seen,
+            })
+            .collect(),
+    ))
+}
+
 /// Takes one merge back.
 ///
 /// Addressed by the entity that was folded *in*, because that is the one

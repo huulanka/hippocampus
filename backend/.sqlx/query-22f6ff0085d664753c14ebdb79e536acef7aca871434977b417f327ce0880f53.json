@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with anchor as (\n            select id, name, entity_type, embedding from entities where id = $1\n        ),\n        scored as (\n            select\n                e.id,\n                -- Against what was typed, if anything was; otherwise\n                -- against the anchor's own name. One name inside the\n                -- other counts as a strong match on its own: trigrams\n                -- score \"Aufguss\" in \"Finnischer Aufguss\" at only 0.42.\n                greatest(\n                    similarity(e.name, coalesce($2, a.name)),\n                    case when e.name ilike '%' || coalesce($2, a.name) || '%'\n                           or ($2::text is null and a.name ilike '%' || e.name || '%')\n                         then 0.6 else 0 end\n                ) as name_score,\n                e.entity_type = a.entity_type as same_type,\n                e.embedding <=> a.embedding as distance\n            from entities e, anchor a\n            where e.merged_into is null and e.id <> a.id\n        )\n        select\n            e.id,\n            e.entity_type,\n            e.name,\n            e.current_summary,\n            count(o.id) as \"mention_count!\",\n            max(o.created_at) as \"last_seen?\"\n        from scored s\n        join entities e on e.id = s.id\n        left join observations o on o.entity_id = e.id\n        where s.name_score > 0.3\n           -- Typed: a name that was merged away still finds what it became.\n           or ($2::text is not null and exists (\n                 select 1 from entity_alias al\n                 where al.entity_id = e.id and al.name ilike '%' || $2 || '%'))\n           -- Untyped: fill up with the same kind of thing.\n           or ($2::text is null and s.same_type)\n        group by e.id, e.entity_type, e.name, e.current_summary, s.name_score, s.same_type, s.distance\n        order by s.name_score desc, s.same_type desc, s.distance nulls last, count(o.id) desc\n        limit $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "entity_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "entity_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "current_summary",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "current_summary"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "mention_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_seen?",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "22f6ff0085d664753c14ebdb79e536acef7aca871434977b417f327ce0880f53"
+}

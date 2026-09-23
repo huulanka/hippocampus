@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { getGraph, mergeEntities, type Graph, type GraphNode } from "../api";
 import { entityColor } from "../entityType";
 import { buildMap, buildOrbit, mostRecent, type Cluster, type Orbit, type Placed } from "../orbit";
+import { FoldPicker, type FoldTarget } from "../components/FoldPicker";
 import { ChangesScreen } from "./ChangesScreen";
 
 /// The graph, as one thing at a time.
@@ -27,6 +28,9 @@ const MAX_MATCHES = 6;
 /// of them are one-offs — all at once is three lines of legend above a
 /// picture, which is the wrong way round.
 const MAX_TYPE_CHIPS = 8;
+/// How far out the stand-in for a fold target sits, between the centre's
+/// halo and the first ring.
+const FOLD_GHOST_AT = 0.5;
 /// Past this a relation name is cut, with the whole thing in the tooltip.
 const MAX_RELATION_LABEL = 22;
 
@@ -50,7 +54,7 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
   const [onlyRepeated, setOnlyRepeated] = useState(false);
 
   const [mergeSource, setMergeSource] = useState<string | null>(null);
-  const [mergeTarget, setMergeTarget] = useState<string | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<FoldTarget | null>(null);
   const [merging, setMerging] = useState(false);
 
   const sky = useRef<HTMLDivElement>(null);
@@ -134,7 +138,7 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
   const pick = useCallback(
     (node: GraphNode) => {
       if (mergeSource && node.id !== mergeSource) {
-        setMergeTarget(node.id);
+        setMergeTarget(node);
         return;
       }
       if (node.id === centreId) {
@@ -163,11 +167,6 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
   }, [graph]);
   const shownTypes = allTypes ? types : types.slice(0, MAX_TYPE_CHIPS);
 
-  const nameOf = useCallback(
-    (id: string) => graph?.nodes.find((node) => node.id === id)?.name ?? "it",
-    [graph],
-  );
-
   /// Back to the whole picture. The walk is dropped with it: "Everything"
   /// is its first step, so going there is going back to the start.
   const showEverything = () => {
@@ -182,15 +181,25 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
     setMergeTarget(null);
   };
 
+  // A fold belongs to the entity it was started on. Walking to another
+  // one leaves it behind rather than quietly carrying it along — the
+  // picture would then show one thing and the panel fold another.
+  useEffect(() => {
+    if (mergeSource && centreId !== mergeSource) {
+      setMergeSource(null);
+      setMergeTarget(null);
+    }
+  }, [centreId, mergeSource]);
+
   async function confirmMerge() {
     if (!mergeSource || !mergeTarget) return;
     setMerging(true);
     try {
-      await mergeEntities(mergeSource, mergeTarget);
+      await mergeEntities(mergeSource, mergeTarget.id);
       const reloaded = await getGraph({ limit: 400 });
       setGraph(reloaded);
       // The folded-away entity is gone; stand on what absorbed it.
-      const target = reloaded.nodes.find((node) => node.id === mergeTarget);
+      const target = reloaded.nodes.find((node) => node.id === mergeTarget.id);
       setPath((walked) => {
         const kept = walked.filter((step) => step.id !== mergeSource);
         return target ? [...kept.filter((step) => step.id !== target.id), target] : kept;
@@ -385,6 +394,7 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
                 at={settled}
                 size={size}
                 mergeSource={mergeSource}
+                foldTarget={mergeTarget}
                 onPick={(node) => {
                   if (!drag.current?.moved) pick(node);
                 }}
@@ -459,47 +469,15 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
             </div>
           </article>
 
-          {mergeSource && (
-            <article className="graph-merge">
-              {mergeTarget ? (
-                <>
-                  <p className="graph-merge-ask">
-                    Fold <strong>{nameOf(mergeSource)}</strong> into{" "}
-                    <strong>{nameOf(mergeTarget)}</strong>?
-                  </p>
-                  <p className="graph-merge-why">
-                    Everything said about it moves across, and “{nameOf(mergeSource)}” stays
-                    searchable. You can take this back.
-                  </p>
-                  <div className="graph-focus-actions">
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={merging}
-                      onClick={() => void confirmMerge()}
-                    >
-                      {merging ? "Folding…" : `Yes, keep ${nameOf(mergeTarget)}`}
-                    </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => setMergeTarget(null)}>
-                      Pick another
-                    </button>
-                    <button type="button" className="btn btn-quiet" onClick={cancelMerge}>
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="graph-merge-ask">
-                    Click the entity that <strong>{nameOf(mergeSource)}</strong> should be folded
-                    into.
-                  </p>
-                  <button type="button" className="btn btn-quiet" onClick={cancelMerge}>
-                    Cancel
-                  </button>
-                </>
-              )}
-            </article>
+          {mergeSource === orbit.centre.node.id && (
+            <FoldPicker
+              source={orbit.centre.node}
+              target={mergeTarget}
+              merging={merging}
+              onTarget={setMergeTarget}
+              onConfirm={() => void confirmMerge()}
+              onCancel={cancelMerge}
+            />
           )}
         </div>
       )}
@@ -683,12 +661,14 @@ function OrbitDrawing({
   at,
   size,
   mergeSource,
+  foldTarget,
   onPick,
 }: {
   orbit: Orbit;
   at: Map<string, { x: number; y: number; r: number }>;
   size: { width: number; height: number };
   mergeSource: string | null;
+  foldTarget: FoldTarget | null;
   onPick: (node: GraphNode) => void;
 }) {
   const where = (placed: Placed) => at.get(placed.node.id) ?? placed;
@@ -746,7 +726,9 @@ function OrbitDrawing({
             <g
               key={placed.node.id}
               className={`graph-node${placed.hop === 2 ? " graph-node-far" : ""}${
-                mergeSource === placed.node.id ? " graph-node-merging" : ""
+                mergeSource === placed.node.id || foldTarget?.id === placed.node.id
+                  ? " graph-node-merging"
+                  : ""
               }`}
               onClick={() => onPick(placed.node)}
             >
@@ -772,6 +754,10 @@ function OrbitDrawing({
           );
         })}
       </g>
+
+      {foldTarget && foldTarget.id !== orbit.centre.node.id && (
+        <FoldLine orbit={orbit} centre={centre} where={where} target={foldTarget} />
+      )}
 
       <g className="graph-node graph-node-centre" onClick={() => onPick(orbit.centre.node)}>
         <circle
@@ -949,4 +935,72 @@ function MapDrawing({
       ))}
     </>
   );
+}
+
+/// What the fold being chosen will do, drawn where it will happen.
+///
+/// A target already in the orbit gets a line to it. One that is not — the
+/// usual case for a duplicate — is stood in for by a dashed ghost in the
+/// widest gap of the inner ring, so the picture shows both halves of the
+/// fold without walking anywhere.
+function FoldLine({
+  orbit,
+  centre,
+  where,
+  target,
+}: {
+  orbit: Orbit;
+  centre: { x: number; y: number; r: number };
+  where: (placed: Placed) => { x: number; y: number; r: number };
+  target: FoldTarget;
+}) {
+  const placed = orbit.ring.find((candidate) => candidate.node.id === target.id);
+  const colour = entityColor(target.entity_type);
+
+  if (placed) {
+    const to = where(placed);
+    return <line className="graph-fold-line" x1={centre.x} y1={centre.y} x2={to.x} y2={to.y} />;
+  }
+
+  const angle = widestGap(
+    orbit.ring
+      .filter((candidate) => candidate.hop === 1)
+      .map((candidate) => {
+        const at = where(candidate);
+        return Math.atan2(at.y - centre.y, at.x - centre.x);
+      }),
+  );
+  const halo = centre.r * 1.34;
+  const distance = halo + (orbit.radii.one - halo) * FOLD_GHOST_AT + 18;
+  const ghost = { x: centre.x + Math.cos(angle) * distance, y: centre.y + Math.sin(angle) * distance };
+  const right = Math.cos(angle) >= 0;
+
+  return (
+    <g className="graph-fold">
+      <line className="graph-fold-line" x1={centre.x} y1={centre.y} x2={ghost.x} y2={ghost.y} />
+      <circle className="graph-fold-ghost" cx={ghost.x} cy={ghost.y} r={11} stroke={colour} />
+      <text
+        className="graph-name graph-fold-name"
+        x={ghost.x + (right ? 17 : -17)}
+        y={ghost.y + 4}
+        style={{ textAnchor: right ? "start" : "end" }}
+      >
+        {target.name}
+      </text>
+    </g>
+  );
+}
+
+/// The middle of the widest empty arc between the given angles. Upper
+/// right when there is nothing to avoid, where the centre's own name is
+/// not.
+function widestGap(angles: number[]): number {
+  if (angles.length === 0) return -Math.PI / 4;
+  const sorted = [...angles].sort((a, b) => a - b);
+  let best = { size: -1, middle: 0 };
+  sorted.forEach((angle, index) => {
+    const next = index + 1 < sorted.length ? sorted[index + 1] : sorted[0] + Math.PI * 2;
+    if (next - angle > best.size) best = { size: next - angle, middle: angle + (next - angle) / 2 };
+  });
+  return best.middle;
 }

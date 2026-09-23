@@ -652,6 +652,16 @@ export function listEntities(options: { entityType?: string; name?: string } = {
   return request<EntityListItem[]>(`/entities${query ? `?${query}` : ""}`);
 }
 
+/// What `id` could be folded into. Without `query`: the look-alikes by
+/// name, then more of the same kind. With it: whatever that name finds,
+/// aliases included.
+export function getFoldCandidates(id: string, query?: string): Promise<EntityListItem[]> {
+  const params = new URLSearchParams();
+  if (query?.trim()) params.set("q", query.trim());
+  const suffix = params.toString();
+  return request<EntityListItem[]>(`/entities/${id}/fold-candidates${suffix ? `?${suffix}` : ""}`);
+}
+
 export function getEntity(id: string): Promise<EntityDetail> {
   return request<EntityDetail>(`/entities/${id}`);
 }

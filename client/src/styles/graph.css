@@ -338,6 +338,86 @@
     color: var(--text-dim);
   }
 
+  /* — choosing what to fold into — */
+  .fold-candidates {
+    display: flex;
+    flex-direction: column;
+    margin: 0 calc(var(--space-2) * -1);
+    padding: 0;
+    list-style: none;
+  }
+  .fold-candidate {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    width: 100%;
+    padding: var(--space-2);
+    border: none;
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .fold-candidate:hover,
+  .fold-candidate:focus-visible {
+    background: var(--surface-hover);
+  }
+  .fold-candidate .chip-dot {
+    flex: none;
+    align-self: center;
+  }
+  .fold-candidate-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fold-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-quiet);
+  }
+  .fold-side-name {
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+  .fold-quote {
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+    color: var(--text-muted);
+  }
+  .fold-arrow {
+    color: var(--accent);
+    text-align: center;
+  }
+
+  /* The fold drawn into the picture: dashed, because it has not happened. */
+  .graph-fold-line {
+    stroke: var(--accent);
+    stroke-width: 1.6;
+    stroke-dasharray: 5 5;
+    pointer-events: none;
+  }
+  .graph-fold-ghost {
+    fill: var(--bg-sunken);
+    stroke-width: 2;
+    stroke-dasharray: 3 3;
+    pointer-events: none;
+  }
+  .graph-fold-name {
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: var(--bg-sunken);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+  }
+
   .graph-legend {
     position: absolute;
     right: var(--space-4);

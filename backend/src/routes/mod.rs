@@ -49,6 +49,10 @@ pub fn router() -> Router<AppState> {
         .route("/entities", get(entities::list))
         .route("/entities/{id}", get(entities::detail))
         .route("/entities/{id}/merge", post(entities::merge_entities))
+        .route(
+            "/entities/{id}/fold-candidates",
+            get(entities::fold_candidates),
+        )
         .route("/entities/{id}/unmerge", post(entities::unmerge))
         .route("/consolidation", get(entities::changelog))
         .route("/consolidation/run", post(entities::consolidate_now))
