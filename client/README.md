@@ -1,7 +1,15 @@
-# Tauri + React + Typescript
+# client
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+The desktop app: a Tauri v2 shell (`src-tauri/`, Rust) around a React and
+TypeScript interface (`src/`), built with Vite.
 
-## Recommended IDE Setup
+`src-tauri/` is its own Cargo workspace, separate from the backend's — run
+Cargo commands for it from inside that directory. Why, and how to run the
+app from source without disturbing the installed one:
+[`docs/development.md`](../docs/development.md).
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+```sh
+npm install
+npm run dev:app   # the desktop app, under its own bundle identity
+npm run build     # the interface alone, type-checked
+```

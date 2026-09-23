@@ -22,8 +22,8 @@ COPY backend backend
 
 # sqlx's query! macros check against the committed query cache at compile
 # time (backend/.sqlx) — there is no DATABASE_URL here, only what
-# `cargo sqlx prepare` already captured. See the README's Echo section for
-# when that cache needs regenerating.
+# `cargo sqlx prepare` already captured. See "Queries are checked offline"
+# in docs/development.md for when that cache needs regenerating.
 ENV SQLX_OFFLINE=true
 
 RUN cargo build --release -p backend
