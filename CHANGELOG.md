@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/huulanka/hippocampus/compare/v1.14.0...v1.15.0) (2026-09-23)
+
+
+### Features
+
+* what you meant to do comes back when it matters ([#55](https://github.com/huulanka/hippocampus/issues/55)) ([36d3ce9](https://github.com/huulanka/hippocampus/commit/36d3ce93f20b9de09e963de4079d21fcbe25ed23))
+
 # [1.14.0](https://github.com/huulanka/hippocampus/compare/v1.13.0...v1.14.0) (2026-09-23)
 
 
