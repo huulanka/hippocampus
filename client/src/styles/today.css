@@ -1,0 +1,144 @@
+@layer screens {
+  .today {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+  .today-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  /* The one sentence the screen is about, and the largest type on it. */
+  .today-lead {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 400;
+    line-height: var(--leading-snug);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-bright);
+    max-width: 24ch;
+  }
+  .today-note {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+    max-width: 52ch;
+  }
+
+  .today-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* — something you said was coming — */
+  .today-upcoming {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-5);
+    padding: var(--space-4);
+  }
+  /* Fixed width so the dates line up into a column the eye can run down;
+     it is the thing every row is sorted by. */
+  .today-when {
+    flex: none;
+    width: 104px;
+    padding-top: 2px;
+    color: var(--ember);
+  }
+  .today-upcoming-body {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .today-observation {
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    color: var(--text);
+  }
+  .today-upcoming-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: calc(var(--space-3) * -1);
+  }
+  .today-entity {
+    font-size: var(--text-sm);
+    min-height: 28px;
+  }
+  .today-said {
+    font-size: var(--text-sm);
+    min-height: 28px;
+    color: var(--text-dim);
+  }
+
+  /* — subjects that keep coming up — */
+  .today-threads {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    gap: var(--space-3);
+  }
+  .today-thread {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+  }
+  .today-thread-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .today-thread-name {
+    font-size: var(--text-xl);
+  }
+  .today-thread-summary {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+    /* Three lines: enough to recognise the thing, not enough to read
+       instead of opening it. */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* — the tail: what was said lately — */
+  .today-recent {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+  }
+  .today-recent-text {
+    max-width: none;
+    font-size: var(--text-md);
+    /* Two lines of a spoken note is enough to know which one it is. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .today-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+  }
+
+  @media (max-width: 620px) {
+    .today-upcoming {
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .today-when {
+      width: auto;
+    }
+  }
+}

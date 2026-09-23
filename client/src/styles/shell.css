@@ -1,0 +1,220 @@
+/* The frame: a rail down the left, everything else in the rest.
+ *
+ * Below 720px the rail becomes a bottom tab bar. That switch is the only
+ * structural difference between the Mac window and a phone — every screen
+ * inside is already one column with a measure, so nothing else has to
+ * know which one it is on.
+ */
+
+@layer screens {
+  .app {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .rail {
+    width: var(--rail-w);
+    flex: none;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-4) var(--space-2);
+    background: var(--rail-bg);
+    border-right: 1px solid var(--line);
+  }
+
+  .rail-inner {
+    display: contents;
+  }
+
+  .rail-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    margin-bottom: var(--space-4);
+    color: var(--accent);
+  }
+
+  .rail-places {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-grow: 1;
+  }
+
+  .rail-place,
+  .rail-lock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    min-height: 54px;
+    padding: var(--space-2) 2px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: var(--text-2xs);
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+  .rail-place:hover,
+  .rail-lock:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+  .rail-place[aria-current="page"] {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .rail-lock {
+    min-height: 48px;
+    color: var(--text-faint);
+  }
+
+  .app-main {
+    flex-grow: 1;
+    min-width: 0;
+    overflow: auto;
+    padding: var(--space-8) var(--space-8) var(--space-12);
+  }
+  .app-main-bleed {
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* One column with a measure, everywhere. Screens ask for this rather
+     than each inventing its own max-width, which is how the app ended up
+     with 480, 720, 760 and 860px columns side by side. */
+  .column {
+    width: 100%;
+    max-width: var(--content-max);
+    margin: 0 auto;
+  }
+  .column-wide {
+    max-width: 1080px;
+  }
+
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .stack-tight {
+    gap: var(--space-2);
+  }
+  .stack-loose {
+    gap: var(--space-8);
+  }
+
+  /* — the phone — ----------------------------------------------------- */
+
+  @media (max-width: 720px) {
+    .app {
+      flex-direction: column-reverse;
+    }
+    .rail {
+      width: auto;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 0;
+      padding: var(--space-1) var(--space-1) env(safe-area-inset-bottom, var(--space-2));
+      border-right: none;
+      border-top: 1px solid var(--line);
+    }
+    /* The brand and the lock button are desk furniture; on a phone the bar
+       is five targets and nothing else. Locking moves to Settings, where
+       there is room to say what it does. */
+    .rail-brand,
+    .rail-lock {
+      display: none;
+    }
+    .rail-places {
+      flex-direction: row;
+      flex-grow: 1;
+    }
+    .rail-places > li {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .rail-place {
+      min-height: var(--tap-min);
+    }
+    .app-main {
+      padding: var(--space-5) var(--space-4) var(--space-8);
+    }
+  }
+}
+
+/* Settings, until its own pass. The legacy rules still draw the rows; this
+   only stops a text field from being 1360px wide on a large display, which
+   is what a full-bleed form looks like once the sidebar stopped being
+   220px. */
+@layer screens {
+  .settings {
+    display: flex;
+    flex-direction: column;
+  }
+  .settings .section-label {
+    margin-top: var(--space-6);
+  }
+  .settings .settings-note {
+    margin-top: 0;
+  }
+}
+
+@layer screens {
+  /* The capture button. Not one of the places and styled so it cannot be
+     mistaken for one: a filled control above the list, the way a compose
+     button sits above a mailbox. */
+  .rail-capture {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    min-height: 58px;
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) 2px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: var(--accent-text);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+  .rail-capture:hover {
+    background: color-mix(in srgb, var(--accent) 88%, var(--text-bright));
+  }
+  .rail-capture:active {
+    background: color-mix(in srgb, var(--accent) 86%, #000);
+  }
+
+  @media (max-width: 720px) {
+    /* On the phone it stops being a column item and becomes the one thing
+       in the middle of the bar, where a thumb already is. */
+    .rail-capture {
+      order: -1;
+      width: auto;
+      min-width: 64px;
+      margin: 0 var(--space-1) 0 0;
+      min-height: var(--tap-min);
+    }
+  }
+}

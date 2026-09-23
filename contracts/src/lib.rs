@@ -21,6 +21,41 @@ pub struct CreateCaptureRequest {
     /// to the server's configured timezone when absent.
     #[serde(default)]
     pub timezone: Option<String>,
+    /// When the note was *written*, if that is not now.
+    ///
+    /// A capture spoken and sent in one breath leaves this out and gets
+    /// the moment it arrived. A note written during a four-hour session
+    /// and sent at the end must carry its own moment, or every note in
+    /// that session claims to have been thought when Send was pressed —
+    /// and the timeline, which is most of what this system promises, ends
+    /// up full of times that never happened.
+    ///
+    /// Refused if it is in the future: a note cannot have been written
+    /// later than it arrived, and a device whose clock says otherwise is
+    /// a device whose timestamps cannot be trusted at all.
+    #[serde(default)]
+    pub occurred_at: Option<DateTime<Utc>>,
+    /// The sitting this note was written in, if it was written in one.
+    #[serde(default)]
+    pub session: Option<CaptureSession>,
+}
+
+/// A writing session: one sitting, many notes, one Send at the end.
+///
+/// A label on the captures and nothing more. A session is deliberately not
+/// an entity and never appears in the graph — the extraction finds
+/// entities in what was *said*, and a heading typed into a text field was
+/// not said. Inventing a node for it would be the interface writing a
+/// guess into the graph, which is the line `docs/product.md` draws at P12.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureSession {
+    pub id: Uuid,
+    /// What the writer called it. Ordinary prose, possibly naming people,
+    /// so it is stored as content rather than in the event payload — the
+    /// log is never modified and anything written there could never be
+    /// redacted (ADR 0005).
+    pub title: String,
+    pub started_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -556,13 +591,34 @@ mod tests {
 
     #[test]
     fn create_capture_request_round_trips() {
+        let written = DateTime::parse_from_rfc3339("2026-09-23T10:31:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
         let req = CreateCaptureRequest {
             transcript_text: "test".into(),
             device: "unit-test".into(),
             timezone: Some("Europe/Berlin".into()),
+            occurred_at: Some(written),
+            session: Some(CaptureSession {
+                id: Uuid::nil(),
+                title: "Workshop".into(),
+                started_at: written,
+            }),
         };
         let json = serde_json::to_string(&req).unwrap();
         let back: CreateCaptureRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(back.transcript_text, req.transcript_text);
+        assert_eq!(back.occurred_at, Some(written));
+        assert_eq!(back.session.map(|s| s.title).as_deref(), Some("Workshop"));
+    }
+
+    /// A client that predates the session — and every spoken capture, which
+    /// has no written time and no sitting — must still be accepted.
+    #[test]
+    fn a_capture_without_a_written_time_still_parses() {
+        let req: CreateCaptureRequest =
+            serde_json::from_str(r#"{"transcript_text":"test","device":"mac"}"#).unwrap();
+        assert!(req.occurred_at.is_none());
+        assert!(req.session.is_none());
     }
 }

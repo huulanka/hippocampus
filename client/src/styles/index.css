@@ -1,0 +1,30 @@
+/* The one stylesheet the app imports. Everything else arrives through it,
+ * in an order that is declared rather than accidental.
+ *
+ * The layer order is the point. Before this, "which rule wins" depended on
+ * which file happened to be imported last and how many class names a
+ * selector had — which is why the old sheet had a `:not(.graph-ring)` in
+ * it to stop a general rule from repainting a specific one. With layers,
+ * a screen always beats a component, a component always beats the base,
+ * and neither has to out-specify the other to do it.
+ */
+
+@layer tokens, base, components, screens;
+
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./base.css";
+@import "./components.css";
+@import "./utilities.css";
+@import "./brand.css";
+@import "./shell.css";
+@import "./today.css";
+@import "./notepad.css";
+@import "./search.css";
+@import "./graph.css";
+@import "./capture.css";
+@import "./detail.css";
+@import "./entity.css";
+@import "./settings.css";
+@import "./changes.css";
+@import "./lock.css";

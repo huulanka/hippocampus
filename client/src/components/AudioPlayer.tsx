@@ -62,11 +62,10 @@ export function AudioPlayer({ eventId, mime }: { eventId: string; mime: string }
     else el.pause();
   }
 
-  function seek(event: React.MouseEvent<HTMLDivElement>) {
+  function seekTo(seconds: number) {
     const el = audio.current;
     if (!el || !duration) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    el.currentTime = ((event.clientX - bounds.left) / bounds.width) * duration;
+    el.currentTime = Math.min(Math.max(seconds, 0), duration);
   }
 
   if (failed) {
@@ -77,13 +76,38 @@ export function AudioPlayer({ eventId, mime }: { eventId: string; mime: string }
 
   return (
     <div className="audio-player">
-      <span className="audio-player-button" onClick={toggle}>
-        [ {playing ? "▮▮" : "▶"} ]
-      </span>
-      <div className="audio-player-track" onClick={seek}>
-        <div className="audio-player-fill" style={{ width: `${progress * 100}%` }} />
-      </div>
-      <span className="dim audio-player-time">
+      <button
+        type="button"
+        className="icon-btn icon-btn-bordered audio-player-button"
+        aria-label={playing ? "Pause the recording" : "Play the recording"}
+        onClick={toggle}
+      >
+        {playing ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="6" y="5" width="4" height="14" rx="1.2" />
+            <rect x="14" y="5" width="4" height="14" rx="1.2" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z" />
+          </svg>
+        )}
+      </button>
+      {/* A real range input: it can be dragged, reached with Tab and moved
+          with the arrow keys, which the clickable bar it replaces could not. */}
+      <input
+        type="range"
+        className="audio-player-track"
+        aria-label="Position in the recording"
+        min={0}
+        max={duration ?? 0}
+        step={0.1}
+        value={position}
+        disabled={!duration}
+        style={{ "--progress": `${progress * 100}%` } as React.CSSProperties}
+        onChange={(event) => seekTo(Number(event.currentTarget.value))}
+      />
+      <span className="meta audio-player-time">
         {clock(position)} / {duration === null ? "--:--" : clock(duration)}
       </span>
       <audio

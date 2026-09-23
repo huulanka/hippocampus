@@ -319,9 +319,40 @@ export function listCaptures(): Promise<CaptureListItem[]> {
   return request<CaptureListItem[]>("/captures");
 }
 
+/// Where a note came from, when it did not come from the capture field.
+///
+/// Carried as a label on the capture and nothing more. A session is
+/// deliberately *not* an entity in the graph: the extraction finds
+/// entities in what was said, and a heading typed into a text field is
+/// not something that was said. Making "Workshop Datenqualität" a
+/// node would mean the interface inventing a thing nobody spoke, which is
+/// the exact line P12 draws.
+export interface CaptureSession {
+  id: string;
+  title: string;
+  started_at: string;
+}
+
+export interface CaptureOrigin {
+  /// When the note was *written*, not when it was sent. Left out for a
+  /// capture that is being sent as it is made.
+  ///
+  /// This is the whole reason a session can exist at all. Four hours of a
+  /// workshop sent at the end would otherwise arrive carrying one
+  /// timestamp, and every note in it would claim to have been thought at
+  /// 14:00 — which makes the timeline, the only thing this app is really
+  /// promising, start lying.
+  occurredAt?: string;
+  session?: CaptureSession;
+}
+
 /// Records a capture. The response carries its echoes inline, so the user
 /// sees them without a second round trip.
-export function createCapture(transcriptText: string, device: string): Promise<CaptureAccepted> {
+export function createCapture(
+  transcriptText: string,
+  device: string,
+  origin: CaptureOrigin = {},
+): Promise<CaptureAccepted> {
   return request<CaptureAccepted>("/captures", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -331,8 +362,73 @@ export function createCapture(transcriptText: string, device: string): Promise<C
       // Where the note is being written, so the backend can turn
       // "morgen" into a real date rather than guessing.
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      occurred_at: origin.occurredAt,
+      session: origin.session,
     }),
   });
+}
+
+/// One written note out of a session, and what became of it.
+export interface SentNote {
+  writtenAt: string;
+  text: string;
+  eventId: string | null;
+  error: string | null;
+}
+
+/// Sends a whole session, one note at a time, each carrying the moment it
+/// was written.
+///
+/// Sequential rather than parallel, and it does not stop at the first
+/// failure. Both follow from what a session is: the notes are ordered and
+/// a reader will read them in order, and after four hours of typing the
+/// worst possible answer to a flaky connection is "none of it was kept".
+/// Whatever got through is reported note by note, so the ones that did not
+/// can be retried without sending the rest twice.
+/// Two timestamps are the same moment if they agree to the second.
+/// Postgres stores microseconds and the client sends milliseconds, so
+/// insisting on an exact string match would fail on a backend that did
+/// everything right.
+function sameMoment(a: string, b: string): boolean {
+  return Math.abs(new Date(a).getTime() - new Date(b).getTime()) < 1000;
+}
+
+export async function sendSession(
+  notes: { text: string; writtenAt: string }[],
+  session: CaptureSession,
+  device: string,
+): Promise<SentNote[]> {
+  const sent: SentNote[] = [];
+  for (const note of notes) {
+    try {
+      const accepted = await createCapture(note.text, device, {
+        occurredAt: note.writtenAt,
+        session,
+      });
+      // The backend has to say back the moment we asked it to keep. A
+      // version that does not understand `occurred_at` would answer with
+      // the time it received the note, and every note in a four-hour
+      // session would quietly claim to have been thought at the moment
+      // Send was pressed — wrong in a way nobody would notice until the
+      // timeline was already full of it. Better a note that refuses to
+      // send than one that lies about when you thought it.
+      if (!sameMoment(accepted.occurred_at, note.writtenAt)) {
+        sent.push({
+          ...note,
+          eventId: null,
+          error:
+            "the backend kept this at " +
+            new Date(accepted.occurred_at).toLocaleTimeString() +
+            " instead of when it was written — it is too old to accept a written time",
+        });
+        continue;
+      }
+      sent.push({ ...note, eventId: accepted.event_id, error: null });
+    } catch (err) {
+      sent.push({ ...note, eventId: null, error: String(err) });
+    }
+  }
+  return sent;
 }
 
 /// A capture's judged echo. Comes back with `pending` set while the

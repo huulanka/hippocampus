@@ -1,0 +1,432 @@
+/* The graph.
+ *
+ * Its own ground, but not its own world. The screen this replaces painted
+ * a bespoke near-black behind itself with its own scanlines, and the CSS
+ * said in so many words that it was committing to a separate visual
+ * world — which is exactly why it never fitted into the app around it.
+ * The ground here is `--bg-sunken`, a token like any other, with a
+ * vignette to say "look into this" and nothing else.
+ */
+
+@layer screens {
+  .graph {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .graph-message {
+    max-width: 52ch;
+    margin: var(--space-10) auto;
+    padding: 0 var(--space-6);
+    color: var(--text-dim);
+    line-height: var(--leading-normal);
+    text-align: center;
+  }
+
+  /* — the bar — -------------------------------------------------------- */
+
+  .graph-bar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    min-height: var(--header-h);
+    padding: var(--space-2) var(--space-5);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  /* Where you have been. The screen this replaces kept one focused id, so
+     walking three hops in left no way back but starting over. */
+  .graph-walk {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .graph-walk-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+  .graph-walk-sep {
+    color: var(--text-faint);
+  }
+  .graph-walk-name {
+    font-size: var(--text-sm);
+    min-height: 30px;
+    white-space: nowrap;
+  }
+  .graph-walk-name[aria-current="true"] {
+    color: var(--text-bright);
+    font-weight: 500;
+  }
+
+  .graph-tools {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+  }
+  .graph-find {
+    width: 208px;
+    min-height: 34px;
+  }
+  .graph-tidy-toggle {
+    min-height: 34px;
+    padding: 0 var(--space-3);
+    font-size: var(--text-sm);
+  }
+  .graph-tidy-toggle[aria-expanded="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .graph-matches {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  /* — the sky — -------------------------------------------------------- */
+
+  .graph-sky {
+    position: relative;
+    flex-grow: 1;
+    min-height: 0;
+    overflow: hidden;
+    background: radial-gradient(
+      ellipse 62% 58% at 50% 46%,
+      var(--surface-quiet) 0%,
+      var(--bg-sunken) 78%
+    );
+  }
+  .graph-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .graph-canvas:active {
+    cursor: grabbing;
+  }
+
+  .graph-recentre {
+    position: absolute;
+    top: var(--space-3);
+    left: 50%;
+    transform: translateX(-50%);
+    min-height: 32px;
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
+    background: var(--surface);
+  }
+
+  /* — what is drawn — --------------------------------------------------
+   * Two rings, named once. Without them "distance is steps" is a claim in
+   * a legend; with them it is a fact in the picture.
+   */
+
+  .graph-ring {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 1;
+    stroke-dasharray: 2 7;
+  }
+  .graph-ring-far {
+    stroke: var(--line-soft);
+  }
+  .graph-ring-label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    fill: var(--text-faint);
+  }
+  .graph-ring-label-far {
+    opacity: 0.6;
+  }
+
+  .graph-spoke {
+    stroke: var(--line-strong);
+    stroke-width: 1.7;
+  }
+  .graph-spoke-thin {
+    stroke: var(--line);
+    stroke-width: 1;
+  }
+
+  /* The verb. Italic, smaller and dimmer than a name, so a relation and an
+     entity never read as the same kind of word — even before either is
+     parsed. There are at most a dozen of these, which is the whole reason
+     they can be drawn at all. */
+  .graph-relation {
+    font-family: var(--font-ui);
+    font-size: 10.5px;
+    font-style: italic;
+    fill: var(--text-dim);
+    text-anchor: middle;
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: var(--bg-sunken);
+    stroke-width: 3;
+    stroke-linejoin: round;
+  }
+
+  /* The noun. Drawn behind the glyphs so a name crossing a spoke stays
+     readable without a box around it. */
+  .graph-name {
+    font-family: var(--font-ui);
+    font-size: 12.5px;
+    font-weight: 500;
+    fill: var(--text);
+    text-anchor: middle;
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: var(--bg-sunken);
+    stroke-width: 3.5;
+    stroke-linejoin: round;
+  }
+
+  .graph-node {
+    cursor: pointer;
+  }
+  .graph-node circle {
+    transition:
+      r var(--dur-fast) var(--ease-out),
+      stroke-width var(--dur-fast) var(--ease-out);
+  }
+  .graph-node:hover circle {
+    stroke: var(--text-bright);
+    stroke-width: 2;
+  }
+  .graph-node-far {
+    opacity: 0.72;
+  }
+  .graph-name-far {
+    font-size: 11px;
+    font-weight: 400;
+    fill: var(--text-dim);
+  }
+  .graph-centre-name {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 500;
+    fill: var(--text-bright);
+    text-anchor: middle;
+    pointer-events: none;
+    paint-order: stroke;
+    stroke: var(--bg-sunken);
+    stroke-width: 5px;
+    stroke-linejoin: round;
+  }
+  .graph-node-merging circle {
+    stroke: var(--accent);
+    stroke-width: 2.5;
+  }
+
+  .graph-halo {
+    opacity: 0.09;
+    pointer-events: none;
+  }
+  .graph-centre-count {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    fill: var(--accent-text);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  .graph-horizon {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    fill: var(--text-faint);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+
+  .graph-cluster-label {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    fill: var(--text-dim);
+    text-anchor: middle;
+    pointer-events: none;
+  }
+  /* A name on the map is a way in, the same as its dot. */
+  .graph-name-map {
+    pointer-events: auto;
+    cursor: pointer;
+    font-size: 11px;
+    paint-order: stroke;
+    stroke: var(--bg-sunken);
+    stroke-width: 4px;
+    stroke-linejoin: round;
+  }
+  .graph-cluster-count {
+    fill: var(--text-faint);
+  }
+
+  /* — what floats over it — --------------------------------------------- */
+
+  .graph-overlays {
+    position: absolute;
+    left: var(--space-4);
+    bottom: var(--space-4);
+    z-index: var(--z-overlay);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: min(340px, calc(100% - var(--space-8)));
+  }
+  .graph-focus,
+  .graph-merge {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .graph-merge {
+    border-color: var(--accent);
+  }
+  .graph-focus-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .graph-focus-name {
+    font-size: var(--text-2xl);
+  }
+  .graph-lonely {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+  }
+  .graph-focus-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+  .graph-focus-actions .btn {
+    min-height: 34px;
+    padding: 0 var(--space-4);
+    font-size: var(--text-sm);
+  }
+  .graph-merge-ask {
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+  }
+  .graph-merge-why {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+  }
+
+  .graph-legend {
+    position: absolute;
+    right: var(--space-4);
+    bottom: var(--space-4);
+    z-index: var(--z-overlay);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .graph-legend-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--text-dim);
+  }
+
+  /* — the filters — ------------------------------------------------------ */
+
+  .graph-filters {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-5);
+    border-top: 1px solid var(--line-soft);
+  }
+  .graph-more-types {
+    font-size: var(--text-sm);
+    min-height: 30px;
+  }
+
+  /* — tidying — ---------------------------------------------------------
+   * A drawer rather than a place: everything in it changes this picture,
+   * and the picture stays visible beside it.
+   */
+
+  .graph-tidy {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: var(--z-sheet);
+    width: min(440px, 100%);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-left: 1px solid var(--line-strong);
+  }
+  .graph-tidy-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-height: var(--header-h);
+    padding: 0 var(--space-3) 0 var(--space-5);
+    border-bottom: 1px solid var(--line);
+  }
+  .graph-tidy-body {
+    flex-grow: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: var(--space-5);
+  }
+
+  @media (max-width: 720px) {
+    .graph-bar {
+      flex-wrap: wrap;
+      padding: var(--space-2) var(--space-4);
+    }
+    .graph-find {
+      width: 140px;
+    }
+    .graph-overlays {
+      right: var(--space-4);
+      width: auto;
+    }
+    /* The legend is for the first few visits; on a phone the picture needs
+       every pixel more than the explanation does. */
+    .graph-legend {
+      display: none;
+    }
+    .graph-tidy {
+      width: 100%;
+      border-left: none;
+    }
+  }
+}

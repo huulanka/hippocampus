@@ -1,0 +1,161 @@
+/* Settings: sections of rows, name on the left and control on the right.
+ *
+ * Not cards. An eight-section settings page built out of cards is a stack
+ * of boxes you scroll through, and the box adds nothing — a hairline
+ * between rows says the same thing with none of the weight. It is also
+ * what every other settings screen on this platform looks like, which
+ * matters more here than in the rest of the app: this is the one screen
+ * where being unsurprising is the whole job.
+ */
+
+@layer screens {
+  .settings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+  .settings-title {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 500;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-bright);
+  }
+
+  .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .settings-rows {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    min-height: 52px;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .settings-row:last-child {
+    border-bottom: none;
+  }
+  .settings-row-action {
+    justify-content: flex-end;
+  }
+  .settings-label {
+    flex: none;
+    font-size: var(--text-base);
+    color: var(--text-quiet);
+  }
+  .settings-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    flex-grow: 1;
+    min-width: 0;
+  }
+
+  /* The one place a text field is allowed to stretch: an address is long
+     and there is nothing to its right competing for the room. */
+  .settings-input {
+    flex-grow: 1;
+    min-width: 0;
+    max-width: 360px;
+    min-height: 36px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
+
+  /* What the shortcut currently is, shown the way a key is shown. */
+  .hotkey {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 108px;
+    min-height: 36px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    color: var(--text);
+  }
+  .hotkey-listening {
+    border-color: var(--accent);
+    color: var(--text-dim);
+    cursor: text;
+  }
+
+  .settings-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .settings-note {
+    max-width: 68ch;
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+    color: var(--text-dim);
+  }
+  .settings-problem {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--clay);
+  }
+
+  /* A two-state switch that is not a checkbox: one control, both options
+     visible, the chosen one filled. Shared with the graph's Orbit/Map. */
+  .segmented {
+    display: inline-flex;
+    padding: 3px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+  }
+  .segmented > button {
+    min-height: 28px;
+    padding: 0 var(--space-4);
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+  .segmented > button:hover {
+    color: var(--text);
+  }
+  .segmented > button[aria-pressed="true"] {
+    background: var(--surface-hover);
+    color: var(--text-bright);
+    font-weight: 500;
+  }
+
+  @media (max-width: 620px) {
+    .settings-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-2);
+    }
+    .settings-control {
+      justify-content: flex-start;
+    }
+    .settings-input {
+      max-width: none;
+    }
+  }
+}

@@ -1,0 +1,260 @@
+/* One capture: your words first, then what the machine made of them,
+ * then what they echo, and only at the end — folded away — the log that
+ * proves it. The same column and furniture as Today and the entity page:
+ * a label over each section, cards for things you said, the model's
+ * reading always smaller and always marked. */
+
+@layer screens {
+  .said {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+  .said > .back-button {
+    align-self: flex-start;
+    margin-left: calc(var(--space-3) * -1);
+    margin-bottom: calc(var(--space-6) * -1);
+  }
+
+  .said-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .said-when {
+    color: var(--ember);
+  }
+  /* The original, and so the largest type on the page — ADR 0004 says the
+     spoken words are the record, and the old screen set them smaller than
+     the labels around them. */
+  .said-words {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    line-height: var(--leading-snug);
+    color: var(--text-bright);
+    white-space: pre-wrap;
+  }
+  .said-words-gone {
+    font-style: italic;
+    color: var(--text-dim);
+  }
+  .said-edit {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    line-height: var(--leading-relaxed);
+    resize: vertical;
+  }
+  .said-note {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+    max-width: var(--measure);
+  }
+  .said-warning {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--clay);
+    max-width: var(--measure);
+  }
+  .said-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .said-kbd {
+    margin-left: var(--space-2);
+  }
+
+  .said-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* — what it means — */
+  .said-entities {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line-soft);
+  }
+  .said-entities > li {
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .said-entity {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+    width: calc(100% + var(--space-2));
+    padding: var(--space-3) var(--space-2);
+    margin-left: calc(var(--space-2) * -1);
+    text-align: left;
+    white-space: normal;
+  }
+  .said-entity-head {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .said-entity-name {
+    font-size: var(--text-lg);
+  }
+  .said-entity:hover .said-entity-name {
+    color: var(--accent);
+  }
+  .said-entity-reading {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+    padding-left: calc(8px + var(--space-2));
+  }
+  .said-about {
+    color: var(--ember);
+  }
+
+  .said-relations {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .said-relation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+  }
+  .said-relation-end {
+    min-height: 30px;
+    color: var(--text);
+  }
+  .said-relation-type {
+    font-style: italic;
+    color: var(--text-dim);
+  }
+
+  /* — earlier words, and earlier wordings — */
+  .said-echo {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .said-echo-words {
+    font-family: var(--font-display);
+    font-size: var(--text-md);
+    line-height: var(--leading-relaxed);
+    color: var(--text);
+  }
+  .said-versions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .said-version {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-left: var(--space-4);
+    border-left: 2px solid var(--line);
+  }
+
+  /* — under the hood — */
+  .said-raw > summary {
+    cursor: pointer;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    list-style: none;
+  }
+  .said-raw > summary::-webkit-details-marker {
+    display: none;
+  }
+  .said-raw > summary::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .said-raw[open] > summary::before {
+    transform: rotate(45deg);
+  }
+  .said-event {
+    margin-top: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .said-payload {
+    margin: 0;
+    padding: var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: var(--leading-normal);
+    /* Wrap rather than scroll: a transcript inside a payload is longer
+       than any sensible panel, and a horizontal scrollbar per event is
+       unusable. */
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* — the recording — */
+  .audio-player {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .audio-player-button {
+    flex: none;
+    color: var(--accent);
+  }
+  .audio-player-track {
+    flex-grow: 1;
+    height: 18px;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .audio-player-track::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(
+      to right,
+      var(--accent) var(--progress, 0%),
+      var(--line-strong) var(--progress, 0%)
+    );
+  }
+  .audio-player-track::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    border-radius: var(--radius-full);
+    background: var(--accent);
+  }
+  .audio-player-track:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .audio-player-note {
+    font-size: var(--text-sm);
+    color: var(--text-dim);
+  }
+}

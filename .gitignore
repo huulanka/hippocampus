@@ -24,3 +24,7 @@ client/src-tauri/target/
 *.log
 data/audio/
 data/models/
+
+# Python bytecode from the one-off scripts in scripts/
+__pycache__/
+*.pyc

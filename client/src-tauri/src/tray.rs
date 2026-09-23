@@ -1,20 +1,26 @@
-//! The menu-bar presence: an always-there black-and-white pixel-art
-//! brain, a click that brings the window back, and a right-click that
-//! offers the way out.
+//! The menu-bar presence: an always-there brain, a click that brings the
+//! window back, and a right-click that offers the way out.
 //!
-//! Doubles as this project's first drawn icon — there has never been one
-//! besides Tauri's default double-O. Built as a literal bitmap in source
-//! rather than a PNG asset: a glyph this small is a handful of pixels
-//! either way, and a bitmap spelled out as text is one that can be tuned
-//! without an image editor. `icon_as_template` leaves the actual colour
-//! to macOS, which is what lets the same brain sit correctly on a light
-//! or a dark menu bar.
+//! The mark comes from `icons/tray-template.png`, which
+//! `scripts/render-brand.py` renders from `client/src/brand/mark.json` —
+//! the same file the interface draws. It used to be a bitmap spelled out
+//! as rows of `#` in this file, which meant the menu bar and the window
+//! could drift apart, and both of them did: mirrored halves tapering to a
+//! point at the bottom centre is the construction of a heart, and that is
+//! what it had quietly become.
+//!
+//! The image is 48x36 and only its left 36 columns hold the brain.
+//! `tray-icon` scales whatever it is handed to 18 points tall, so the
+//! brain lands at the conventional 16 pt and the empty strip on the right
+//! is reserved for the recording dot. Reserving it means the item never
+//! changes width — so the mark itself never moves, however long a
+//! recording runs.
 //!
 //! It also stands still. A menu bar item that moves when nothing is
-//! happening is a menu bar item that trains you to ignore it — so the
-//! brain only pulses while a recording is actually in progress, one
-//! frame of a synapse travelling down the groove between the two halves,
-//! and holds still the rest of the time.
+//! happening is one that trains you to ignore it, so the brain never
+//! animates at all: while a recording is in flight the dot beside it
+//! breathes, and that is the whole of it. The shape changing used to be
+//! the signal, which at menu-bar size is a flicker.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -24,113 +30,95 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
-/// Logical pixels per side of the bitmap below.
-const SIZE: usize = 16;
-/// How many real pixels each logical pixel becomes. Kept low deliberately
-/// — this is meant to read as pixel art, not as a smoothed-out icon that
-/// happens to be small.
-const SCALE: usize = 2;
+/// The resting mark: black plus alpha, for macOS to tint once the icon is
+/// marked as a template. Baked into the binary rather than read from disk
+/// so a half-installed app cannot end up with no icon at all.
+const TEMPLATE: &[u8] = include_bytes!("../icons/tray-template.png");
 
-/// The resting brain. `#` is ink, `.` is transparent; read top to bottom.
-/// Two lobes, a groove between them, and a short stem.
+/// Where the recording dot sits, in template pixels, and how big it is.
+/// Inside the strip the brain deliberately leaves empty.
+const DOT_CENTRE: (f32, f32) = (42.0, 18.0);
+const DOT_RADIUS: f32 = 3.4;
+
+/// How many steps one breath is cut into, and how long the whole breath
+/// takes. Twelve is enough that the fade reads as continuous and few
+/// enough that the frames are built once at startup and then only cloned.
+const PULSE_FRAMES: usize = 12;
+const PULSE_PERIOD: Duration = Duration::from_millis(1600);
+
+/// How far the dot fades at the bottom of a breath. Never to nothing: a
+/// dot that disappears entirely reads as a glitch rather than as breathing,
+/// and "am I still recording?" is the one question this must always answer.
+const DOT_MIN_ALPHA: f32 = 0.30;
+
+/// How often the loop looks for work while nothing is recording. Long
+/// enough to be nearly free, short enough that the dot appears without a
+/// noticeable wait after the shortcut is pressed.
+const IDLE_POLL: Duration = Duration::from_millis(250);
+
+/// Composites the recording dot onto a copy of the resting mark at the
+/// given strength.
 ///
-/// Earlier version of this bitmap carved single-pixel gyri notches into
-/// the outline, which read fine blown up in an ASCII preview and turned
-/// to mush at the size a menu bar actually renders it — a 20×20 grid of
-/// one-pixel details survives neither the downscale nor the antialiasing
-/// macOS applies. Every stroke here is at least two logical pixels thick
-/// for exactly that reason: it has to still be a brain at 16 real pixels
-/// tall, not just at this file's zoom level.
-const REST: [&str; SIZE] = [
-    "................",
-    "................",
-    "...####..####...",
-    "..#####..#####..",
-    "..#####..#####..",
-    ".######..######.",
-    ".##############.",
-    ".##############.",
-    "..############..",
-    "...##########...",
-    ".....######.....",
-    "......####......",
-    "......####......",
-    "................",
-    "................",
-    "................",
-];
+/// Coverage is the distance to the centre softened over one pixel, which
+/// is all the antialiasing a disc this size needs. Only the alpha channel
+/// carries the shape: a template image is drawn from its alpha alone, and
+/// the colour underneath is discarded by macOS.
+fn with_dot(rest: &Image<'_>, strength: f32) -> Image<'static> {
+    let (width, height) = (rest.width() as usize, rest.height() as usize);
+    let mut rgba = rest.rgba().to_vec();
 
-/// Where the groove between the two lobes runs — the two columns and the
-/// row range that [`REST`] deliberately leaves blank there. Two columns
-/// wide for the same reason as everything else here: a one-pixel groove
-/// disappears at real size, a two-pixel one does not. Short on purpose,
-/// too: a groove that ran the full height of the mass read as two hearts
-/// pinched together rather than one brain with a dimple at the top.
-const GROOVE_COLUMNS: (usize, usize) = (7, 8);
-/// Row pairs the pulse lights up, one step at a time, top to bottom — an
-/// impulse two rows tall rather than one, again so it stays visible after
-/// the downscale.
-const GROOVE_STEPS: [(usize, usize); 2] = [(2, 3), (4, 5)];
+    let (cx, cy) = DOT_CENTRE;
+    let first_row = (cy - DOT_RADIUS - 1.0).floor().max(0.0) as usize;
+    let last_row = ((cy + DOT_RADIUS + 1.0).ceil() as usize).min(height);
+    let first_col = (cx - DOT_RADIUS - 1.0).floor().max(0.0) as usize;
+    let last_col = ((cx + DOT_RADIUS + 1.0).ceil() as usize).min(width);
 
-/// How often the pulse steps forward while something is recording.
-/// Slow enough to read as a heartbeat, not a spinner.
-const PULSE_INTERVAL: Duration = Duration::from_millis(450);
-
-/// One frame of the pulse: the resting brain with one step of the groove
-/// lit, standing in for an impulse partway down it.
-fn pulse_frame(step: usize) -> [String; SIZE] {
-    let (top, bottom) = GROOVE_STEPS[step % GROOVE_STEPS.len()];
-    std::array::from_fn(|y| {
-        if y != top && y != bottom {
-            return REST[y].to_string();
-        }
-        let mut row: Vec<char> = REST[y].chars().collect();
-        row[GROOVE_COLUMNS.0] = '#';
-        row[GROOVE_COLUMNS.1] = '#';
-        row.into_iter().collect()
-    })
-}
-
-/// Turns a `SIZE`×`SIZE` grid of `#`/`.` into an RGBA image, `SCALE`
-/// times larger, nearest-neighbour — the upscale that keeps pixel art
-/// looking like pixel art instead of blurring it. Alpha is what actually
-/// draws the shape once the tray icon is marked as a template; colour is
-/// opaque black and macOS ignores it in that mode.
-fn render(rows: &[impl AsRef<str>; SIZE]) -> Image<'static> {
-    let out = SIZE * SCALE;
-    let mut rgba = vec![0u8; out * out * 4];
-    for (y, row) in rows.iter().enumerate() {
-        for (x, cell) in row.as_ref().chars().enumerate() {
-            if cell != '#' {
+    for y in first_row..last_row {
+        for x in first_col..last_col {
+            let dx = x as f32 + 0.5 - cx;
+            let dy = y as f32 + 0.5 - cy;
+            let coverage = (DOT_RADIUS + 0.5 - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
+            if coverage <= 0.0 {
                 continue;
             }
-            for dy in 0..SCALE {
-                for dx in 0..SCALE {
-                    let idx = ((y * SCALE + dy) * out + (x * SCALE + dx)) * 4;
-                    rgba[idx] = 0;
-                    rgba[idx + 1] = 0;
-                    rgba[idx + 2] = 0;
-                    rgba[idx + 3] = 255;
-                }
+            let index = (y * width + x) * 4;
+            let alpha = (coverage * strength * 255.0).round() as u8;
+            // Never dim a pixel the mark already claimed. The dot sits in
+            // empty space by construction, but the arithmetic should not
+            // be the thing keeping that true.
+            if alpha > rgba[index + 3] {
+                rgba[index] = 0;
+                rgba[index + 1] = 0;
+                rgba[index + 2] = 0;
+                rgba[index + 3] = alpha;
             }
         }
     }
-    Image::new_owned(rgba, out as u32, out as u32)
+
+    Image::new_owned(rgba, width as u32, height as u32)
 }
 
-/// The rendered frames, built once at startup rather than on every tick
-/// of the pulse — the bitmap never changes, only which frame is shown.
+/// How bright the dot is at `step` of a breath: a cosine, so it eases at
+/// both ends instead of sawing back to the start.
+fn breath(step: usize) -> f32 {
+    let phase = step as f32 / PULSE_FRAMES as f32 * std::f32::consts::TAU;
+    let swing = (1.0 - phase.cos()) / 2.0;
+    DOT_MIN_ALPHA + (1.0 - DOT_MIN_ALPHA) * swing
+}
+
+/// The rendered frames, built once at startup rather than on every tick.
 struct Frames {
     rest: Image<'static>,
-    pulse: [Image<'static>; 2],
+    pulse: Vec<Image<'static>>,
 }
 
 impl Frames {
-    fn render() -> Self {
-        Self {
-            rest: render(&REST),
-            pulse: std::array::from_fn(|step| render(&pulse_frame(step))),
-        }
+    fn render() -> tauri::Result<Self> {
+        let rest = Image::from_bytes(TEMPLATE)?.to_owned();
+        let pulse = (0..PULSE_FRAMES)
+            .map(|step| with_dot(&rest, breath(step)))
+            .collect();
+        Ok(Self { rest, pulse })
     }
 }
 
@@ -179,7 +167,7 @@ fn summon(app: &AppHandle) {
 /// already exists.
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     app.manage(Activity::default());
-    let frames = Frames::render();
+    let frames = Frames::render()?;
 
     let show = MenuItem::with_id(app, "show", "Open Hippocampus", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Hippocampus", true, None::<&str>)?;
@@ -212,30 +200,40 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Steps the pulse forward while a recording is in flight, and puts the
-/// resting frame back the moment it ends. Ticks at [`PULSE_INTERVAL`]
-/// regardless of activity — coarser than that would make the first frame
-/// of a pulse lag behind the recording noticeably; a tighter interval
-/// would just be extra wakeups with nothing to show for them, the same
-/// tradeoff the idle-lock clock already makes.
+/// Steps the breath forward while a recording is in flight, and puts the
+/// resting mark back the moment it ends.
+///
+/// Every icon change goes through `set_icon_with_as_template`, never
+/// `set_icon`. That is not a style preference: `set_icon` hands
+/// `is_template: false` straight through to AppKit and never restores it,
+/// so the first frame of the first recording turned the mark solid black
+/// and it stayed black — on every menu bar, light or dark — until the app
+/// was restarted. The flag being set once at build time is not enough.
+///
+/// The loop idles slowly and only wakes at frame rate while there is
+/// something to draw; a menu-bar item has no business waking the machine
+/// twelve times a second to redraw a picture that is not changing.
 fn watch(app: AppHandle, tray: TrayIcon) {
+    let frame_gap = PULSE_PERIOD / PULSE_FRAMES as u32;
     tauri::async_runtime::spawn(async move {
         let mut step = 0usize;
         let mut pulsing = false;
         loop {
-            tokio::time::sleep(PULSE_INTERVAL).await;
+            let active = is_active(&app);
+            tokio::time::sleep(if active { frame_gap } else { IDLE_POLL }).await;
+
             let frames = app.state::<Frames>();
             if is_active(&app) {
                 pulsing = true;
-                let icon = frames.pulse[step % frames.pulse.len()].clone();
+                let icon = frames.pulse[step % PULSE_FRAMES].clone();
                 step = step.wrapping_add(1);
-                if let Err(err) = tray.set_icon(Some(icon)) {
+                if let Err(err) = tray.set_icon_with_as_template(Some(icon), true) {
                     log::warn!("could not step the tray pulse: {err}");
                 }
             } else if pulsing {
                 pulsing = false;
                 step = 0;
-                if let Err(err) = tray.set_icon(Some(frames.rest.clone())) {
+                if let Err(err) = tray.set_icon_with_as_template(Some(frames.rest.clone()), true) {
                     log::warn!("could not still the tray icon: {err}");
                 }
             }
@@ -247,62 +245,85 @@ fn watch(app: AppHandle, tray: TrayIcon) {
 mod tests {
     use super::*;
 
+    fn rest() -> Image<'static> {
+        Image::from_bytes(TEMPLATE)
+            .expect("the bundled template decodes")
+            .to_owned()
+    }
+
     #[test]
-    fn every_row_of_the_bitmap_is_the_declared_width() {
-        for row in REST {
-            assert_eq!(row.chars().count(), SIZE);
+    fn the_template_is_the_shape_the_menu_bar_expects() {
+        let image = rest();
+        assert_eq!(image.width(), 48);
+        assert_eq!(image.height(), 36);
+        assert_eq!(image.rgba().len(), 48 * 36 * 4);
+    }
+
+    #[test]
+    fn the_mark_leaves_the_dot_strip_empty() {
+        let image = rest();
+        let rgba = image.rgba();
+        for y in 0..36usize {
+            for x in 36..48usize {
+                let alpha = rgba[(y * 48 + x) * 4 + 3];
+                assert_eq!(alpha, 0, "the mark reaches into the dot strip at {x},{y}");
+            }
         }
     }
 
     #[test]
-    fn a_pulse_frame_lights_up_only_its_own_groove_rows() {
-        for (step, &(top, bottom)) in GROOVE_STEPS.iter().enumerate() {
-            let frame = pulse_frame(step);
-            for (y, (rest_row, frame_row)) in REST.iter().zip(frame.iter()).enumerate() {
-                if y == top || y == bottom {
-                    assert_ne!(
-                        *frame_row, *rest_row,
-                        "row {y} should differ from rest at the lit step"
+    fn breathing_never_disturbs_the_mark() {
+        let base = rest();
+        for step in 0..PULSE_FRAMES {
+            let frame = with_dot(&base, breath(step));
+            for y in 0..36usize {
+                for x in 0..36usize {
+                    let index = (y * 48 + x) * 4 + 3;
+                    assert_eq!(
+                        frame.rgba()[index],
+                        base.rgba()[index],
+                        "step {step} moved the mark at {x},{y}"
                     );
-                    let mut expected: Vec<char> = rest_row.chars().collect();
-                    expected[GROOVE_COLUMNS.0] = '#';
-                    expected[GROOVE_COLUMNS.1] = '#';
-                    let expected: String = expected.into_iter().collect();
-                    assert_eq!(*frame_row, expected);
-                } else {
-                    assert_eq!(*frame_row, *rest_row, "row {y} should be untouched");
                 }
             }
         }
     }
 
     #[test]
-    fn rendering_scales_up_and_only_ever_writes_opaque_ink_or_transparency() {
-        let image = render(&REST);
-        let out = SIZE * SCALE;
-        assert_eq!(image.width(), out as u32);
-        assert_eq!(image.height(), out as u32);
+    fn the_dot_fades_but_never_vanishes() {
+        let base = rest();
+        let centre = ((DOT_CENTRE.1 as usize) * 48 + DOT_CENTRE.0 as usize) * 4 + 3;
+        let alphas: Vec<u8> = (0..PULSE_FRAMES)
+            .map(|step| with_dot(&base, breath(step)).rgba()[centre])
+            .collect();
 
-        let rgba = image.rgba();
-        assert_eq!(rgba.len(), out * out * 4);
-        for pixel in rgba.as_chunks::<4>().0 {
-            match pixel {
-                [0, 0, 0, 255] => {}
-                [0, 0, 0, 0] => {}
-                other => panic!("unexpected pixel {other:?} — ink must be opaque black or absent"),
-            }
-        }
+        assert!(
+            alphas.iter().all(|&a| a > 0),
+            "the dot disappeared: {alphas:?}"
+        );
+        assert_eq!(
+            *alphas.iter().max().unwrap(),
+            255,
+            "the dot never reaches full: {alphas:?}"
+        );
+        // Dimmest at the ends of the cycle, brightest in the middle — a
+        // breath, not a sawtooth.
+        assert_eq!(alphas.iter().copied().min().unwrap(), alphas[0]);
+        assert_eq!(
+            alphas.iter().copied().max().unwrap(),
+            alphas[PULSE_FRAMES / 2]
+        );
     }
 
     #[test]
-    fn a_lit_groove_pixel_survives_the_upscale() {
-        let frame = pulse_frame(0);
-        let image = render(&frame);
-        let out = SIZE * SCALE;
-        let rgba = image.rgba();
-
-        let (gx, gy) = (GROOVE_COLUMNS.0 * SCALE, GROOVE_STEPS[0].0 * SCALE);
-        let idx = (gy * out + gx) * 4;
-        assert_eq!(&rgba[idx..idx + 4], &[0, 0, 0, 255]);
+    fn every_frame_is_the_same_size_as_the_mark() {
+        let base = rest();
+        for step in 0..PULSE_FRAMES {
+            let frame = with_dot(&base, breath(step));
+            assert_eq!(
+                (frame.width(), frame.height()),
+                (base.width(), base.height())
+            );
+        }
     }
 }

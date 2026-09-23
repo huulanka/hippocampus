@@ -1,0 +1,191 @@
+/* One entity: what it is, when it came up, what it hangs off, and the
+ * words it was read out of. Same column and the same furniture as Today
+ * — a label above each section, cards for the things you said — so it
+ * reads as another page of the same book rather than a report. */
+
+@layer screens {
+  .entity {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-10);
+  }
+  .entity > .back-button {
+    align-self: flex-start;
+    margin-left: calc(var(--space-3) * -1);
+    margin-bottom: calc(var(--space-6) * -1);
+  }
+
+  .back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+    font-size: var(--text-sm);
+  }
+
+  .entity-note {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+  }
+
+  /* — the head — */
+  .entity-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .entity-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .entity-name-large {
+    font-family: var(--font-display);
+    font-size: var(--text-4xl);
+    font-weight: 500;
+    line-height: var(--leading-snug);
+    letter-spacing: var(--tracking-tight);
+    color: var(--text-bright);
+  }
+  .entity-latest {
+    display: flex;
+    gap: var(--space-2);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    color: var(--text-muted);
+    max-width: var(--measure);
+  }
+
+  /* The model's reading of something, wherever it appears next to your
+     own words: green, small, and marked, so it can never pass for them. */
+  .derived-dot {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    margin-top: 0.55em;
+    border-radius: var(--radius-full);
+    background: var(--moss);
+  }
+
+  .entity-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* — when it came up — */
+  .entity-strip-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .entity-strip {
+    display: block;
+    width: 100%;
+    height: 40px;
+  }
+  .entity-strip-axis {
+    stroke: var(--line);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .entity-strip-mark {
+    stroke: var(--ember);
+    stroke-width: 3;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* — how it hangs together — */
+  .entity-relations {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--line-soft);
+  }
+  .entity-relation {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .entity-relation-open {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
+    min-height: 44px;
+    padding: var(--space-2) var(--space-2);
+    margin-left: calc(var(--space-2) * -1);
+    text-align: left;
+  }
+  /* Fixed width so the names line up into a column: the relation is the
+     question, the name is the answer, and answers are what the eye scans. */
+  .entity-relation-type {
+    flex: none;
+    width: 190px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--text-sm);
+    font-style: italic;
+    color: var(--text-dim);
+  }
+  .entity-relation-name {
+    flex-grow: 1;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-base);
+    color: var(--text);
+  }
+  .entity-relation-open:hover .entity-relation-name {
+    color: var(--accent);
+  }
+  .entity-relation-why {
+    flex: none;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--text-xs);
+  }
+  span.entity-relation-why {
+    padding: 0 var(--space-3);
+  }
+
+  /* — what you said — */
+  .entity-said {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .entity-said-when {
+    color: var(--ember);
+  }
+  .entity-said-about {
+    color: var(--text-dim);
+  }
+  .entity-said-words {
+    font-family: var(--font-display);
+    font-size: var(--text-md);
+    line-height: var(--leading-relaxed);
+    color: var(--text);
+  }
+  .entity-said-reading {
+    display: flex;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--text-dim);
+  }
+
+  @media (max-width: 640px) {
+    .entity-relation-type {
+      width: 120px;
+    }
+  }
+}

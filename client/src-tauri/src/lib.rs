@@ -7,6 +7,7 @@
 mod asr;
 mod backend;
 mod capture;
+mod draft;
 mod keychain;
 mod lock;
 pub mod microphone;
@@ -203,6 +204,9 @@ pub fn run() {
             lock::lock_status,
             lock::unlock,
             lock::lock_now,
+            draft::draft_load,
+            draft::draft_save,
+            draft::draft_clear,
         ])
         .setup(|app| {
             // Settings are loaded before the shortcut is registered, and

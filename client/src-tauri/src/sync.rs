@@ -118,6 +118,8 @@ pub(crate) async fn upload(
                 transcript_text: entry.transcript.clone(),
                 device: entry.device.clone(),
                 timezone: Some(entry.timezone.clone()),
+                occurred_at: written_at(entry),
+                session: None,
             },
         ),
     };
@@ -163,6 +165,22 @@ pub(crate) async fn upload(
 /// cause, so working through the rest of the queue would only mean the
 /// same error repeated n times, n retry counters incremented, and — with
 /// a backend that is up but refusing — n pointless round trips.
+/// How long a note must have waited before it carries its own moment.
+const LATE_AFTER: chrono::TimeDelta = chrono::TimeDelta::minutes(5);
+
+/// The moment a typed note was written, when that is worth sending.
+///
+/// Only for notes that actually waited — offline, or behind a failing
+/// backend. One sent straight away is stamped on arrival as before: the
+/// backend refuses a moment more than a minute in its future, so a Mac
+/// whose clock runs a little ahead of the server would otherwise have
+/// every fresh note refused and stuck in this queue for good. After five
+/// minutes of waiting that can no longer happen, and a note written on a
+/// train and sent at the station keeps the time it was written.
+fn written_at(entry: &Queued) -> Option<chrono::DateTime<chrono::Utc>> {
+    (chrono::Utc::now() - entry.recorded_at > LATE_AFTER).then_some(entry.recorded_at)
+}
+
 pub async fn drain(app: &tauri::AppHandle) -> Drained {
     let sync = app.state::<SyncState>();
     let _held = sync.gate.lock().await;

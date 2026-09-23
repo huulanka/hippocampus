@@ -1,0 +1,86 @@
+/* Tidying, inside the graph's drawer. */
+
+@layer screens {
+/* — how this got organised — */
+.changes-screen {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.changes-lede {
+  margin-bottom: var(--space-4);
+}
+.changes-actions {
+  margin-bottom: var(--space-4);
+}
+.changes-proposal {
+  margin: var(--space-1) 0;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.changes-proposal-remove {
+  cursor: pointer;
+  margin-left: var(--space-1);
+  font-size: var(--text-xs);
+}
+.changes-proposal-remove:hover {
+  color: var(--text);
+}
+.change-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-base);
+  flex-wrap: wrap;
+}
+/* The kind, as a fixed-width label so the column reads as a column. The
+   four colours are the four things that can happen to an arrangement —
+   a merge loses a node and is the only one that is ever alarming. */
+.change-kind {
+  flex: 0 0 62px;
+  font-size: var(--text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.change-kind.merged {
+  color: var(--accent);
+}
+.change-kind.related {
+  color: var(--moss);
+}
+.change-kind.retyped,
+.change-kind.renamed {
+  color: var(--ember);
+}
+.change-body {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.change-what {
+  margin: 0;
+  line-height: var(--leading-normal);
+}
+.change-reason {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+}
+.change-when {
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.change-open,
+.change-undo {
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+.change-undo:hover,
+.change-open:hover {
+  color: var(--text);
+}
+.change-undone {
+  font-size: var(--text-xs);
+  opacity: 0.7;
+}
+}

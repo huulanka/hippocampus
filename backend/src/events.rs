@@ -27,10 +27,33 @@ pub async fn append(
     payload: &Value,
     source: &str,
 ) -> Result<StoredEvent, sqlx::Error> {
+    append_at(pool, stream_id, version, event_type, payload, source, None).await
+}
+
+/// Appends an event that happened at a moment other than now.
+///
+/// Only one thing needs this: a note written during a session and sent at
+/// the end, which has to carry the moment it was written rather than the
+/// moment it arrived (see `CreateCaptureRequest::occurred_at`). Everything
+/// else passes `None` through [`append`] and takes the database's clock,
+/// which is the only clock worth trusting for "when did this reach us".
+///
+/// The caller is responsible for deciding whether the moment is
+/// believable — this function will write whatever it is handed, and the
+/// route that owns the rule is where an error can explain itself.
+pub async fn append_at(
+    pool: &PgPool,
+    stream_id: Uuid,
+    version: i64,
+    event_type: &str,
+    payload: &Value,
+    source: &str,
+    occurred_at: Option<DateTime<Utc>>,
+) -> Result<StoredEvent, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        insert into events (stream_id, version, event_type, payload, source)
-        values ($1, $2, $3, $4, $5)
+        insert into events (stream_id, version, event_type, payload, source, occurred_at)
+        values ($1, $2, $3, $4, $5, coalesce($6, now()))
         returning id, occurred_at
         "#,
         stream_id,
@@ -38,6 +61,7 @@ pub async fn append(
         event_type,
         payload,
         source,
+        occurred_at,
     )
     .fetch_one(pool)
     .await?;

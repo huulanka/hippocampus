@@ -1,0 +1,53 @@
+/* The handful of names the screens share.
+ *
+ * Small on purpose: everything here is something several screens genuinely
+ * need, not a place for rules that had nowhere else to go. `.panel`,
+ * `.kicker` and `.section-label` used to live alongside these and are gone
+ * — the first was `.card` under another name, and the other two were both
+ * `.label-micro`.
+ */
+
+@layer components {
+  .dim {
+    color: var(--text-dim);
+  }
+
+  /* Text that leads somewhere but is not a button: a name inside a
+     sentence, usually. Real buttons and links get `.btn-quiet`. */
+  .link {
+    cursor: pointer;
+    color: var(--accent);
+  }
+
+  /* A card you can click through to something. */
+  .clickable {
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .clickable:hover {
+    border-color: var(--accent);
+  }
+
+  .card-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-width: var(--content-max);
+  }
+
+  /* The caret in the capture field's placeholder, so an empty field looks
+     like somewhere to speak rather than somewhere to fill in. */
+  .blink-cursor {
+    animation: blink-cursor 1s step-end infinite;
+  }
+  @keyframes blink-cursor {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    50.01%,
+    100% {
+      opacity: 0;
+    }
+  }
+}

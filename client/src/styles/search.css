@@ -1,0 +1,94 @@
+@layer screens {
+  .search {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .search-field {
+    min-height: 46px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .search-types {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .search-all {
+    margin-top: var(--space-4);
+  }
+
+  .search-day {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .search-day + .search-day {
+    margin-top: var(--space-6);
+  }
+  /* Sticks under the search field so the day you are looking at is always
+     named, however far down a year of notes you have scrolled. */
+  .search-day-label {
+    position: sticky;
+    top: 46px;
+    padding: var(--space-2) 0;
+    background: var(--bg);
+    color: var(--ember);
+  }
+
+  .search-note,
+  .search-hit-open {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+  }
+  .search-hit-open {
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+  .search-note {
+    padding: var(--space-4);
+  }
+  .search-note-text,
+  .search-hit-text {
+    max-width: none;
+    font-size: var(--text-md);
+  }
+  .search-note-text {
+    /* Two lines is enough to know which note it is; the rest is one click
+       away and reading it here instead would make the list unscannable. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .search-hit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .search-hit-meta {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+  .search-hit-entities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  .search-hit-entities .pill {
+    cursor: pointer;
+  }
+  .search-hit-entities .pill:hover {
+    border-color: var(--accent);
+  }
+}

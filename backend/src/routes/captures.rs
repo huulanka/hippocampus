@@ -47,8 +47,16 @@ pub async fn create(
     }
 
     let timezone = timezone_for(&state, req.timezone.as_deref());
+    let written_at = written_at(req.occurred_at)?;
 
-    let stored = events::append(
+    // The session's name is content, not an event: the log is never
+    // modified, so a title typed by hand could never be redacted
+    // afterwards (ADR 0005). Only its id goes into the payload.
+    if let Some(session) = &req.session {
+        remember_session(&state, session).await?;
+    }
+
+    let stored = events::append_at(
         &state.pool,
         Uuid::new_v4(),
         1,
@@ -60,15 +68,22 @@ pub async fn create(
             "origin": "text",
             "device": req.device,
             "timezone": timezone.name(),
+            "session": req.session.as_ref().map(|session| session.id),
+            // Whether this moment was chosen by the writer or taken from
+            // our own clock. Without it a replay could not tell a note
+            // written at 10:31 from one that merely arrived then.
+            "written": written_at.is_some(),
         }),
         &req.device,
+        written_at,
     )
     .await?;
 
     sqlx::query!(
-        r#"insert into capture_content (event_id, origin, text) values ($1, 'text', $2)"#,
+        r#"insert into capture_content (event_id, origin, text, session_id) values ($1, 'text', $2, $3)"#,
         stored.id,
         transcript,
+        req.session.as_ref().map(|session| session.id),
     )
     .execute(&state.pool)
     .await?;
@@ -91,6 +106,71 @@ pub async fn create(
         echo: Vec::new(),
         echo_pending: true,
     }))
+}
+
+/// How far ahead of us a device's clock may be and still be believed.
+///
+/// Not zero: two machines are never exactly in step, and refusing a note
+/// because a laptop is four seconds fast would be refusing it for no
+/// reason. Not generous either — past this, the times coming off that
+/// device cannot be trusted at all, and quietly accepting them would put
+/// notes into the future of a timeline that is supposed to be the one
+/// thing here that is exactly right.
+const MAX_CLOCK_SKEW: chrono::Duration = chrono::Duration::minutes(1);
+
+/// Checks a caller-supplied moment before it becomes a fact.
+fn written_at(
+    requested: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>, AppError> {
+    let Some(at) = requested else {
+        return Ok(None);
+    };
+
+    let now = chrono::Utc::now();
+    if at > now + MAX_CLOCK_SKEW {
+        return Err(AppError::bad_request(
+            "a note cannot have been written in the future — check the device's clock",
+        ));
+    }
+    // A clock that has not been set yet reads as 1970. Accepting that would
+    // file a note written this morning at the bottom of everything ever
+    // recorded, where nobody would find it again.
+    if at.timestamp() < 946_684_800 {
+        return Err(AppError::bad_request(
+            "that moment is implausibly old — check the device's clock",
+        ));
+    }
+    Ok(Some(at))
+}
+
+/// Writes down what a session is called, once per session.
+///
+/// Idempotent, and a second send updates the title: a writer who renames
+/// a page and sends the rest of it should not end up with two names for
+/// one sitting. `started_at` is left alone — when the sitting began is a
+/// fact about the first note, not something a later send gets to revise.
+async fn remember_session(
+    state: &AppState,
+    session: &contracts::CaptureSession,
+) -> Result<(), AppError> {
+    let title = session.title.trim();
+    if title.is_empty() {
+        return Err(AppError::bad_request("a session needs a name"));
+    }
+
+    sqlx::query!(
+        r#"
+        insert into capture_sessions (id, title, started_at)
+        values ($1, $2, $3)
+        on conflict (id) do update set title = excluded.title
+        "#,
+        session.id,
+        title,
+        session.started_at,
+    )
+    .execute(&state.pool)
+    .await?;
+    Ok(())
 }
 
 /// Records a spoken capture: the audio plus the transcript the client
@@ -1255,4 +1335,38 @@ pub async fn retry_all(
 
     let (waiting, given_up) = pipeline::counts(&state.pool).await?;
     Ok(Json(contracts::PipelineStatus { waiting, given_up }))
+}
+
+#[cfg(test)]
+mod written_time {
+    use super::*;
+
+    #[test]
+    fn a_missing_moment_means_now() {
+        assert!(written_at(None).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_moment_that_has_passed_is_kept_exactly() {
+        let then = chrono::Utc::now() - chrono::Duration::hours(4);
+        assert_eq!(written_at(Some(then)).unwrap(), Some(then));
+    }
+
+    #[test]
+    fn a_clock_a_few_seconds_fast_is_still_believed() {
+        let soon = chrono::Utc::now() + chrono::Duration::seconds(20);
+        assert_eq!(written_at(Some(soon)).unwrap(), Some(soon));
+    }
+
+    #[test]
+    fn a_moment_in_the_future_is_refused() {
+        let later = chrono::Utc::now() + chrono::Duration::hours(2);
+        assert!(written_at(Some(later)).is_err());
+    }
+
+    #[test]
+    fn an_unset_clock_is_refused() {
+        let epoch = chrono::DateTime::from_timestamp(0, 0).unwrap();
+        assert!(written_at(Some(epoch)).is_err());
+    }
 }

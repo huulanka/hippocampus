@@ -1,0 +1,110 @@
+/* The ground everything else stands on: the reset, the two type defaults
+ * that are right almost everywhere, and the focus ring.
+ *
+ * The focus ring is the reason this file matters more than it looks. Until
+ * this overhaul nothing in the app could be reached by keyboard at all —
+ * every button was a <span onClick>, and Tab walked straight past all of
+ * them. Real elements fixed that; this is what makes the fix visible.
+ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Headings carry no size of their own. A heading's size comes from what
+   * it is doing on the screen, not from which number followed the h — and
+   * the app was full of h4s standing in for small labels because h4
+   * happened to be the size that looked right. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  /* Inputs and buttons do not inherit type in any browser; say so once. */
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
+
+  /* Numbers that sit above one another — durations, timestamps, counts —
+   * must not dance as they tick. */
+  time,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A ring, not an outline: it is held off the control by the ground
+   * colour, so it reads on a card, on the rail and over the graph alike.
+   * `:focus-visible` rather than `:focus` keeps it off anything reached
+   * by mouse. */
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--bg),
+      0 0 0 4px var(--focus-ring);
+    border-radius: var(--radius-xs);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+
+  ::placeholder {
+    color: var(--text-faint);
+  }
+
+  /* Someone who has asked the system for less movement gets none of ours.
+   * Nothing in this app depends on an animation to be understood — the
+   * graph re-centres instantly instead of springing, the menu-bar dot
+   * simply stays lit. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

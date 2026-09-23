@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { correctTranscript, getCapture, redactCapture, type CaptureDetail } from "../api";
 import { AudioPlayer } from "../components/AudioPlayer";
+import { BackButton } from "../components/BackButton";
 import { useEcho } from "../useEcho";
 import { entityColor } from "../entityType";
 import { whenLabel } from "../whenLabel";
@@ -107,238 +108,204 @@ export function CaptureDetailScreen({
   const corrections = detail.transcripts.filter((t) => t.model === "user");
 
   return (
-    <div className="detail">
-      <div className="detail-head">
-        <span className="dim link" onClick={onBack}>
-          [ ← back ]
-        </span>
-        <span className="dim detail-stamp">
-          // {fullStamp(detail.occurred_at)} · {spoken ? "spoken" : "typed"} on {detail.device}
-        </span>
-      </div>
+    <div className="column said">
+      <BackButton onBack={onBack} />
 
-      <section className="panel detail-panel">
-        <div className="kicker">
-          [ CAPTURED ]{" "}
-          <span className="dim">
-            {detail.redacted
-              ? "— the content was removed; the capture itself stays"
-              : draft !== null
-                ? spoken
-                  ? "— fixing the transcript; the recording stays untouched"
-                  : "— fixing the text; the original is kept"
-                : spoken
-                  ? "— transcript; the recording below is the original"
-                  : "— raw, verbatim"}
-          </span>
-        </div>
+      <header className="said-head">
+        <p className="meta said-when">
+          {fullStamp(detail.occurred_at)} · {spoken ? "spoken" : "typed"} on {detail.device}
+        </p>
 
         {draft === null ? (
-          <p className="detail-transcript">{detail.text ?? "(redacted)"}</p>
+          <p className={detail.redacted ? "said-words said-words-gone" : "said-words"}>
+            {detail.text ?? "The words were taken back."}
+          </p>
         ) : (
-          <textarea
-            className="capture-input detail-edit"
-            autoFocus
-            rows={Math.max(3, Math.ceil(draft.length / 70))}
-            value={draft}
-            disabled={saving}
-            onChange={(e) => setDraft(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                void saveCorrection();
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setDraft(null);
-              }
-            }}
-          />
+          <>
+            <label className="sr-only" htmlFor="said-edit">
+              The corrected wording
+            </label>
+            <textarea
+              id="said-edit"
+              className="input said-edit"
+              autoFocus
+              rows={Math.max(3, Math.ceil(draft.length / 60))}
+              value={draft}
+              disabled={saving}
+              onChange={(e) => setDraft(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  void saveCorrection();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setDraft(null);
+                }
+              }}
+            />
+          </>
         )}
+
+        <p className="said-note">
+          {detail.redacted
+            ? "The content was removed; the fact that you said something stays."
+            : draft !== null
+              ? spoken
+                ? "Fixing the transcript. The recording stays untouched, and the old wording is kept."
+                : "Fixing the text. The old wording is never deleted — search and the entities are rebuilt from the new one."
+              : spoken
+                ? "A transcript. The recording below is the original."
+                : "Exactly as you typed it."}
+          {draft === null && corrections.length > 0 && (
+            <> Corrected {corrections.length === 1 ? "once" : `${corrections.length} times`}; every earlier wording is kept below.</>
+          )}
+        </p>
 
         {detail.audio && <AudioPlayer eventId={detail.event_id} mime={detail.audio.mime} />}
 
         {!detail.redacted &&
           (draft === null ? (
-            <div className="detail-actions">
-              <span className="dim link" onClick={() => setDraft(detail.text ?? "")}>
-                [ fix a word ]
-              </span>
+            <div className="said-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setDraft(detail.text ?? "")}>
+                Fix a word
+              </button>
               {confirmRedact ? (
                 <>
-                  <span
-                    className={`btn${redacting ? " disabled" : ""}`}
-                    onClick={redacting ? undefined : redact}
-                  >
-                    [ {redacting ? "Taking it back…" : "Yes, take it back"} ]
-                  </span>
-                  <span className="dim link" onClick={() => setConfirmRedact(false)}>
-                    [ keep it ]
-                  </span>
+                  <button type="button" className="btn btn-secondary btn-danger" onClick={redact} disabled={redacting}>
+                    {redacting ? "Taking it back…" : "Yes, take it back"}
+                  </button>
+                  <button type="button" className="btn btn-quiet" onClick={() => setConfirmRedact(false)}>
+                    Keep it
+                  </button>
                 </>
               ) : (
-                <span className="dim link" onClick={() => setConfirmRedact(true)}>
-                  [ take this back ]
-                </span>
+                <button type="button" className="btn btn-quiet" onClick={() => setConfirmRedact(true)}>
+                  Take this back…
+                </button>
               )}
             </div>
           ) : (
-            <div className="detail-actions">
-              <span
-                className={`btn btn-accent${draft.trim() && !saving ? "" : " disabled"}`}
+            <div className="said-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
                 onClick={saveCorrection}
+                disabled={!(draft.trim() && !saving)}
               >
-                [ {saving ? "Fixing…" : "Keep The Fix"} ]
-              </span>
-              <span className="btn" onClick={() => setDraft(null)}>
-                [ Cancel ]
-              </span>
+                {saving ? "Fixing…" : "Keep the fix"}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setDraft(null)}>
+                Cancel
+              </button>
+              <span className="kbd said-kbd">⌘↵</span>
             </div>
           ))}
 
         {confirmRedact && !detail.redacted && (
-          <p className="dim detail-note">
-            This removes the words, the recording, and everything derived from them — and
-            the capture leaves the timeline, search and other captures' echoes. The event
-            that it happened stays. It cannot be undone, and backups made before now still
-            hold the original.
+          <p className="said-warning">
+            This removes the words, the recording, and everything derived from them — and the
+            capture leaves search and other captures' echoes. The event that it happened stays.
+            It cannot be undone, and backups made before now still hold the original.
           </p>
         )}
 
-        {saveError && <p className="dim detail-note">Couldn't save that: {saveError}</p>}
+        {saveError && <p className="said-warning">Couldn't save that: {saveError}</p>}
+      </header>
 
-        {draft !== null && (
-          <p className="dim detail-note">
-            The old wording is never deleted — every version is kept below. Search and the
-            entities are rebuilt from the new one.
-          </p>
-        )}
-
-        {draft === null && corrections.length > 0 && (
-          <p className="dim detail-note">
-            Corrected {corrections.length === 1 ? "once" : `${corrections.length} times`} — every
-            earlier wording is kept below.
-          </p>
-        )}
-      </section>
-
-      <section className="panel detail-panel">
-        <div className="kicker">
-          [ WHAT IT MEANS ]{" "}
-          <span className="dim">— drawn out by a model, not written by you</span>
-        </div>
+      <section className="said-section">
+        <h2 className="label-micro">What it means — drawn out by a model, not written by you</h2>
         {detail.entities.length === 0 ? (
-          <p className="dim detail-note">
-            Nothing was extracted from this one. Either the structuring hasn't run yet, or
-            there was nothing in it worth remembering as a thing.
+          <p className="said-note">
+            Nothing was extracted from this one. Either the structuring hasn't run yet, or there
+            was nothing in it worth remembering as a thing.
           </p>
         ) : (
-          <div className="detail-entities">
+          <ul className="said-entities">
             {detail.entities.map((entity) => (
-              <div
-                key={`${entity.id}-${entity.observation}`}
-                className="detail-entity detail-entity-link"
-                onClick={() => onOpenEntity(entity.id)}
-              >
-                <div className="entity-card-head">
-                  <span
-                    className="entity-dot"
-                    style={{ background: entityColor(entity.entity_type) }}
-                  />
-                  <span className="entity-name detail-entity-name">{entity.name}</span>
-                  <span className="dim entity-type-label">{entity.entity_type.toUpperCase()}</span>
-                </div>
-                <p className="detail-observation">{entity.observation}</p>
-                <WhenBadge of={entity} />
-              </div>
+              <li key={`${entity.id}-${entity.observation}`}>
+                <button type="button" className="btn-quiet said-entity" onClick={() => onOpenEntity(entity.id)}>
+                  <span className="said-entity-head">
+                    <span className="chip-dot" style={{ background: entityColor(entity.entity_type) }} />
+                    <span className="name said-entity-name">{entity.name}</span>
+                    <span className="label-micro">{entity.entity_type}</span>
+                  </span>
+                  <span className="said-entity-reading">
+                    {entity.observation}
+                    {whenLabel(entity) && <span className="said-about"> · about {whenLabel(entity)}</span>}
+                  </span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
+
         {detail.relations.length > 0 && (
-          <div className="detail-relations">
+          <ul className="said-relations">
             {detail.relations.map((relation) => (
-              <div key={relation.id} className="detail-relation">
-                <span
-                  className="detail-relation-node link"
-                  onClick={() => onOpenEntity(relation.from_entity_id)}
-                >
+              <li key={relation.id} className="said-relation">
+                <button type="button" className="btn-quiet said-relation-end" onClick={() => onOpenEntity(relation.from_entity_id)}>
                   {relation.from_name}
-                </span>
-                <span className="dim detail-relation-type">──{relation.relation_type}──▶</span>
-                <span
-                  className="detail-relation-node link"
-                  onClick={() => onOpenEntity(relation.to_entity_id)}
-                >
+                </button>
+                <span className="said-relation-type">{relation.relation_type} →</span>
+                <button type="button" className="btn-quiet said-relation-end" onClick={() => onOpenEntity(relation.to_entity_id)}>
                   {relation.to_name}
-                </span>
-              </div>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </section>
 
-      <section className="panel detail-panel">
-        <div className="kicker">
-          [ YOU'VE BEEN HERE BEFORE ]{" "}
-          <span className="dim">— your own earlier words, not a summary</span>
-        </div>
+      <section className="said-section">
+        <h2 className="label-micro">You've been here before — your own earlier words</h2>
         {echoPending ? (
-          <p className="dim detail-note">Looking through your earlier captures…</p>
+          <p className="said-note">Looking through your earlier captures…</p>
         ) : echoItems.length === 0 ? (
-          <p className="dim detail-note">
-            Nothing close enough among your earlier captures.
-          </p>
+          <p className="said-note">Nothing close enough among your earlier captures.</p>
         ) : (
-          <div className="card-stack detail-echo">
+          <div className="stack stack-tight">
             {echoItems.map((item) => (
-              <div
+              <button
+                type="button"
                 key={item.capture_event_id}
-                className="timeline-card clickable"
+                className="card said-echo"
                 onClick={() => onOpenCapture(item.capture_event_id)}
               >
-                <div className="timeline-card-meta">
-                  <span className="dim">// {shortStamp(item.occurred_at)}</span>
-                  <span className="dim card-open-hint">[open]</span>
-                </div>
-                <p className="timeline-transcript">{item.transcript_text}</p>
-              </div>
+                <span className="meta said-when">{shortStamp(item.occurred_at)}</span>
+                <span className="said-echo-words">{item.transcript_text}</span>
+              </button>
             ))}
           </div>
         )}
       </section>
 
       {detail.transcripts.length > 1 && (
-        <section className="panel detail-panel">
-          <div className="kicker">
-            [ HOW THE WORDS CHANGED ]{" "}
-            <span className="dim">— oldest first; nothing was overwritten</span>
-          </div>
-          {detail.transcripts.map((version) => (
-            <div key={version.event_id} className="detail-version">
-              <div className="timeline-card-meta">
-                <span className="dim">// {shortStamp(version.created_at)}</span>
-                <span className="dim">{authorOf(version.model)}</span>
-              </div>
-              <p className="timeline-transcript">{version.text}</p>
-            </div>
-          ))}
+        <section className="said-section">
+          <h2 className="label-micro">How the words changed — oldest first; nothing was overwritten</h2>
+          <ol className="said-versions">
+            {detail.transcripts.map((version) => (
+              <li key={version.event_id} className="said-version">
+                <span className="meta">
+                  {shortStamp(version.created_at)} · {authorOf(version.model)}
+                </span>
+                <span className="said-echo-words">{version.text}</span>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 
-      <details className="panel detail-panel detail-raw">
-        <summary className="kicker">
-          [ UNDER THE HOOD ]{" "}
-          <span className="dim">— {detail.events.length} events, exactly as stored</span>
+      <details className="said-raw">
+        <summary className="label-micro">
+          Under the hood — {detail.events.length} events, exactly as stored
         </summary>
         {detail.events.map((event) => (
-          <div key={event.id} className="detail-event">
-            <div className="timeline-card-meta">
-              <span className="detail-event-type">{event.event_type}</span>
-              <span className="dim">
-                {shortStamp(event.occurred_at)} · {event.source}
-              </span>
-            </div>
-            <pre className="detail-payload">{JSON.stringify(event.payload, null, 2)}</pre>
+          <div key={event.id} className="said-event">
+            <span className="meta">
+              <span className="derived">{event.event_type}</span> · {shortStamp(event.occurred_at)} · {event.source}
+            </span>
+            <pre className="said-payload">{JSON.stringify(event.payload, null, 2)}</pre>
           </div>
         ))}
       </details>
@@ -346,24 +313,11 @@ export function CaptureDetailScreen({
   );
 }
 
-/// The date an observation is *about*, shown only when there is one.
-/// Most observations are not about a point in time, and a badge on every
-/// card would train the eye to ignore it.
-function WhenBadge({ of }: { of: Parameters<typeof whenLabel>[0] }) {
-  const label = whenLabel(of);
-  if (!label) return null;
-  return <p className="when-badge">◷ {label}</p>;
-}
-
 function DetailFrame({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
   return (
-    <div className="detail">
-      <div className="detail-head">
-        <span className="dim link" onClick={onBack}>
-          [ ← back ]
-        </span>
-      </div>
-      <p className="dim">{children}</p>
+    <div className="column said">
+      <BackButton onBack={onBack} />
+      <p className="said-note">{children}</p>
     </div>
   );
 }

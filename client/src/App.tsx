@@ -1,52 +1,37 @@
 import { useEffect, useState } from "react";
-import "./App.css";
+import "./styles/index.css";
 import { ThemeProvider } from "./theme";
-import { Sidebar } from "./components/Sidebar";
+import { Rail } from "./components/Rail";
+import { OPEN_WHILE_LOCKED, PLACES, type Place } from "./places";
 import { CaptureScreen } from "./screens/CaptureScreen";
-import { ResurfaceScreen } from "./screens/ResurfaceScreen";
+import { TodayScreen } from "./screens/TodayScreen";
+import { NotepadScreen } from "./screens/NotepadScreen";
 import { CaptureDetailScreen } from "./screens/CaptureDetailScreen";
 import { EntityDetailScreen } from "./screens/EntityDetailScreen";
-import { TimelineScreen } from "./screens/TimelineScreen";
 import { SearchScreen } from "./screens/SearchScreen";
 import { RelationsScreen } from "./screens/RelationsScreen";
-import { ChangesScreen } from "./screens/ChangesScreen";
-import { ChatScreen } from "./screens/ChatScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { LockGate } from "./components/LockGate";
 import { lockStatus, onLocked, onSummonCapture, type LockStatus } from "./desktop";
 
-export type TabId = "capture" | "resurface" | "timeline" | "search" | "relations" | "changes" | "chat" | "settings";
-
-/// A thing being looked at, layered over whichever tab you were on.
-/// Details are not tabs: you always arrive at one *from* somewhere, and
-/// following a capture to an entity to another capture has to be
-/// retraceable — hence a stack rather than a single slot.
-type View = { kind: "capture"; id: string } | { kind: "entity"; id: string };
-
-/// The two places that stay open while the notes are locked.
+/// Something you are looking at, layered over whichever place you were in.
 ///
-/// Capture, because speaking a note only ever adds — and because the
-/// global shortcut is the main path through this app, so a gate in front
-/// of it would cost the one property the whole design is built on.
-/// Settings, because it holds no notes, and because being shut out of the
-/// screen that configures the backend by a guard you cannot reach to
-/// switch off is a trap. Switching the guard off from there authenticates
-/// first, so nothing is given away by letting you in.
-const OPEN_WHILE_LOCKED: TabId[] = ["capture", "settings"];
-
-/// What each gated tab calls itself on the lock screen, so it says what
-/// was being asked for rather than "this content".
-const TAB_NAMES: Partial<Record<TabId, string>> = {
-  resurface: "What you said before",
-  timeline: "Your timeline",
-  search: "Search",
-  relations: "Your graph",
-  changes: "How this got organised",
-  chat: "Chat",
-};
+/// None of these is a place. You always arrive at one *from* somewhere,
+/// and following a capture to an entity to another capture has to be
+/// retraceable — hence a stack rather than a single slot.
+///
+/// `capture` is on this list and not in the rail on purpose: the shortcut
+/// is the record button (ADR 0012), so speaking opens over whatever you
+/// were already doing and closes back onto it. Making it a tab meant the
+/// one thing you do twenty times a day was also the one thing that threw
+/// away where you were.
+type View =
+  | { kind: "capture" }
+  | { kind: "captureDetail"; id: string }
+  | { kind: "entity"; id: string };
 
 function Shell() {
-  const [activeTab, setActiveTab] = useState<TabId>("capture");
+  const [place, setPlace] = useState<Place>("today");
   // Bumped every time the global shortcut fires. CaptureScreen watches it
   // to clear itself and take focus, so the shortcut always lands on an
   // empty field even if the last capture is still on screen.
@@ -89,109 +74,105 @@ function Shell() {
   useEffect(
     () =>
       onSummonCapture(() => {
-        setStack([]);
-        setActiveTab("capture");
+        setStack((s) => [...s.filter((v) => v.kind !== "capture"), { kind: "capture" }]);
         setSummons((n) => n + 1);
       }),
     [],
   );
 
-  function selectTab(tab: TabId) {
+  function go(next: Place) {
     setStack([]);
-    setActiveTab(tab);
+    setPlace(next);
   }
 
-  const openCapture = (id: string) => setStack((s) => [...s, { kind: "capture", id }]);
+  /// Opening the capture sheet, from the rail or from the shortcut. One
+  /// at a time: pressing it twice should leave one sheet open, and
+  /// closing it should land back where you actually were.
+  const capture = () =>
+    setStack((s) => [...s.filter((v) => v.kind !== "capture"), { kind: "capture" }]);
+
+  const openCapture = (id: string) => setStack((s) => [...s, { kind: "captureDetail", id }]);
   const openEntity = (id: string) => setStack((s) => [...s, { kind: "entity", id }]);
   const back = () => setStack((s) => s.slice(0, -1));
 
-  const current = stack[stack.length - 1];
-  // A detail view always reads something, so it is gated whatever tab it
-  // was opened from.
-  const locked =
-    (lock?.locked ?? false) && (current !== undefined || !OPEN_WHILE_LOCKED.includes(activeTab));
+  const view = stack[stack.length - 1];
+  // A detail view always reads something, so it is gated whatever place it
+  // was opened from. Capturing is not: it only ever adds.
+  const reading = view ? view.kind !== "capture" : !OPEN_WHILE_LOCKED.includes(place);
+  const locked = (lock?.locked ?? false) && reading;
+
+  const gatedName =
+    view && view.kind !== "capture"
+      ? "This"
+      : (PLACES.find((entry) => entry.id === place)?.gatedName ?? "This");
 
   return (
-    <div className="app-shell">
-      <Sidebar
-        activeTab={activeTab}
-        onSelectTab={selectTab}
-        lock={lock}
-        onLockChange={setLock}
-      />
-      {/* The graph is full-bleed: a canvas you look into rather than a
-          document you read, so the padding every other screen gets would
-          just be a border shrinking it back into a box. No detail view
-          ever opens over it without a capture or entity id, and neither
-          of those is the graph, so gating this on the tab alone (not on
-          `current`) is enough. */}
-      <main className={`app-content${!current && activeTab === "relations" ? " app-content-bleed" : ""}`}>
+    <div className="app">
+      <Rail place={place} onGo={go} onCapture={capture} lock={lock} onLockChange={setLock} />
+
+      {/* The graph and the notepad are full-bleed. The graph is a canvas
+          you look into rather than a document you read, and the notepad is
+          a desk with its own header and footer — the padding every other
+          screen gets would only be a border shrinking either back into a
+          box. */}
+      <main
+        className={`app-main${!view && (place === "graph" || place === "write") ? " app-main-bleed" : ""}`}
+      >
         {locked ? (
-          <LockGate
-            status={lock!}
-            what={current ? "This" : (TAB_NAMES[activeTab] ?? "This")}
-            onUnlocked={setLock}
+          <LockGate status={lock!} what={gatedName} onUnlocked={setLock} />
+        ) : view?.kind === "capture" ? (
+          <CaptureScreen
+            summons={summons}
+            onOpenCapture={openCapture}
+            onClose={back}
+            locked={lock?.locked ?? false}
           />
-        ) : current?.kind === "capture" ? (
+        ) : view?.kind === "captureDetail" ? (
           <CaptureDetailScreen
-            key={current.id}
-            eventId={current.id}
+            key={view.id}
+            eventId={view.id}
             onOpenCapture={openCapture}
             onOpenEntity={openEntity}
             onBack={back}
           />
-        ) : current?.kind === "entity" ? (
+        ) : view?.kind === "entity" ? (
           <EntityDetailScreen
-            key={current.id}
-            entityId={current.id}
+            key={view.id}
+            entityId={view.id}
             onOpenEntity={openEntity}
             onOpenCapture={openCapture}
             onBack={back}
           />
         ) : (
-          <Screen
-            tab={activeTab}
-            summons={summons}
-            onOpenCapture={openCapture}
-            onOpenEntity={openEntity}
-            locked={lock?.locked ?? false}
-          />
+          <Here place={place} onOpenCapture={openCapture} onOpenEntity={openEntity} onGo={go} />
         )}
       </main>
     </div>
   );
 }
 
-function Screen({
-  tab,
-  summons,
+function Here({
+  place,
   onOpenCapture,
   onOpenEntity,
-  locked,
+  onGo,
 }: {
-  tab: TabId;
-  summons: number;
+  place: Place;
   onOpenCapture: (eventId: string) => void;
   onOpenEntity: (id: string) => void;
-  locked: boolean;
+  onGo: (place: Place) => void;
 }) {
-  switch (tab) {
-    case "capture":
+  switch (place) {
+    case "today":
       return (
-        <CaptureScreen summons={summons} onOpenCapture={onOpenCapture} locked={locked} />
+        <TodayScreen onOpenCapture={onOpenCapture} onOpenEntity={onOpenEntity} onGo={onGo} />
       );
-    case "resurface":
-      return <ResurfaceScreen onOpenCapture={onOpenCapture} onOpenEntity={onOpenEntity} />;
-    case "timeline":
-      return <TimelineScreen onOpenCapture={onOpenCapture} />;
+    case "write":
+      return <NotepadScreen onOpenCapture={onOpenCapture} />;
+    case "graph":
+      return <RelationsScreen onOpenEntity={onOpenEntity} />;
     case "search":
       return <SearchScreen onOpenCapture={onOpenCapture} onOpenEntity={onOpenEntity} />;
-    case "relations":
-      return <RelationsScreen onOpenEntity={onOpenEntity} />;
-    case "changes":
-      return <ChangesScreen onOpenEntity={onOpenEntity} />;
-    case "chat":
-      return <ChatScreen />;
     case "settings":
       return <SettingsScreen />;
   }

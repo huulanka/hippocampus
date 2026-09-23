@@ -1,0 +1,217 @@
+/* The writing session: a page, a gutter of times, and one Send. */
+
+@layer screens {
+  .notepad {
+    display: flex;
+    flex-direction: column;
+    /* Fills the window rather than the content column: this screen is a
+       desk you sit at for hours, and the app's usual 32px of padding
+       around a 760px column would put a four-hour page in a postcard. The
+       main area drops its padding for it (`.app-main-bleed`) instead of
+       this cancelling it with negative margins, which left the footer
+       floating 80px above the bottom edge. */
+    height: 100%;
+  }
+
+  .notepad-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    min-height: var(--header-h);
+    padding: 0 var(--space-6);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .notepad-title {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+  /* A heading you can type into, not a field. No box, no border — it sits
+     where the title of the page sits and behaves like one. */
+  .notepad-title-input {
+    width: 30ch;
+    max-width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-bright);
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: 500;
+  }
+  .notepad-saved {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    white-space: nowrap;
+  }
+
+  .notepad-body {
+    flex-grow: 1;
+    min-height: 0;
+    display: flex;
+    gap: var(--space-8);
+    padding: var(--space-6);
+    overflow: auto;
+  }
+
+  .notepad-page {
+    flex-grow: 1;
+    min-width: 0;
+    max-width: 720px;
+  }
+
+  /* One note. The stamp is a gutter, not a label: the times line up into
+     a column you can run an eye down, which is what makes "each note
+     keeps its own time" something you can see rather than be told. */
+  .notepad-note {
+    display: flex;
+    gap: var(--space-5);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .notepad-note:last-of-type {
+    border-bottom: none;
+  }
+  .notepad-stamp {
+    flex: none;
+    /* Wide enough for a twelve-hour clock with its AM/PM, which is what
+       some locales hand back — at 52px it wrapped onto two lines and the
+       gutter stopped being a column. */
+    width: 68px;
+    padding-top: 5px;
+    text-align: right;
+    color: var(--text-faint);
+  }
+  .notepad-note:focus-within .notepad-stamp {
+    color: var(--ember);
+  }
+
+  .notepad-field {
+    flex-grow: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    resize: none;
+    overflow: hidden;
+    color: var(--text-quiet);
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    line-height: var(--leading-relaxed);
+  }
+  .notepad-note:focus-within .notepad-field {
+    color: var(--text-bright);
+  }
+  /* The app's focus ring is right everywhere else and wrong here: a box
+     drawn around whichever note you are typing in turns a page back into
+     a stack of form fields. A text field already shows its focus with a
+     caret — the ember timestamp in the gutter and the brighter ink are
+     the rest of it. */
+  .notepad-field:focus-visible,
+  .notepad-title-input:focus-visible {
+    box-shadow: none;
+  }
+
+  .notepad-hint {
+    margin: var(--space-4) 0 0 calc(52px + var(--space-5));
+    font-size: var(--text-sm);
+    color: var(--text-faint);
+  }
+
+  .notepad-aside {
+    width: 292px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .notepad-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+  }
+  .notepad-explain {
+    font-size: var(--text-sm);
+    line-height: var(--leading-relaxed);
+    color: var(--text-dim);
+  }
+  .notepad-explain strong {
+    color: var(--text-quiet);
+    font-weight: 600;
+  }
+  .notepad-result {
+    border-color: var(--moss);
+  }
+  .notepad-landed {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    margin-left: calc(var(--space-3) * -1);
+  }
+  .notepad-landed-link {
+    font-size: var(--text-sm);
+    min-height: 30px;
+    text-align: left;
+  }
+  .notepad-failed {
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    color: var(--clay);
+  }
+
+  .notepad-foot {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-5);
+    flex-wrap: wrap;
+    min-height: 68px;
+    padding: var(--space-3) var(--space-6);
+    border-top: 1px solid var(--line-soft);
+    background: var(--surface-quiet);
+  }
+  .notepad-count {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+  .notepad-nowhere {
+    font-size: var(--text-sm);
+    color: var(--text-faint);
+  }
+  .notepad-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  @media (max-width: 900px) {
+    /* The explanations are for the first few sessions; the page is for
+       every one of them. */
+    .notepad-aside {
+      display: none;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .notepad-head,
+    .notepad-body,
+    .notepad-foot {
+      padding-inline: var(--space-4);
+    }
+    .notepad-stamp {
+      width: 44px;
+    }
+    .notepad-actions {
+      margin-left: auto;
+    }
+  }
+}

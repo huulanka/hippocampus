@@ -150,16 +150,25 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
       </p>
 
       <div className="capture-actions changes-actions">
-        <span className={`btn${busy ? " disabled" : ""}`} onClick={() => void look()}>
-          [ {busy === "preview" ? "Looking…" : "Check for changes"} ]
-        </span>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy !== null}
+          onClick={() => void look()}
+        >
+          {busy === "preview" ? "Looking…" : "Check for changes"}
+        </button>
         {preview?.token && (
-          <span
-            className={`btn btn-accent${busy || proposals.length === 0 ? " disabled" : ""}`}
-            onClick={() => proposals.length > 0 && void apply()}
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy !== null || proposals.length === 0}
+            onClick={() => void apply()}
           >
-            [ {busy === "apply" ? "Applying…" : `Apply ${proposals.length} change${proposals.length === 1 ? "" : "s"}`} ]
-          </span>
+            {busy === "apply"
+              ? "Applying…"
+              : `Apply ${proposals.length} change${proposals.length === 1 ? "" : "s"}`}
+          </button>
         )}
       </div>
 
@@ -170,9 +179,9 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
           until it is applied, so removing one never risks a second,
           different judgement of the rest. */}
       {preview && (
-        <div className="panel transcript-panel">
-          <div className="kicker">
-            [ NOTHING HAS CHANGED YET ]{" "}
+        <div className="panel transcript-card">
+          <div className="label-micro">
+            NOTHING HAS CHANGED YET{" "}
             <span className="dim">
               — {preview.considered} {preview.considered === 1 ? "entity" : "entities"} looked at
             </span>
@@ -210,9 +219,17 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
                   <span className="dim"> — {item.reason}</span>
                 </>
               )}
-              <span className="dim link changes-proposal-remove" onClick={() => exclude(item.id)}>
-                [x]
-              </span>
+              <button
+                type="button"
+                className="icon-btn changes-proposal-remove"
+                aria-label={`Leave this one out`}
+                title="Leave this one out"
+                onClick={() => exclude(item.id)}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
             </p>
           ))}
         </div>
@@ -236,7 +253,7 @@ export function ChangesScreen({ onOpenEntity }: { onOpenEntity: (id: string) => 
               </div>
               <span className="dim change-when">{relativeTime(change.changed_at)}</span>
               <span className="dim link change-open" onClick={() => onOpenEntity(change.entity_id)}>
-                [open]
+                Open
               </span>
               {/* A rename or a retype is changed again by changing it; a
                   merge or a derived edge has a thing on the other side of

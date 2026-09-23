@@ -1,0 +1,162 @@
+/* The mark, and the only two animations in the interface.
+ *
+ * Both report something that is genuinely happening: the microphone is
+ * open, or the backend is still working. Nothing here runs at rest — the
+ * mascot this replaces blinked and bobbed on a 750 ms timer forever, which
+ * is how a logo teaches you to stop looking at it.
+ */
+
+@layer components {
+  .mark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .mark svg {
+    display: block;
+    overflow: visible;
+  }
+
+  /* Listening: rings leaving the mark, the way sound does. Two of them,
+     half a cycle apart, so there is always one on its way out. */
+  .mark-ring {
+    transform-origin: 50% 50%;
+    animation: mark-pulse 1.8s var(--ease-out) infinite;
+  }
+  .mark-ring-late {
+    animation-delay: 0.9s;
+  }
+  @keyframes mark-pulse {
+    from {
+      transform: scale(0.72);
+      opacity: 0.55;
+    }
+    to {
+      transform: scale(1.45);
+      opacity: 0;
+    }
+  }
+
+  /* Thinking: an impulse travelling the central sulcus. It is the one
+     stroke the mark could not do without, so the motion happens along the
+     thing that makes it a brain rather than beside it. */
+  .mark-impulse {
+    stroke-dasharray: 0.22 0.78;
+    animation: mark-impulse 1.5s var(--ease-in-out) infinite;
+  }
+  @keyframes mark-impulse {
+    from {
+      stroke-dashoffset: 1;
+      opacity: 0;
+    }
+    18%,
+    72% {
+      opacity: 1;
+    }
+    to {
+      stroke-dashoffset: 0;
+      opacity: 0;
+    }
+  }
+}
+
+@layer components {
+  /* The mascot. Pixel art, so it must never be resampled: whole-pixel
+     cells, no scaling, no smoothing. */
+  .mascot {
+    --mascot-line: #17130f;
+    --mascot-fill: var(--clay);
+    --mascot-light: var(--ember);
+    --mascot-shade: #a3573a;
+    --mascot-glint: #fff6ea;
+    position: relative;
+    display: inline-block;
+    flex: none;
+  }
+  .mascot-body {
+    position: absolute;
+    inset: 0;
+    animation: mascot-breathe 4.2s var(--ease-in-out) infinite;
+  }
+  .mascot-body > span {
+    position: absolute;
+  }
+  /* A slow rise and fall of one pixel. Enough that it is alive, little
+     enough that it never asks to be watched. */
+  @keyframes mascot-breathe {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-2px);
+    }
+  }
+
+  /* Listening: rings leaving it, the way sound does. */
+  .mascot-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 112%;
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    border: 1.5px solid var(--clay);
+    border-radius: 50%;
+    animation: mascot-pulse 1.8s var(--ease-out) infinite;
+  }
+  .mascot-ring-late {
+    animation-delay: 0.9s;
+  }
+  @keyframes mascot-pulse {
+    from {
+      scale: 0.72;
+      opacity: 0.5;
+    }
+    to {
+      scale: 1.5;
+      opacity: 0;
+    }
+  }
+
+  /* Thinking: three pixels going round. Pixels rather than dots, because
+     everything else about this thing is made of them. */
+  .mascot-thoughts {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 132%;
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    animation: mascot-orbit 2.6s linear infinite;
+  }
+  .mascot-thoughts > span {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+  }
+  .mascot-thoughts > span:nth-child(1) {
+    left: 50%;
+    top: 0;
+    margin-left: -3px;
+  }
+  .mascot-thoughts > span:nth-child(2) {
+    left: 0;
+    top: 50%;
+    margin-top: -3px;
+  }
+  .mascot-thoughts > span:nth-child(3) {
+    right: 0;
+    top: 50%;
+    margin-top: -3px;
+  }
+  @keyframes mascot-orbit {
+    from {
+      rotate: 0deg;
+    }
+    to {
+      rotate: 360deg;
+    }
+  }
+}

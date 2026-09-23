@@ -1,0 +1,366 @@
+/* The controls, once each.
+ *
+ * What this replaces: `[ New Capture ]`, `[ open ]`, `[ merge into… ]`,
+ * `[x] said more than once` — ASCII drawings of controls, built out of
+ * spans with onClick handlers. They could not be tabbed to, could not be
+ * pressed with a keyboard, announced nothing to a screen reader, and were
+ * re-invented with slightly different padding on every screen. Each one
+ * below is a real element with one definition.
+ */
+
+@layer components {
+  /* — buttons — ------------------------------------------------------ */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: 38px;
+    padding: 0 var(--space-5);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-quiet);
+    font-size: var(--text-base);
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+
+  /* A finger is not a cursor. On touch every control grows to the 44px
+   * minimum rather than each screen remembering to ask for it. */
+  @media (pointer: coarse) {
+    .btn,
+    .chip,
+    .icon-btn {
+      min-height: var(--tap-min);
+    }
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+  }
+  .btn-primary:hover {
+    background: color-mix(in srgb, var(--accent) 88%, var(--text-bright));
+  }
+  .btn-primary:active {
+    background: color-mix(in srgb, var(--accent) 86%, #000);
+  }
+
+  .btn-secondary {
+    border-color: var(--line-strong);
+  }
+  .btn-secondary:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  /* Stands on its own as well as next to `.btn`: a breadcrumb or a "more"
+   * link is a quiet button without being a full-height one, and without
+   * the reset it fell back to the browser's grey bevel. */
+  .btn-quiet {
+    padding: 0 var(--space-3);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+  .btn-quiet:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  /* Destructive is a colour, not a variant: it can be applied to any of
+   * the three above, because "take this back" is sometimes the primary
+   * action on a screen and sometimes the quietest thing on it. */
+  .btn-danger {
+    color: var(--clay);
+  }
+  .btn-danger.btn-primary {
+    background: var(--clay);
+    color: var(--accent-text);
+  }
+
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
+    opacity: 0.42;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+  .icon-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+  .icon-btn-bordered {
+    border-color: var(--line-strong);
+  }
+
+  /* — chips: a filter you switch on and off — ------------------------- */
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-full);
+    background: var(--surface-raised);
+    color: var(--text-quiet);
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition:
+      opacity var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out);
+  }
+  .chip:hover {
+    border-color: var(--text-dim);
+  }
+
+  .chip[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--text-bright);
+  }
+  /* Unselected is not the same as switched off, and the two must not look
+   * alike. A chip that narrows a list ("show me only Personen") is simply
+   * not chosen yet — quiet is enough. A chip that *hides* part of a
+   * picture, which is what the graph's type filters do, is struck through:
+   * there the drawing in front of you is missing something, and you have
+   * to be able to see what. Switched off, not removed — the chip keeps its
+   * place, so turning a type back on is where you left it. */
+  .chip[aria-pressed="false"] {
+    color: var(--text-dim);
+  }
+  .chip-hides[aria-pressed="false"] {
+    opacity: 0.45;
+    text-decoration: line-through;
+  }
+
+  .chip-dot {
+    width: 7px;
+    height: 7px;
+    flex: none;
+    border-radius: var(--radius-full);
+  }
+  .chip-count {
+    color: var(--text-dim);
+  }
+
+  /* A pill is a chip that is not a control: an entity as it appears in a
+   * sentence. Same shape so the two read as the same family, no hover and
+   * no pressed state so it is never mistaken for a filter. */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 5px var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-full);
+    background: var(--surface-raised);
+    font-size: var(--text-sm);
+  }
+  .pill-type {
+    color: var(--text-dim);
+    font-size: var(--text-xs);
+  }
+
+  /* — checkboxes — ----------------------------------------------------
+   * The native control, tinted. What this replaces was the string "[x]"
+   * or "[ ]" inside a span: not focusable, not toggleable by keyboard,
+   * and announced to a screen reader as the literal characters.
+   */
+
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+    color: var(--text-quiet);
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+  .check input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    flex: none;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .check-hint {
+    color: var(--text-dim);
+  }
+
+  /* — surfaces — ------------------------------------------------------ */
+
+  .card {
+    padding: var(--space-5);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+
+  /* A card that leads somewhere. The whole card is the target, so the
+   * element is an <a> and this only dresses it. */
+  a.card,
+  button.card {
+    display: block;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+    transition:
+      border-color var(--dur-fast) var(--ease-out),
+      background-color var(--dur-fast) var(--ease-out);
+  }
+  a.card:hover,
+  button.card:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-hover);
+  }
+
+  .sheet {
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+  }
+
+  /* — fields — -------------------------------------------------------- */
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text-dim);
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  /* The ring belongs to the whole field, not to the bare input inside it,
+   * which has no border of its own to hang one on. */
+  .field:focus-within {
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 2px var(--bg),
+      0 0 0 4px var(--focus-ring);
+  }
+  .field:focus-within :focus-visible {
+    box-shadow: none;
+  }
+
+  .input {
+    flex-grow: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: var(--text-base);
+  }
+
+  /* — text roles — ----------------------------------------------------
+   * The four kinds of text in this app, and nothing decides which one it
+   * is by picking a size.
+   */
+
+  /* What you said, and the names of things. The largest type on any
+   * screen it appears on — it is the original, and the interface around
+   * it is commentary. */
+  .prose {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    line-height: var(--leading-relaxed);
+    color: var(--text-quiet);
+    max-width: var(--measure);
+  }
+  .prose-lead {
+    font-size: var(--text-3xl);
+    color: var(--text-bright);
+    line-height: var(--leading-snug);
+  }
+  .name {
+    font-family: var(--font-display);
+    font-weight: 500;
+    color: var(--text-bright);
+  }
+
+  /* A machine fact: a timestamp, a count, a duration, an id. Mono is
+   * reserved for these, which is what makes mono mean something. */
+  .meta {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The small caps label above a section. Mono, because it is furniture. */
+  .label-micro {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* Anything the extraction produced rather than you. Always marked, and
+   * always quieter than the thing it was read out of. */
+  .derived {
+    color: var(--moss);
+  }
+
+  .kbd {
+    padding: 3px var(--space-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-xs);
+    background: var(--surface-raised);
+    color: var(--text-quiet);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+  }
+
+  /* Reached by keyboard, skipped by eye: the standard way to name a
+   * control for a screen reader without drawing the name. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    border: 0;
+    clip-path: inset(50%);
+  }
+}

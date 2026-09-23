@@ -1,0 +1,123 @@
+/* Capturing: the sheet the shortcut opens, and what it shows afterwards. */
+
+@layer screens {
+.capture-idle {
+  max-width: 480px;
+  margin: 0 auto;
+  text-align: center;
+  padding-top: var(--space-5);
+}
+.capture-idle h3 {
+  margin: var(--space-3) 0 2px;
+  font-size: var(--text-xl);
+}
+.transcript-card {
+  text-align: left;
+  min-height: 90px;
+  padding: var(--space-3);
+  margin-top: var(--space-4);
+}
+.capture-input {
+  width: 100%;
+  margin-top: var(--space-2);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: vertical;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+.capture-input::placeholder {
+  color: var(--text-dim);
+}
+.capture-input:disabled {
+  opacity: 0.6;
+}
+/* Echo entries sit inside a panel already, so they drop the card border
+   that free-standing timeline cards carry. */
+.transcript-card .timeline-card {
+  border: none;
+  border-left: 2px solid var(--line);
+  padding: var(--space-1) 0 var(--space-1) var(--space-3);
+}
+.transcript-placeholder {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+.capture-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-top: var(--space-4);
+}
+
+}
+
+@layer screens {
+  /* An earlier note, quoted. Shared by the capture sheet, a capture's own
+     page and an entity's mentions — it is the same object in all three, so
+     it is one rule rather than three. */
+  .timeline-card {
+    padding: var(--space-4);
+  }
+  .timeline-card-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-4);
+    margin-bottom: var(--space-2);
+  }
+  .timeline-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+  /* Your own words, so they are set like your own words everywhere. */
+  .timeline-transcript {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    line-height: var(--leading-relaxed);
+    color: var(--text-quiet);
+  }
+  /* Inside the capture sheet the echoes are already in a card, so they
+     drop the border and keep only a rule down the side. */
+  .transcript-card .timeline-card {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    border-left: 2px solid var(--line-strong);
+    padding: var(--space-1) 0 var(--space-1) var(--space-3);
+  }
+
+  .capture-lede {
+    margin-bottom: var(--space-5);
+    color: var(--text-dim);
+  }
+
+  /* What the keys do, under the field. */
+  .key-hints {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-2) var(--space-5);
+    margin: var(--space-5) 0 0;
+    font-size: var(--text-sm);
+    color: var(--text-dim);
+  }
+  .key-hints > div {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+  .key-hints dt {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .key-hints dd {
+    margin: 0;
+  }
+}

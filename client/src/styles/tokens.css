@@ -1,0 +1,224 @@
+/* The only file in the app allowed to name a colour, a size or a duration.
+ *
+ * Everything else refers to these by name. That rule is the whole point:
+ * the interface this replaces used twelve font sizes between 10 and 14px
+ * in the same view, four ad-hoc greys, and a different border colour
+ * depending on which screen had been written most recently — not because
+ * anyone chose that, but because there was nowhere to go and look up what
+ * the right value was. Now there is.
+ *
+ * Two themes. The dark one is the app's own; the light one is paper. Only
+ * the ramps change between them — every semantic name below resolves to
+ * something in both, so no rule anywhere needs to know which theme is on.
+ */
+
+@layer tokens {
+  :root {
+    /* — the ramp — ---------------------------------------------------
+     * Warm-neutral, not grey. The hue stays near 30° all the way down,
+     * which is what keeps a near-black ground reading as lamplight
+     * rather than as a switched-off monitor. Numbered by lightness, so
+     * 950 is the darkest ink and 50 the lightest paper, the same
+     * direction in both themes.
+     */
+    --ink-950: #0d0b09;
+    --ink-900: #100e0c;
+    --ink-850: #14110e;
+    --ink-800: #16130f;
+    --ink-750: #1a1611;
+    --ink-700: #1f1b16;
+    --ink-600: #241f19;
+    --ink-500: #2a241e;
+    --ink-400: #332b23;
+    --ink-300: #453b30;
+
+    --sand-500: #5b5147;
+    --sand-400: #6e6257;
+    --sand-300: #8c7f72;
+    --sand-200: #a89a8b;
+    --sand-100: #c6baab;
+    --sand-50: #e5daca;
+    --sand-0: #efe7da;
+
+    --paper-0: #fbf8f2;
+    --paper-50: #ffffff;
+    --paper-100: #f2ebdf;
+    --paper-200: #e4dcce;
+    --paper-300: #cfc3ae;
+
+    /* — the four accents — -------------------------------------------
+     * Fixed across both themes, each with exactly one job. They are the
+     * same four the app already had, pulled into line with each other:
+     * one hue family, comparable chroma, comparable lightness, so no one
+     * of them shouts over the others when all four appear at once in the
+     * graph legend.
+     */
+    --clay: #d07850; /* actions, and whatever is in focus */
+    --clay-deep: #b2603c; /* the same on paper, where #d07850 goes weak */
+    --ember: #e3a047; /* time: when it was said, when it is due */
+    --ember-deep: #a9701f;
+    --moss: #5e9a87; /* derived by the machine — never your own words */
+    --moss-deep: #3d6f5e;
+    --plum: #b06a7e; /* people, and the fourth entity hue */
+    --plum-deep: #8a4a5e;
+
+    /* Entity colours are generated from the four accents above; see
+     * entityType.ts. Only the lightness has to track the theme — what
+     * pops against near-black goes muddy on paper, and the other way
+     * round. Saturation is what varies per type, which is why it is not
+     * the axis being used here. */
+    --entity-lightness: 58%;
+
+    /* — what things mean — -------------------------------------------
+     * Rules below this file use these names, never the ramp directly.
+     * Swapping a theme is then a matter of re-pointing ten aliases.
+     */
+    --bg: var(--ink-900);
+    --bg-sunken: var(--ink-950); /* the graph void */
+    --surface: var(--ink-800);
+    --surface-quiet: var(--ink-850);
+    --surface-raised: var(--ink-700);
+    --surface-hover: var(--ink-750);
+    --rail-bg: var(--ink-800);
+
+    --line: var(--ink-600);
+    --line-soft: #1b1712;
+    --line-strong: var(--ink-400);
+
+    --text: var(--sand-0);
+    --text-bright: #f6f0e6;
+    --text-quiet: var(--sand-50);
+    --text-muted: var(--sand-200);
+    --text-dim: var(--sand-300);
+    /* Not --sand-500: that lands at 3.2:1 on this ground, which is a
+     * hairline colour, not a text colour. This one clears 4.5:1. */
+    --text-faint: #7a6d60;
+
+    --accent: var(--clay);
+    --accent-text: #17130f; /* what sits legibly on a clay fill */
+    --focus-ring: var(--ember);
+
+    /* — type — -------------------------------------------------------
+     * Three families, three jobs, and the job is the reason to reach for
+     * one. Serif is reserved for what you said and for the names of
+     * things; mono is reserved for facts a machine produced. Everything
+     * else is the sans, and prose is never mono — one face doing every
+     * job is what made every screen read as the same flat texture.
+     */
+    --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --font-ui: "Instrument Sans", ui-sans-serif, -apple-system, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* Chrome does not scale: a label is the same size on a 13" laptop and
+     * a 32" display, because it is furniture. Content does scale, which
+     * is why only the display sizes below carry a clamp(). */
+    --text-2xs: 10px;
+    --text-xs: 11px;
+    --text-sm: 12.5px;
+    --text-base: 13.5px;
+    --text-md: 15px;
+    --text-lg: 16.5px;
+    --text-xl: clamp(17px, 1.05rem + 0.2vw, 19px);
+    --text-2xl: clamp(18px, 1.1rem + 0.4vw, 21px);
+    --text-3xl: clamp(21px, 1.2rem + 0.9vw, 27px);
+    --text-4xl: clamp(25px, 1.4rem + 1.2vw, 34px);
+    --text-5xl: clamp(29px, 1.6rem + 1.6vw, 40px);
+
+    --leading-tight: 1.15;
+    --leading-snug: 1.38;
+    --leading-normal: 1.55;
+    --leading-relaxed: 1.62;
+    --tracking-label: 0.14em; /* the mono micro-labels, and only those */
+    --tracking-tight: -0.005em;
+
+    /* The measure a spoken note is read at. Roughly 62 characters of
+     * Fraunces — past that the eye loses the line on the way back, and
+     * captures run long. */
+    --measure: 62ch;
+
+    /* — rhythm — -----------------------------------------------------
+     * Four-based, no exceptions. If a gap is not on this scale it is a
+     * mistake, not a nuance.
+     */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    --radius-xs: 6px; /* chips, kbd */
+    --radius-sm: 8px;
+    --radius-md: 10px; /* buttons, inputs */
+    --radius-lg: 14px; /* cards */
+    --radius-xl: 18px; /* sheets */
+    --radius-full: 999px; /* entity pills */
+
+    /* — motion — -----------------------------------------------------
+     * Short and few. The graph used to rotate by itself so that depth
+     * would read; that is motion carrying no information, and it is gone.
+     * What is left either answers something you just did, or says that
+     * something is genuinely happening right now.
+     */
+    --dur-fast: 120ms;
+    --dur-base: 200ms;
+    --dur-slow: 320ms;
+    --dur-breath: 1600ms;
+    --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    /* Overshoots slightly. Used for one thing only: re-centring the
+     * graph, where the overshoot is what makes "you moved" legible. */
+    --ease-settle: cubic-bezier(0.34, 1.28, 0.64, 1);
+
+    /* — layout — ------------------------------------------------------ */
+    /* Wide enough for an icon with its name underneath. An earlier
+     * version was 64px and slid open on hover, which put a 208px panel
+     * over the left of whatever you were reading every time the pointer
+     * crossed the edge — and hid the names from anyone who never
+     * hovered. Names that are always there cost twelve pixels. */
+    --rail-w: 76px;
+    --header-h: 56px;
+    --content-max: 760px;
+    --tap-min: 44px; /* never smaller, on any pointer */
+
+    --z-canvas: 0;
+    --z-overlay: 10;
+    --z-sheet: 20;
+    --z-gate: 30;
+
+    color-scheme: dark;
+  }
+
+  :root[data-theme="light"] {
+    --bg: var(--paper-0);
+    --bg-sunken: #efe8dc;
+    --surface: var(--paper-50);
+    --surface-quiet: var(--paper-0);
+    --surface-raised: var(--paper-100);
+    --surface-hover: var(--paper-100);
+    --rail-bg: var(--paper-100);
+
+    --line: var(--paper-200);
+    --line-soft: #ede5d8;
+    --line-strong: var(--paper-300);
+
+    --text: #241d16;
+    --text-bright: #150f0a;
+    --text-quiet: #33291f;
+    --text-muted: #52483d;
+    --text-dim: #655a4d;
+    --text-faint: #736757;
+
+    --accent: var(--clay-deep);
+    --accent-text: #fffaf4;
+    --focus-ring: var(--ember-deep);
+
+    --entity-lightness: 38%;
+
+    color-scheme: light;
+  }
+}

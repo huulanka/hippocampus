@@ -483,3 +483,52 @@ export function acceleratorFromEvent(event: KeyboardEvent): { accelerator: strin
 
   return { accelerator: [...modifiers, event.code].join("+") };
 }
+
+/// The unsent draft of a writing session, as the Rust side last wrote it.
+///
+/// The shape is entirely this side's business — `draft.rs` stores whatever
+/// JSON it is handed and gives it back byte for byte. What it guarantees
+/// is durability: an interrupted write leaves the previous draft intact,
+/// which is the only property that matters when the thing being protected
+/// is four hours of a meeting.
+export async function loadDraft<T>(): Promise<T | null> {
+  if (!runningInDesktopApp()) return readWebDraft<T>();
+  return ((await invoke("draft_load")) as T | null) ?? null;
+}
+
+export async function saveDraft(draft: unknown): Promise<void> {
+  if (!runningInDesktopApp()) return writeWebDraft(draft);
+  await invoke("draft_save", { draft });
+}
+
+export async function clearDraft(): Promise<void> {
+  if (!runningInDesktopApp()) {
+    writeWebDraft(null);
+    return;
+  }
+  await invoke("draft_clear");
+}
+
+/// `npm run dev` in a plain browser has no Rust side to ask. Session
+/// storage is not durable in any sense that matters, but losing a draft
+/// while developing is an inconvenience and being unable to open the
+/// screen at all is not.
+const WEB_DRAFT_KEY = "hippocampus.draft";
+
+function readWebDraft<T>(): T | null {
+  try {
+    const raw = window.localStorage.getItem(WEB_DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeWebDraft(draft: unknown): void {
+  try {
+    if (draft === null) window.localStorage.removeItem(WEB_DRAFT_KEY);
+    else window.localStorage.setItem(WEB_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Private mode, or storage full. The draft simply will not persist.
+  }
+}

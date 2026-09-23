@@ -96,13 +96,13 @@ export function PendingWork() {
 
   return (
     <div
-      className={`sidebar-pending${outbox.failing > 0 || backend.given_up > 0 ? " stuck" : ""}`}
+      className={`rail-pending${outbox.failing > 0 || backend.given_up > 0 ? " stuck" : ""}`}
       title={detail}
       onClick={() => void tryAgain()}
     >
-      <span className="sidebar-pending-count">{parts.join(" · ")}</span>
-      <span className="sidebar-pending-action">
-        {retrying ? "[ trying… ]" : "[ try now ]"}
+      <span className="rail-pending-count">{parts.join(" · ")}</span>
+      <span className="rail-pending-action">
+        {retrying ? "trying…" : "try now"}
       </span>
     </div>
   );

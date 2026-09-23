@@ -95,7 +95,7 @@ export function LockGate({
       )}
 
       <span className={`lock-gate-button${asking ? " disabled" : ""}`} onClick={() => void ask()}>
-        {asking ? "[ waiting… ]" : `[ unlock with ${mechanism} ]`}
+        {asking ? "waiting…" : `unlock with ${mechanism}`}
       </span>
     </div>
   );

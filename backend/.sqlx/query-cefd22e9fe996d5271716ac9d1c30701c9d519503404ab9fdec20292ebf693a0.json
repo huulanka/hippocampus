@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into capture_sessions (id, title, started_at)\n        values ($1, $2, $3)\n        on conflict (id) do update set title = excluded.title\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cefd22e9fe996d5271716ac9d1c30701c9d519503404ab9fdec20292ebf693a0"
+}

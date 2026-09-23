@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mascot } from "../mascot";
+import { Mascot } from "../brand/Mascot";
 import { createCapture } from "../api";
 import { useEcho } from "../useEcho";
 import {
@@ -55,10 +55,19 @@ type Phase = "idle" | "recording" | "working";
 export function CaptureScreen({
   summons = 0,
   onOpenCapture,
+  onClose,
   locked = false,
 }: {
   summons?: number;
   onOpenCapture: (eventId: string) => void;
+  /// Back to whatever was on screen when the shortcut was pressed.
+  ///
+  /// Capture is not a place any more — it opens over wherever you already
+  /// were and closes back onto it, which is what the shortcut being the
+  /// record button (ADR 0012) actually implies. It used to be a tab, so
+  /// the one thing done twenty times a day was also the one thing that
+  /// threw away where you had been.
+  onClose?: () => void;
   /// Capturing works either way — this only decides whether the echo can
   /// be shown, which is the one part of this screen that reads.
   locked?: boolean;
@@ -112,6 +121,19 @@ export function CaptureScreen({
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [phase]);
+
+  // Escape closes the sheet back onto wherever you were. Its own effect:
+  // it once sat inside the timer above, which called a hook from inside an
+  // effect — React threw the moment a recording started and took the whole
+  // window down to a blank page, with the microphone still running.
+  useEffect(() => {
+    if (!onClose) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose?.();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   /// Locking has to take the last capture off the screen as well.
   /// Capturing stays open while locked, but what is left standing
@@ -224,12 +246,12 @@ export function CaptureScreen({
   if (phase === "recording") {
     return (
       <div className="capture-idle">
-        <Mascot state="listening" cell={9} />
+        <Mascot state="listening" cell={6} />
         <h3>listening…</h3>
         <p className="dim">{formatElapsed(elapsed)}</p>
-        <div className="panel transcript-panel">
-          <div className="kicker">
-            [ RECORDING ]{" "}
+        <div className="panel transcript-card">
+          <div className="label-micro">
+            RECORDING{" "}
             <span className="dim">— kept as the original, transcribed on this Mac</span>
           </div>
           <p className="transcript-placeholder">
@@ -237,12 +259,12 @@ export function CaptureScreen({
           </p>
         </div>
         <div className="capture-actions">
-          <span className="btn" onClick={discardRecording}>
-            [ Discard ]
-          </span>
-          <span className="btn btn-accent" onClick={finishRecording}>
-            [ Done ]
-          </span>
+          <button type="button" className="btn btn-secondary" onClick={discardRecording}>
+            Discard
+          </button>
+          <button type="button" className="btn btn-primary" onClick={finishRecording}>
+            Done
+          </button>
         </div>
       </div>
     );
@@ -251,11 +273,11 @@ export function CaptureScreen({
   if (saved) {
     return (
       <div className="capture-idle">
-        <Mascot state="idle" cell={9} />
+        <Mascot cell={6} />
         <h3>{queued ? "kept on this Mac" : "kept, word for word"}</h3>
-        <div className="panel transcript-panel">
-          <div className="kicker">
-            [ CAPTURED ]{" "}
+        <div className="panel transcript-card">
+          <div className="label-micro">
+            CAPTURED{" "}
             <span className="dim">
               {saved.spoken
                 ? "— transcript; the recording itself is the original"
@@ -277,9 +299,9 @@ export function CaptureScreen({
              is the one thing the user cannot see: why it has not, because
              "waiting to sync" with no reason is how an expired Access
              token goes unnoticed for a week. */
-          <div className="panel transcript-panel">
-            <div className="kicker">
-              [ WAITING TO SYNC ]{" "}
+          <div className="panel transcript-card">
+            <div className="label-micro">
+              WAITING TO SYNC{" "}
               <span className="dim">
                 — safe here; it goes up by itself, and the echo comes with it
               </span>
@@ -287,44 +309,42 @@ export function CaptureScreen({
             {saved.queuedReason && <p className="dim">{saved.queuedReason}</p>}
           </div>
         ) : locked ? (
-          <div className="panel transcript-panel">
-            <div className="kicker">
-              [ EARLIER THOUGHTS ARE LOCKED ]{" "}
+          <div className="panel transcript-card">
+            <div className="label-micro">
+              EARLIER THOUGHTS ARE LOCKED{" "}
               <span className="dim">
                 — your note is saved; what it echoes is waiting until you unlock
               </span>
             </div>
           </div>
         ) : echo.pending ? (
-          <div className="panel transcript-panel">
-            <div className="kicker">
-              [ LOOKING FOR EARLIER THOUGHTS ]{" "}
+          <div className="panel transcript-card">
+            <div className="label-micro">
+              LOOKING FOR EARLIER THOUGHTS{" "}
               <span className="dim">— your note is saved; this part takes a moment</span>
             </div>
           </div>
         ) : echo.items.length > 0 ? (
-          <div className="panel transcript-panel">
-            <div className="kicker">
-              [ YOU'VE BEEN HERE BEFORE ]{" "}
+          <div className="panel transcript-card">
+            <div className="label-micro">
+              YOU'VE BEEN HERE BEFORE{" "}
               <span className="dim">— your own earlier words, not a summary</span>
             </div>
-            <div className="card-stack">
+            <div className="stack stack-tight">
               {echo.items.map((item) => (
-                <div
+                <button
+                  type="button"
                   key={item.capture_event_id}
-                  className="timeline-card clickable"
+                  className="card said-echo"
                   onClick={() => onOpenCapture(item.capture_event_id)}
                 >
-                  <div className="timeline-card-meta">
-                    <span className="dim">// {relativeDay(item.occurred_at)}</span>
-                    {/* No similarity number. 0.89 is a *good* match here
-                        and reads as a bad one to anyone who has ever seen
-                        a percentage — the same reason the search results
-                        show a rank instead of a score. */}
-                    <span className="dim card-open-hint">[open]</span>
-                  </div>
-                  <p className="timeline-transcript">{item.transcript_text}</p>
-                </div>
+                  {/* No similarity number. 0.89 is a *good* match here
+                      and reads as a bad one to anyone who has ever seen a
+                      percentage — the same reason the search results show
+                      a rank instead of a score. */}
+                  <span className="meta said-when">{relativeDay(item.occurred_at)}</span>
+                  <span className="said-echo-words">{item.transcript_text}</span>
+                </button>
               ))}
             </div>
           </div>
@@ -336,16 +356,16 @@ export function CaptureScreen({
         )}
 
         <div className="capture-actions">
-          <span className="btn btn-accent" onClick={startNext}>
-            [ Capture Another ]
-          </span>
+          <button type="button" className="btn btn-primary" onClick={startNext}>
+            Capture Another
+          </button>
           {/* Nothing to open while it is queued: the backend has not seen
               it, so there is no detail page and no entities it could
               show. Offering the button anyway would be a link to a 404. */}
           {saved.eventId && (
-            <span className="btn" onClick={() => onOpenCapture(saved.eventId!)}>
-              [ See What It Made Of It ]
-            </span>
+            <button type="button" className="btn btn-secondary" onClick={() => onOpenCapture(saved.eventId!)}>
+              See What It Made Of It
+            </button>
           )}
         </div>
       </div>
@@ -357,15 +377,15 @@ export function CaptureScreen({
 
   return (
     <div className="capture-idle">
-      <Mascot state={working ? "thinking" : "idle"} cell={9} />
+      <Mascot state={working ? "thinking" : "idle"} cell={6} />
       <h3>{working ? "keeping it…" : "ready when you are"}</h3>
       <p className="dim capture-lede">
         {canSpeak ? "Speak it, or type it." : "Type it."}
       </p>
 
-      <div className="panel transcript-panel">
-        <div className="kicker">
-          [ CAPTURE ] <span className="dim">— stored exactly as written</span>
+      <div className="panel transcript-card">
+        <div className="label-micro">
+          CAPTURE <span className="dim">— stored exactly as written</span>
         </div>
         <textarea
           ref={inputRef}
@@ -393,16 +413,17 @@ export function CaptureScreen({
 
       <div className="capture-actions">
         {canSpeak && (
-          <span className={`btn${working ? " disabled" : ""}`} onClick={beginRecording}>
-            [ ● Record ]
-          </span>
+          <button type="button" className="btn btn-secondary" onClick={beginRecording}
+          disabled={working}>
+            ● Record
+          </button>
         )}
-        <span
-          className={`btn btn-accent${text.trim() && !working ? "" : " disabled"}`}
+        <button type="button"
+          className="btn btn-primary"
           onClick={saveTyped}
-        >
-          [ {working ? "Keeping…" : "Keep It"} ]
-        </span>
+          disabled={!(text.trim() && !working)}>
+          {working ? "Keeping…" : "Keep It"}
+        </button>
       </div>
 
       <KeyHints
