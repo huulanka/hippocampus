@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/huulanka/hippocampus/compare/v1.15.1...v1.16.0) (2026-09-24)
+
+
+### Features
+
+* one glass design for Mac and phone, and a layout of its own for the phone ([#10](https://github.com/huulanka/hippocampus/issues/10)) ([affb3c4](https://github.com/huulanka/hippocampus/commit/affb3c4c080e328bb32f17b6e39820c8df766e64))
+
 ## [1.15.1](https://github.com/huulanka/hippocampus/compare/v1.15.0...v1.15.1) (2026-09-24)
 
 
