@@ -146,9 +146,9 @@ the number is pure server time, without tunnel or network.
 **Every call to a hosted model.**
 
 ```
-INFO model call finished purpose="echo-judge" model="mistralai/mistral-small-2603"
-     provider="Mistral" served_by="mistralai/mistral-small-2603" ms=11840
-     prompt_tokens=612 completion_tokens=88
+INFO model call finished purpose="echo-judge" model="google/gemini-3.5-flash-lite"
+     provider="Google" served_by="google/gemini-3.5-flash-lite" ms=1388
+     prompt_tokens=318 completion_tokens=59
 ```
 
 `purpose` separates the two callers, `structuring` and `echo-judge`,
@@ -160,19 +160,44 @@ zero-retention routing OpenRouter picks among the matching providers, and
 when a route fell back. The token counts are the cost basis.
 
 If a call fails, the same place logs `model call failed` with its duration
-and the error, so a silent failure is ruled out.
+and the error, so a silent failure is ruled out. For an error answer the
+error includes what OpenRouter said, and that matters most for a 429:
+
+```
+WARN model call failed purpose="echo-judge" model="…" ms=153
+     error=OpenRouter answered 429 Too Many Requests: {"error":{"message":
+     "Provider returned error",…"raw":"… is temporarily rate-limited upstream …"}}
+```
+
+"Rate-limited upstream" means one provider is throttling everybody on
+that route. Waiting and retrying won't fix it, only another model or
+provider will (ADR 0015). A limit on your own account reads differently.
 
 **Every finished echo judgement.**
 
 ```
-INFO echo judged and stored capture_event_id=… judged_by=mistralai/mistral-small-2603
-     candidates=5 ms=12310 best=Some(1.0) runner_up=Some(0.0) shown=1
+INFO echo judged and stored capture_event_id=… judged_by=google/gemini-3.5-flash-lite
+     candidates=4 ms=1402 best=Some(1.0) runner_up=Some(0.0) shown=1
 ```
 
 `best` and `runner_up` together are the real quality signal: far apart,
 the judge separates cleanly; close together and near the threshold, it's
 guessing. That is exactly what the still uncalibrated threshold of 0.5 has
 to answer over time. `shown` is how many of them actually get shown.
+`judged_by` is the model that answered: with a fallback configured it
+can be the fallback, and then the default model was unreachable.
+
+**Echoes judged later.** A judgement that failed is tried again in the
+background, with a wait that doubles each time up to an hour:
+
+```
+WARN echo judging failed; it will be retried after a backoff err=… failures=3 retry_in_secs=80
+INFO judged echoes that were left unjudged judged=4
+```
+
+A capture showing `failures` climbing while nothing is ever judged means
+the judge is unreachable, and the `model call failed` line just above it
+says why.
 
 A few commands that have proven useful:
 

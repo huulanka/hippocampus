@@ -8,6 +8,60 @@ use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+const CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";
+
+/// One chat completion, with the telemetry every caller wants.
+///
+/// A failed call keeps OpenRouter's answer. `error_for_status` used to
+/// throw it away, and the answer is the diagnosis: a 429 says whether the
+/// account hit a limit or one upstream provider is throttling everybody
+/// ("temporarily rate-limited upstream"), and those two call for opposite
+/// fixes. With only the status code, the echo judge failed several
+/// hundred times before anyone could tell which one it was.
+pub(crate) async fn chat(
+    http: &reqwest::Client,
+    api_key: &str,
+    purpose: &str,
+    model: &str,
+    body: &Value,
+) -> anyhow::Result<Value> {
+    let started = std::time::Instant::now();
+    let response = match http
+        .post(CHAT_URL)
+        .bearer_auth(api_key)
+        .json(body)
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            crate::telemetry::model_call_failed(purpose, model, started.elapsed(), &err);
+            return Err(err.into());
+        }
+    };
+
+    let status = response.status();
+    if !status.is_success() {
+        let text = response.text().await.unwrap_or_default();
+        // Bounded: an error page is not supposed to be long, but the log
+        // line is read by a person and should not become one.
+        let detail: String = text.chars().take(500).collect();
+        let err = anyhow::anyhow!("OpenRouter answered {status}: {detail}");
+        crate::telemetry::model_call_failed(purpose, model, started.elapsed(), &err);
+        return Err(err);
+    }
+
+    let payload = match response.json::<Value>().await {
+        Ok(payload) => payload,
+        Err(err) => {
+            crate::telemetry::model_call_failed(purpose, model, started.elapsed(), &err);
+            return Err(err.into());
+        }
+    };
+    crate::telemetry::model_call(purpose, model, &payload, started.elapsed());
+    Ok(payload)
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ExtractedEntity {
     pub name: String,
@@ -125,6 +179,10 @@ impl KnownGraph {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ExtractedRelation {
+    /// Also accepted as `name`: the model now and then writes a relation
+    /// in the shape of the entity it just wrote, and every such relation
+    /// used to be dropped whole for one key.
+    #[serde(alias = "name")]
     pub from: String,
     pub to: String,
     pub relation_type: String,
@@ -233,28 +291,7 @@ impl OpenRouterClient {
             "provider": {"zdr": self.zdr},
         });
 
-        let started = std::time::Instant::now();
-        let response = match self
-            .http
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await
-            .and_then(|r| r.error_for_status())
-        {
-            Ok(response) => response.json::<Value>().await?,
-            Err(err) => {
-                crate::telemetry::model_call_failed(
-                    "structuring",
-                    &self.model,
-                    started.elapsed(),
-                    &err,
-                );
-                return Err(err.into());
-            }
-        };
-        crate::telemetry::model_call("structuring", &self.model, &response, started.elapsed());
+        let response = chat(&self.http, &self.api_key, "structuring", &self.model, &body).await?;
 
         let content = response["choices"][0]["message"]["content"]
             .as_str()
@@ -363,6 +400,16 @@ mod tests {
         let result = parse_extraction(raw).unwrap();
         assert_eq!(result.entities.len(), 2);
         assert_eq!(result.relations.len(), 0);
+    }
+
+    #[test]
+    fn a_relation_written_like_an_entity_is_kept() {
+        // The model now and then writes `name` where `from` belongs,
+        // carrying over the shape of the entity list it just wrote.
+        let raw = r#"{"entities":[],"relations":[{"name":"Lena","to":"Contoso","relation_type":"arbeitet_bei"}]}"#;
+        let result = parse_extraction(raw).unwrap();
+        assert_eq!(result.relations.len(), 1);
+        assert_eq!(result.relations[0].from, "Lena");
     }
 
     #[test]
@@ -528,18 +575,14 @@ impl OpenRouterClient {
             "provider": {"zdr": self.zdr},
         });
 
-        let started = std::time::Instant::now();
-        let response = self
-            .http
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await?
-            .error_for_status()?;
-
-        let payload: Value = response.json().await?;
-        crate::telemetry::model_call("consolidation", &self.model, &payload, started.elapsed());
+        let payload = chat(
+            &self.http,
+            &self.api_key,
+            "consolidation",
+            &self.model,
+            &body,
+        )
+        .await?;
 
         let content = payload["choices"][0]["message"]["content"]
             .as_str()
@@ -605,23 +648,7 @@ impl OpenRouterClient {
             "provider": {"zdr": self.zdr},
         });
 
-        let started = std::time::Instant::now();
-        let response = match self
-            .http
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await
-            .and_then(|r| r.error_for_status())
-        {
-            Ok(response) => response.json::<Value>().await?,
-            Err(err) => {
-                crate::telemetry::model_call_failed("review", &self.model, started.elapsed(), &err);
-                return Err(err.into());
-            }
-        };
-        crate::telemetry::model_call("review", &self.model, &response, started.elapsed());
+        let response = chat(&self.http, &self.api_key, "review", &self.model, &body).await?;
 
         let content = response["choices"][0]["message"]["content"]
             .as_str()

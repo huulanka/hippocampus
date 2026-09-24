@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select cs.event_id\n        from capture_search cs\n        left join capture_echo_judged j on j.capture_event_id = cs.event_id\n        where j.capture_event_id is null\n          and cs.embedding is not null\n        order by cs.occurred_at desc\n        limit $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "event_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d67fc9f26c94fe348c532510d25e0ad31e396a51046f4cece85e72b7eea0ed96"
+}

@@ -47,7 +47,8 @@ pub struct AppState {
     judging:
         Arc<std::sync::Mutex<std::collections::HashMap<uuid::Uuid, routes::captures::JudgeSlot>>>,
     /// How long a failed judgement blocks a new attempt for the same
-    /// capture. See `judging`.
+    /// capture the first time; every further failure doubles it. See
+    /// `judging`.
     echo_judge_retry_backoff: std::time::Duration,
     audio_dir: std::path::PathBuf,
     timezone: chrono_tz::Tz,
@@ -120,14 +121,14 @@ async fn main() -> anyhow::Result<()> {
         config.judge,
         config.model_cache_dir.clone().into(),
         config.openrouter_api_key.clone(),
-        config.echo_judge_model.clone(),
+        config.echo_judge_models.clone(),
         config.openrouter_zdr,
     )
     .await?
     .map(Arc::new);
     match &judge {
         Some(loaded) => tracing::info!(
-            judge = %loaded.name(),
+            judge = %loaded.describe(),
             min_score = config.echo_min_rerank,
             "echo judging enabled"
         ),
@@ -173,6 +174,7 @@ async fn main() -> anyhow::Result<()> {
     // shrinking while the first request of this one arrives, not waiting
     // for someone to ask.
     pipeline::watch(state.clone(), config.retry);
+    pipeline::watch_echoes(state.clone());
 
     // Slow on purpose, and deliberately not on the same clock as the
     // capture pipeline: that one is catching up on work a user is

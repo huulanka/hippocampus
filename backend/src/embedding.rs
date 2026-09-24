@@ -13,13 +13,21 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config as BertConfig, DTYPE};
 use hf_hub::api::sync::ApiBuilder;
-use tokenizers::Tokenizer;
+use tokenizers::{Tokenizer, TruncationParams};
 use tokio::sync::Mutex;
 
 /// intfloat/multilingual-e5-small: 384 dims, handles German + English well
 /// enough for a personal note archive, small enough to run on a weak NAS.
 const DIMENSIONS: usize = 384;
 const MODEL_ID: &str = "intfloat/multilingual-e5-small";
+
+/// The longest input the model has position embeddings for. A longer one
+/// does not degrade gracefully, it fails outright ("index-select invalid
+/// index 512 with dim size 512") — and a capture that cannot be embedded
+/// is missing from search and echo, and was retried every few minutes
+/// forever. Long notes are cut here instead: what fits is still most of
+/// what a note is about, and it is far better than nothing.
+const MAX_TOKENS: usize = 512;
 
 struct Loaded {
     model: BertModel,
@@ -40,8 +48,14 @@ impl Embedder {
             let weights_path = repo.get("model.safetensors")?;
 
             let config: BertConfig = serde_json::from_str(&std::fs::read_to_string(config_path)?)?;
-            let tokenizer = Tokenizer::from_file(tokenizer_path)
+            let mut tokenizer = Tokenizer::from_file(tokenizer_path)
                 .map_err(|err| anyhow::anyhow!("loading tokenizer: {err}"))?;
+            tokenizer
+                .with_truncation(Some(TruncationParams {
+                    max_length: MAX_TOKENS,
+                    ..Default::default()
+                }))
+                .map_err(|err| anyhow::anyhow!("configuring truncation: {err}"))?;
 
             // CPU only, deliberately: this is the code path that used to
             // crash on a NAS without a GPU, so a device that only exists

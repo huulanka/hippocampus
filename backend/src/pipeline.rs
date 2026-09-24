@@ -305,10 +305,8 @@ pub async fn finish(state: &AppState, item: &Unfinished, max_attempts: i32) {
 
 /// Runs forever, finishing what did not finish the first time.
 ///
-/// A loop rather than "next time someone opens it", which is how the echo
-/// backfill works: an echo is only worth having when a capture is being
-/// looked at, but a capture's *entities* are what make it findable from
-/// somewhere else. Waiting for someone to open it would mean the note
+/// A loop rather than "next time someone opens it": a capture's
+/// *entities* are what make it findable from somewhere else. Waiting for someone to open it would mean the note
 /// nobody revisits — which is precisely the note this whole system exists
 /// to hand back — stays meaningless forever.
 pub fn watch(state: AppState, settings: RetrySettings) {
@@ -373,6 +371,55 @@ pub fn watch(state: AppState, settings: RetrySettings) {
             // a rate limit.
             for item in &items {
                 finish(&state, item, settings.max_attempts).await;
+            }
+        }
+    });
+}
+
+/// How often [`watch_echoes`] looks for captures without an echo.
+///
+/// Cheap when there is nothing to do — one indexed query — and whether a
+/// capture is actually tried again is up to its own backoff, not this.
+const ECHO_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// How many unjudged captures one pass looks at.
+const ECHO_SWEEP_BATCH: i64 = 50;
+
+/// Runs forever, judging the echoes that were not judged the first time.
+///
+/// A judgement used to be retried only when someone read the capture. That
+/// sounded like enough — an echo is only worth having while a capture is
+/// being looked at — and in practice it meant the opposite: the client
+/// stops asking after 45 seconds, so a capture whose judgement failed
+/// while it was open simply never had an echo. With a rate-limited judge,
+/// that was a large share of them (ADR 0015).
+///
+/// Each capture keeps its own backoff, doubling with every failure (see
+/// `judge_backoff`), and a pass stops at the first failure: the next
+/// capture would be asking the same provider that just said no.
+pub fn watch_echoes(state: AppState) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(ECHO_SWEEP_INTERVAL).await;
+
+            let pending = match crate::echo::unjudged(&state.pool, ECHO_SWEEP_BATCH).await {
+                Ok(pending) => pending,
+                Err(err) => {
+                    tracing::warn!(?err, "could not look for captures without an echo");
+                    continue;
+                }
+            };
+
+            let mut judged = 0;
+            for capture_event_id in pending {
+                match crate::routes::captures::judge_if_due(&state, capture_event_id).await {
+                    Some(true) => judged += 1,
+                    Some(false) => break,
+                    None => {}
+                }
+            }
+            if judged > 0 {
+                tracing::info!(judged, "judged echoes that were left unjudged");
             }
         }
     });

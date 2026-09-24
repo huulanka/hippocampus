@@ -86,7 +86,7 @@ Who judges is `HIPPOCAMPUS_RERANKER`:
 
 | Value | What it does |
 | --- | --- |
-| `remote` (default) | A small hosted model over OpenRouter, ZDR-routed, same path as structuring. `ECHO_JUDGE_MODEL` picks it; the default is `mistralai/mistral-small-2603`, chosen for German. |
+| `remote` (default) | A small hosted model over OpenRouter, ZDR-routed, same path as structuring. `ECHO_JUDGE_MODEL` picks it; the default is `google/gemini-3.5-flash-lite`, with `mistralai/mistral-small-3.2-24b-instruct` as a fallback (`ECHO_JUDGE_FALLBACK_MODEL`) when it does not answer. Chosen by measurement, see ADR 0015. |
 | `bge` | `bge-reranker-v2-m3` locally through candle. The only option that keeps capture text on the machine — and the only one that needs hardware for it (see below). |
 | `off` | Embedding similarity alone, which measurably ranks unrelated captures above related ones. |
 
