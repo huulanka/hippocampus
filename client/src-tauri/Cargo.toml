@@ -33,6 +33,10 @@ serde_json = "1"
 contracts = { version = "1.15.1", path = "../../contracts" }
 anyhow = "1"
 hound = "3"
+# Recording and Parakeet in Swift on the phone, since `cpal` and `ort` do
+# not reach iOS. A dependency everywhere, and an empty shell on a Mac, so
+# its permissions exist on every platform the capability file is read for.
+tauri-plugin-hippocampus-speech = { path = "plugins/speech" }
 reqwest = { version = "0.13", default-features = false, features = ["json", "multipart", "rustls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
 iana-time-zone = "0.1"

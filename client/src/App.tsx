@@ -21,6 +21,7 @@ import {
   onLocked,
   onOpenBrief,
   onOpenReview,
+  onRecordRequest,
   onReviewDue,
   onSummonCapture,
   onUnlocked,
@@ -109,6 +110,17 @@ function Shell() {
   useEffect(
     () =>
       onSummonCapture(() => {
+        setStack((s) => [...s.filter((v) => v.kind !== "capture"), { kind: "capture" }]);
+        setSummons((n) => n + 1);
+      }),
+    [],
+  );
+
+  /// The phone's Action Button (docs/iphone.md, I5): the same as the
+  /// Mac's shortcut — open the capture sheet and start recording.
+  useEffect(
+    () =>
+      onRecordRequest(() => {
         setStack((s) => [...s.filter((v) => v.kind !== "capture"), { kind: "capture" }]);
         setSummons((n) => n + 1);
       }),

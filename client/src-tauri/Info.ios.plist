@@ -10,5 +10,8 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
 	</dict>
+	<!-- Without it iOS ends the app the moment it asks for the microphone. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hippocampus records what you say to keep it as a note. It is transcribed on this iPhone, and the recording is kept with the note on your own backend.</string>
 </dict>
 </plist>

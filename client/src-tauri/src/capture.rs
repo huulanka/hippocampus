@@ -77,11 +77,30 @@ pub fn speech_available() -> bool {
     asr::model_dir().is_ok()
 }
 
+/// Opens the microphone. Synchronous on the Mac, where it always has been.
+#[cfg(desktop)]
 #[tauri::command]
 pub fn start_recording(
     app: tauri::AppHandle,
     state: tauri::State<'_, CaptureState>,
 ) -> Result<(), String> {
+    begin_recording(&app, &state)
+}
+
+/// The same, off the main thread. A synchronous command runs on the main
+/// thread, and on the phone opening the microphone waits for Swift, which
+/// the first time waits for the permission prompt — which iOS draws on the
+/// main thread. Blocked, it would never appear.
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn start_recording(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CaptureState>,
+) -> Result<(), String> {
+    begin_recording(&app, &state)
+}
+
+fn begin_recording(app: &tauri::AppHandle, state: &CaptureState) -> Result<(), String> {
     let mut slot = state.recording.lock().map_err(|_| "recorder is wedged")?;
     if slot.is_some() {
         return Err("already recording".to_string());
@@ -103,22 +122,111 @@ pub fn start_recording(
     *slot = Some(Recording::start().map_err(|err| err.to_string())?);
     // The one visible sign, from the menu bar, that the mic is actually
     // listening — see `crate::tray`.
-    crate::tray::activity_begin(&app);
+    crate::tray::activity_begin(app);
     Ok(())
 }
 
 /// Throws the recording away without transcribing or storing it.
+#[cfg(desktop)]
 #[tauri::command]
 pub fn cancel_recording(
     app: tauri::AppHandle,
     state: tauri::State<'_, CaptureState>,
 ) -> Result<(), String> {
+    discard_recording(&app, &state)
+}
+
+/// Off the main thread for the same reason as [`start_recording`].
+#[cfg(mobile)]
+#[tauri::command]
+pub async fn cancel_recording(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, CaptureState>,
+) -> Result<(), String> {
+    discard_recording(&app, &state)
+}
+
+fn discard_recording(app: &tauri::AppHandle, state: &CaptureState) -> Result<(), String> {
     let mut slot = state.recording.lock().map_err(|_| "recorder is wedged")?;
     if let Some(recording) = slot.take() {
         let _ = recording.finish();
-        crate::tray::activity_end(&app);
+        crate::tray::activity_end(app);
     }
     Ok(())
+}
+
+/// Where the speech model stands. On a Mac it is either installed by
+/// `scripts/fetch-asr-model.sh` or not, and nothing here can change that;
+/// on the phone it is downloaded from Settings, and this follows it.
+#[derive(Serialize, Default)]
+pub struct SpeechModel {
+    pub installed: bool,
+    pub can_download: bool,
+    pub downloading: bool,
+    pub fraction: f64,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn speech_model() -> SpeechModel {
+    #[cfg(desktop)]
+    {
+        SpeechModel {
+            installed: asr::model_dir().is_ok(),
+            ..SpeechModel::default()
+        }
+    }
+    #[cfg(mobile)]
+    {
+        match asr::speech().and_then(|speech| speech.model_status().map_err(anyhow::Error::msg)) {
+            Ok(status) => SpeechModel {
+                installed: status.installed,
+                can_download: true,
+                downloading: status.downloading,
+                fraction: status.fraction,
+                error: status.error,
+            },
+            Err(err) => SpeechModel {
+                error: Some(err.to_string()),
+                ..SpeechModel::default()
+            },
+        }
+    }
+}
+
+/// Whether the Action Button asked for a recording that has not been
+/// answered yet (`plugins/speech`, `ios/RecordIntent.swift`). Always
+/// false on a Mac, whose record button is its shortcut.
+#[tauri::command]
+pub async fn take_record_request() -> bool {
+    #[cfg(desktop)]
+    {
+        false
+    }
+    #[cfg(mobile)]
+    {
+        asr::speech()
+            .and_then(|speech| speech.take_record_request().map_err(anyhow::Error::msg))
+            .unwrap_or_else(|err| {
+                log::warn!("could not ask for an Action Button press: {err:#}");
+                false
+            })
+    }
+}
+
+/// Starts fetching the model onto the phone; [`speech_model`] follows it.
+#[tauri::command]
+pub async fn download_speech_model() -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        Err("on a Mac the model comes from scripts/fetch-asr-model.sh".to_string())
+    }
+    #[cfg(mobile)]
+    {
+        asr::speech()
+            .map_err(|err| err.to_string())?
+            .download_model()
+    }
 }
 
 /// Stops recording, transcribes on-device, writes the capture down, and

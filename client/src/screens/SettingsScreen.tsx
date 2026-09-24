@@ -30,6 +30,9 @@ import {
   setReviewSchedule,
   type ReviewSchedule,
   speechAvailable,
+  speechModel,
+  downloadSpeechModel,
+  type SpeechModel,
   type LockStatus,
 } from "../desktop";
 import { getApiBaseUrl, getBackendVersion, setApiBaseUrl } from "../api";
@@ -518,16 +521,7 @@ export function SettingsScreen() {
 
       {mac && <MeetingsSection />}
 
-      <Section
-        title="Speech"
-        note={
-          canSpeak
-            ? `On-device, always. Your voice is the most revealing thing this system holds, so it is heard on this ${phone ? "phone" : "Mac"}, not by a service somewhere else.`
-            : phone
-              ? "Speaking a note is not built for the phone yet; it will use the same model as the Mac, on the phone itself. Typing works now."
-              : "The speech model is not installed. Run scripts/fetch-asr-model.sh to enable spoken capture; typing works either way."
-        }
-      />
+      <SpeechSection canSpeak={canSpeak} phone={phone} onReady={() => setCanSpeak(true)} />
 
       <Section
         title="What is kept"
@@ -776,6 +770,88 @@ function MeetingsSection() {
       {status?.error && (
         <Problem>Meetings can't be checked right now — {status.error}</Problem>
       )}
+    </Section>
+  );
+}
+
+/// The speech model: on a Mac installed by a script, on the phone fetched
+/// from here, once. Not bundled with the phone app, because it is several
+/// hundred megabytes and the app is reinstalled every week under free
+/// signing; downloaded, it stays.
+function SpeechSection({
+  canSpeak,
+  phone,
+  onReady,
+}: {
+  canSpeak: boolean;
+  phone: boolean;
+  onReady: () => void;
+}) {
+  const [model, setModel] = useState<SpeechModel | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const ready = useRef(onReady);
+  ready.current = onReady;
+
+  useEffect(() => {
+    if (phone) speechModel().then(setModel);
+  }, [phone]);
+
+  // Followed while it downloads; a second is fine-grained enough for a bar
+  // that takes minutes to fill.
+  useEffect(() => {
+    if (!model?.downloading) return;
+    const id = window.setInterval(() => {
+      speechModel().then((next) => {
+        setModel(next);
+        if (next?.installed && !next.downloading) ready.current();
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [model?.downloading]);
+
+  const where = phone ? "iPhone" : "Mac";
+  const note = canSpeak
+    ? `Heard on this ${where}, by the same model on both, not by a service somewhere else. Your voice is the most revealing thing this system holds.`
+    : phone
+      ? "Speaking needs the speech model on this iPhone: a few hundred megabytes, fetched once, best over Wi-Fi. It stays through reinstalls. Typing works meanwhile."
+      : "The speech model is not installed. Run scripts/fetch-asr-model.sh to enable spoken capture; typing works either way.";
+
+  if (!phone) return <Section title="Speech" note={note} />;
+
+  return (
+    <Section title="Speech" note={note}>
+      {model && !model.installed && (
+        <Row label={model.downloading ? "Downloading" : "Speech model"}>
+          {model.downloading ? (
+            <span className="settings-inline">
+              <progress className="settings-progress" max={1} value={model.fraction} />
+              <span className="meta" data-numeric>
+                {Math.round(model.fraction * 100)}%
+              </span>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setError(null);
+                downloadSpeechModel()
+                  .then(() => speechModel())
+                  .then(setModel)
+                  .catch((err) => setError(String(err)));
+              }}
+            >
+              Download
+            </button>
+          )}
+        </Row>
+      )}
+      {model?.installed && (
+        <Row label="Speech model">
+          <span className="meta">On this iPhone</span>
+        </Row>
+      )}
+      {(error ?? model?.error) && <Problem>Not downloaded: {error ?? model?.error}</Problem>}
     </Section>
   );
 }

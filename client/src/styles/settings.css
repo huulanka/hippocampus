@@ -166,3 +166,30 @@
     width: 120px;
   }
 }
+
+@layer screens {
+  /* The speech model's download on the phone: minutes, so it shows how
+     far it has got rather than a spinner that says nothing. */
+  .settings-progress {
+    width: 140px;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    border: none;
+    border-radius: var(--radius-full);
+    background: var(--line-strong);
+    overflow: hidden;
+  }
+  .settings-progress::-webkit-progress-bar {
+    background: var(--line-strong);
+    border-radius: var(--radius-full);
+  }
+  .settings-progress::-webkit-progress-value {
+    background: var(--accent);
+    border-radius: var(--radius-full);
+    transition: width var(--dur-slow) var(--ease-out);
+  }
+  .settings-progress::-moz-progress-bar {
+    background: var(--accent);
+  }
+}

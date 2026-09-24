@@ -166,6 +166,9 @@ pub fn run() {
     let builder = tauri::Builder::default();
     #[cfg(desktop)]
     let builder = desktop_plugins(builder);
+    // Recording and Parakeet on the phone, in Swift (`plugins/speech`); on
+    // a Mac it registers and does nothing.
+    let builder = builder.plugin(tauri_plugin_hippocampus_speech::init());
 
     builder
         // Registered first so nothing logged during setup is lost. Writes
@@ -221,6 +224,9 @@ pub fn run() {
             capture::stop_recording,
             capture::cancel_recording,
             capture::capture_text,
+            capture::speech_model,
+            capture::download_speech_model,
+            capture::take_record_request,
             sync::outbox_status,
             sync::sync_now,
             backend::api_request,
@@ -254,6 +260,9 @@ pub fn run() {
             draft::draft_clear,
         ])
         .setup(|app| {
+            #[cfg(mobile)]
+            asr::install(app.handle());
+
             // Settings are loaded before the shortcut is registered, and
             // the handler reads them back out of managed state, so a
             // shortcut changed at runtime takes effect without a restart.

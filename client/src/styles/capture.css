@@ -121,3 +121,90 @@
     margin: 0;
   }
 }
+
+/* The phone's record button, the one every voice recorder has: a ring
+   with a clay disc in it, which becomes a stop square while it listens.
+   Only the phone draws it (CaptureScreen); the Mac records from its
+   shortcut. */
+@layer screens {
+  .record-orb {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 84px;
+    height: 84px;
+    margin: var(--space-4) auto var(--space-2);
+    padding: 0;
+    border: 3px solid color-mix(in srgb, var(--text) 28%, transparent);
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .record-orb:active {
+    transform: scale(0.94);
+  }
+  .record-orb:disabled {
+    opacity: 0.4;
+  }
+  .record-orb-dot,
+  .record-orb-stop {
+    display: block;
+    background: var(--glass-sheen), var(--accent);
+    box-shadow: var(--glass-rim);
+    transition:
+      width var(--dur-base) var(--ease-out),
+      height var(--dur-base) var(--ease-out),
+      border-radius var(--dur-base) var(--ease-out);
+  }
+  .record-orb-dot {
+    width: 66px;
+    height: 66px;
+    border-radius: 50%;
+  }
+  .record-orb-stop {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+  /* While it listens, a ring breathes out from the button: the one sign,
+     at a glance from arm's length, that the microphone is open. */
+  .record-orb.recording::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    animation: record-breathe var(--dur-breath) var(--ease-out) infinite;
+    pointer-events: none;
+  }
+  @keyframes record-breathe {
+    from {
+      transform: scale(1);
+      opacity: 0.8;
+    }
+    to {
+      transform: scale(1.35);
+      opacity: 0;
+    }
+  }
+
+  .capture-recording {
+    padding-top: var(--space-4);
+  }
+  .record-clock {
+    margin: var(--space-4) 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-4xl);
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    color: var(--text-bright);
+  }
+  .record-discard {
+    display: block;
+    min-height: var(--tap-min);
+    margin: var(--space-3) auto 0;
+    font-size: var(--text-md);
+  }
+}
