@@ -40,4 +40,4 @@ reasoning behind everything else.
 - **[0011](adr/0011-reading-is-guarded-capturing-is-not.md)** — Reading is guarded, capturing is not
 - **[0012](adr/0012-the-shortcut-is-the-record-button-nothing-else-summons-recording.md)** — The app lives in the menu bar; only the shortcut starts a recording
 - **[0013](adr/0013-the-calendar-stays-on-the-mac.md)** — The calendar stays on the Mac; the backend only matches
-- **[0014](adr/0014-structuring-is-a-job-any-device-may-claim.md)** — Structuring is a job any device may claim (proposed)
+- **[0014](adr/0014-structuring-is-a-job-any-device-may-claim.md)** — Structuring is a job any device may claim (not built: the on-device models were not good enough)

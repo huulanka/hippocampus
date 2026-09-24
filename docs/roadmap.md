@@ -64,8 +64,8 @@ have.
 ## Phase 4: reaching further
 
 - iPhone: an app of its own, Tauri on iOS, signed for free. Scope and
-  phases in [`docs/iphone.md`](iphone.md); structuring on the devices is
-  proposed in ADR 0014.
+  phases in [`docs/iphone.md`](iphone.md). Structuring stays on the
+  backend; ADR 0014 records why it does not move onto the devices.
 - Weekly review, tied to a review appointment you set anyway. **Done.**
 - Remembering ahead: intentions that hang on people and subjects, and a
   context echo before meetings. **Done**; scope in
