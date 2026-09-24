@@ -4,6 +4,7 @@ import { createCapture } from "../api";
 import { useEcho } from "../useEcho";
 import { useIntentions } from "../useIntentions";
 import { IntentionCard } from "../components/Intention";
+import { usePhoneLayout } from "../phone";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   cancelRecording,
@@ -12,6 +13,7 @@ import {
   getSettings,
   hideWindow,
   runningInDesktopApp,
+  runningOnPhone,
   speechAvailable,
   startRecording,
   stopRecording,
@@ -90,6 +92,11 @@ export function CaptureScreen({
   const [canSpeak, setCanSpeak] = useState(false);
   const [shortcut, setShortcut] = useState(formatAccelerator(DEFAULT_CAPTURE_SHORTCUT));
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  /// The phone gets the record button of every voice recorder: large,
+  /// round, in the middle. The Mac keeps its row of buttons, since the
+  /// shortcut is the record button there (ADR 0012).
+  const phone = usePhoneLayout();
+  const here = runningOnPhone() ? "this iPhone" : "this Mac";
   // The summons effect fires from outside React's render cycle, so it
   // reads these rather than the captured values, which would be stale.
   const phaseRef = useRef(phase);
@@ -121,8 +128,15 @@ export function CaptureScreen({
     setError(null);
     setText("");
 
-    if (canSpeakRef.current) void beginRecording();
-    else if (focusOnOpen) inputRef.current?.focus();
+    // Asked rather than read from state when the answer is not in yet: a
+    // summons that opens this sheet arrives in the same breath as the
+    // sheet itself, before the first answer about speech has come back,
+    // and would otherwise fall through to typing every time.
+    const speak = canSpeakRef.current ? Promise.resolve(true) : speechAvailable();
+    void speak.then((available) => {
+      if (available) void beginRecording();
+      else if (focusOnOpen) inputRef.current?.focus();
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summons]);
 
@@ -213,14 +227,27 @@ export function CaptureScreen({
     }
   }
 
+  /// Set while the microphone is being opened. Two starts can arrive for
+  /// one intention — a press that is delivered twice, as the Watch does,
+  /// or a summons that lands while the sheet is still opening — and the
+  /// second must be a no-op, not an "already recording" error on screen.
+  const starting = useRef(false);
+
   async function beginRecording() {
+    if (starting.current || phaseRef.current === "recording") return;
+    starting.current = true;
     setError(null);
     setElapsed(0);
     try {
       await startRecording();
+      // Written through at once, not left for the next render: a second
+      // start arriving before that render has to see it already.
+      phaseRef.current = "recording";
       setPhase("recording");
     } catch (err) {
       setError(String(err));
+    } finally {
+      starting.current = false;
     }
   }
 
@@ -258,6 +285,25 @@ export function CaptureScreen({
     inputRef.current?.focus();
   }
 
+  if (phase === "recording" && phone) {
+    return (
+      <div className="capture-idle capture-recording">
+        <Mascot state="listening" cell={6} />
+        <p className="record-clock" data-numeric aria-live="off">
+          {formatElapsed(elapsed)}
+        </p>
+        <p className="dim capture-lede">listening — speak freely</p>
+        <button type="button" className="record-orb recording" onClick={finishRecording}>
+          <span className="record-orb-stop" aria-hidden="true" />
+          <span className="sr-only">Done</span>
+        </button>
+        <button type="button" className="btn-quiet record-discard" onClick={discardRecording}>
+          Discard
+        </button>
+      </div>
+    );
+  }
+
   if (phase === "recording") {
     return (
       <div className="capture-idle">
@@ -267,7 +313,7 @@ export function CaptureScreen({
         <div className="panel transcript-card">
           <div className="label-micro">
             RECORDING{" "}
-            <span className="dim">— kept as the original, transcribed on this Mac</span>
+            <span className="dim">— kept as the original, transcribed on {here}</span>
           </div>
           <p className="transcript-placeholder">
             speak freely<span className="blink-cursor">▌</span>
@@ -289,7 +335,7 @@ export function CaptureScreen({
     return (
       <div className="capture-idle">
         <Mascot cell={6} />
-        <h3>{queued ? "kept on this Mac" : "kept, word for word"}</h3>
+        <h3>{queued ? `kept on ${here}` : "kept, word for word"}</h3>
         <div className="panel transcript-card">
           <div className="label-micro">
             CAPTURED{" "}
@@ -438,6 +484,18 @@ export function CaptureScreen({
         {canSpeak ? "Speak it, or type it." : "Type it."}
       </p>
 
+      {phone && canSpeak && (
+        <button
+          type="button"
+          className="record-orb"
+          onClick={beginRecording}
+          disabled={working}
+        >
+          <span className="record-orb-dot" aria-hidden="true" />
+          <span className="sr-only">Record</span>
+        </button>
+      )}
+
       <div className="panel transcript-card">
         <div className="label-micro">
           CAPTURE <span className="dim">— stored exactly as written</span>
@@ -467,7 +525,7 @@ export function CaptureScreen({
       {error && <p className="dim">Couldn't keep that: {error}</p>}
 
       <div className="capture-actions">
-        {canSpeak && (
+        {canSpeak && !phone && (
           <button type="button" className="btn btn-secondary" onClick={beginRecording}
           disabled={working}>
             ● Record

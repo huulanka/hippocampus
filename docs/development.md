@@ -83,9 +83,10 @@ What is *not* split, and why:
 The same client builds for iOS (`docs/iphone.md`). What only a Mac has
 (the menu bar, the global shortcut, the login item, Parakeet through
 ONNX, the calendar, Touch ID) is left out with `#[cfg(desktop)]`, and
-`asr`, `recorder` and `tray` are replaced by stand-ins under
-`client/src-tauri/src/mobile/`. Typed capture and reading work; speech
-does not yet.
+`asr`, `recorder` and `tray` have phone versions under
+`client/src-tauri/src/mobile/`: recording and Parakeet go through the
+Swift plugin in `client/src-tauri/plugins/speech` (below), and the tray
+is a stand-in.
 
 It needs Xcode (not only the Command Line Tools), CocoaPods and
 XcodeGen, and a free Apple ID added in Xcode under Settings, Accounts,
@@ -98,18 +99,22 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim
 
 cd client
 npx tauri ios init
+../scripts/prepare-ios.sh
 ```
 
 `src-tauri/gen/` is not in the repository, so the generated project is
-yours to regenerate. Two things `init` gets wrong for now, both fixed by
-hand in `src-tauri/gen/apple/project.yml` followed by
-`xcodegen generate` in that directory:
+yours to regenerate, and `scripts/prepare-ios.sh` has to follow every
+`init`. It copies in what has to live in the app target itself rather
+than in a plugin — the Action Button's App Intent
+(`src-tauri/ios/RecordIntent.swift`), since iOS only offers intents it
+finds in the app's own binary — and the app icon, and regenerates the
+project so Xcode sees them. Without it the app shows Tauri's default
+icon and the Action Button has nothing to offer.
 
-- `deploymentTarget` must be `iOS: 26.0`. The iOS 27 SDK rejects 14.0,
-  and speech and the on-device model need 26 anyway.
-- The signing team is not kept. Pass it on every build instead, as
-  `APPLE_DEVELOPMENT_TEAM`; it is the ten characters shown next to your
-  Personal Team in Xcode, and it stays out of the repository.
+`init` takes the deployment target (26.0) from `tauri.ios.conf.json`,
+but it does not keep the signing team. Pass that on every build instead,
+as `APPLE_DEVELOPMENT_TEAM`; it is the ten characters shown next to your
+Personal Team in Xcode, and it stays out of the repository.
 
 `src-tauri/Info.ios.plist` adds a scene manifest. Without it an app
 built with the iOS 27 SDK exits on launch ("UIScene life cycle is
@@ -128,9 +133,31 @@ xcrun devicectl device install app --device <UDID> \
 xcrun devicectl device process launch --device <UDID> com.andreasbauer.hippocampus
 ```
 
-The app icon comes from the same source as the Mac's: run
-`python3 scripts/render-brand.py` after `init` to copy it into the
-generated project, or the app shows Tauri's default icon.
+Speech on the phone is Parakeet v3, the Mac's model, run on the Neural
+Engine by FluidAudio (`docs/iphone.md`, I4). The model is not bundled:
+it is several hundred megabytes and the app is reinstalled every week,
+so Settings downloads it once and it stays in the app's data across
+reinstalls. The plugin's Swift package pins FluidAudio to one release,
+because its API changed in each of the releases before. Two things are
+easy to trip over:
+
+- The Swift package builds for the deployment target in
+  `IPHONEOS_DEPLOYMENT_TARGET`, which `tauri ios build` sets. A plain
+  `cargo check --target aarch64-apple-ios` needs it set by hand
+  (`IPHONEOS_DEPLOYMENT_TARGET=26.0`), or FluidAudio fails to compile
+  for iOS 13.
+- The plugin's calls into Swift block until Swift answers, and the first
+  recording shows the microphone prompt, which iOS draws on the main
+  thread. So the commands that open the microphone are `async` on the
+  phone; a synchronous command runs on the main thread and would wait
+  for an answer that can never be drawn.
+
+The Action Button runs the App Intent, which leaves a timestamp in the
+app's user defaults and posts a notification; the plugin passes it on
+as a `record` event, and the webview, which also asks at start and on
+coming to the front, opens the capture sheet and records, as the Mac's
+shortcut does. A press older than thirty seconds is dropped, so an app
+opened much later never starts recording by itself.
 
 An extension (a control, later a Live Activity) is a second target in
 `project.yml`. Three things XcodeGen does not do by itself: the team has

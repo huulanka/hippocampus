@@ -1,0 +1,3 @@
+[default]
+description = "Lets the webview hear the Action Button: listening for the plugin's `record` event, and no more."
+permissions = ["allow-register-listener", "allow-remove-listener"]

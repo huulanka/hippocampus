@@ -5,7 +5,7 @@
 // degrades to doing nothing, so the browser stays a usable development
 // target instead of throwing on load.
 
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { addPluginListener, invoke, isTauri, type PluginListener } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { appLogDir } from "@tauri-apps/api/path";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -186,6 +186,71 @@ export async function speechAvailable(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/// Where the speech model stands. Mirrors `capture::SpeechModel`. On the
+/// phone it is downloaded from Settings; on a Mac it is installed by a
+/// script, and `can_download` is false.
+export interface SpeechModel {
+  installed: boolean;
+  can_download: boolean;
+  downloading: boolean;
+  fraction: number;
+  error: string | null;
+}
+
+export async function speechModel(): Promise<SpeechModel | null> {
+  if (!isTauri()) return null;
+  try {
+    return await invoke<SpeechModel>("speech_model");
+  } catch {
+    return null;
+  }
+}
+
+/// Calls `onPress` whenever the Action Button asked for a recording: at
+/// once if it was pressed while the app was running, and on start or on
+/// coming back to the front if it launched the app. Returns the cleanup.
+///
+/// Every path goes through `take_record_request`, which clears the press
+/// as it answers, so one press never records twice however many of these
+/// fire for it.
+export function onRecordRequest(onPress: () => void): () => void {
+  if (!isTauri()) return () => {};
+  let live = true;
+  // Acted on even if this listener has been torn down in the meantime:
+  // asking cleared the press, so dropping the answer would lose it.
+  const check = () =>
+    invoke<boolean>("take_record_request")
+      .then((requested) => {
+        if (requested) onPress();
+      })
+      .catch(() => {});
+
+  check();
+  const onVisible = () => {
+    if (document.visibilityState === "visible") void check();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+
+  let listener: PluginListener | undefined;
+  addPluginListener("hippocampus-speech", "record", () => void check())
+    .then((registered) => {
+      if (live) listener = registered;
+      else void registered.unregister();
+    })
+    .catch(() => {});
+
+  return () => {
+    live = false;
+    document.removeEventListener("visibilitychange", onVisible);
+    void listener?.unregister();
+  };
+}
+
+/// Starts the download and returns at once; `speechModel` follows it.
+export function downloadSpeechModel(): Promise<void> {
+  return invoke("download_speech_model");
 }
 
 export function startRecording(): Promise<void> {
