@@ -112,3 +112,26 @@ export function useEdgeSwipeBack(
     };
   }, [area, page, enabled, onBack]);
 }
+
+/// Whether you are reading down a page: the last scroll went down and you
+/// are past the top. The phone's tab bar steps back while this is true,
+/// the way the system's own bars get out of the way of a long read.
+export function useReading(area: RefObject<HTMLElement | null>, enabled: boolean, page: string): boolean {
+  const [reading, setReading] = useState(false);
+  useEffect(() => {
+    setReading(false);
+    const el = area.current;
+    if (!el || !enabled) return;
+    let last = el.scrollTop;
+    const onScroll = () => {
+      const y = el.scrollTop;
+      if (y < 40) setReading(false);
+      else if (y > last + 6) setReading(true);
+      else if (y < last - 6) setReading(false);
+      if (Math.abs(y - last) > 6) last = y;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [area, enabled, page]);
+  return reading;
+}

@@ -15,6 +15,9 @@
     overflow: hidden;
   }
 
+  /* A pane of glass floating inside the window rather than a strip down
+     its edge: the same material as the phone's tab bar, so the two read
+     as one app (components.css, `.glass`). */
   .rail {
     width: var(--rail-w);
     flex: none;
@@ -22,9 +25,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    padding: var(--space-4) var(--space-2);
-    background: var(--rail-bg);
-    border-right: 1px solid var(--line);
+    margin: var(--space-2) 0 var(--space-2) var(--space-2);
+    padding: var(--space-3) var(--space-2);
+    border: 0.5px solid var(--glass-edge);
+    border-radius: var(--radius-xl);
+    background: var(--glass-sheen), var(--glass);
+    box-shadow:
+      var(--glass-rim),
+      var(--glass-shadow);
   }
 
   .rail-inner {
@@ -76,8 +84,10 @@
     background: var(--surface-hover);
     color: var(--text);
   }
+  /* The chosen place sits in a drop of lighter glass, as on the phone. */
   .rail-place[aria-current="page"] {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    background: color-mix(in srgb, var(--text) 9%, transparent);
+    box-shadow: var(--glass-rim);
     color: var(--accent);
     font-weight: 600;
   }
@@ -163,19 +173,35 @@
     margin-bottom: var(--space-3);
     padding: var(--space-2) 2px;
     border: none;
-    border-radius: var(--radius-md);
-    background: var(--accent);
+    border-radius: var(--radius-lg);
+    /* Tinted glass: the rail's rim of light and sheen, over clay. */
+    background: var(--glass-sheen), var(--accent);
+    box-shadow: var(--glass-rim);
     color: var(--accent-text);
     font-size: var(--text-2xs);
     font-weight: 600;
     cursor: pointer;
-    transition: background-color var(--dur-fast) var(--ease-out);
+    transition:
+      filter var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
   }
   .rail-capture:hover {
-    background: color-mix(in srgb, var(--accent) 88%, var(--text-bright));
+    filter: brightness(1.08);
   }
   .rail-capture:active {
-    background: color-mix(in srgb, var(--accent) 86%, #000);
+    transform: scale(0.96);
+  }
+
+  /* The way back is a small capsule of glass, the phone's round back
+     button with its word written out, since a Mac has the room. */
+  .app .page .back-button {
+    min-height: 32px;
+    padding: 0 var(--space-3) 0 var(--space-2);
+    border: 0.5px solid var(--glass-edge);
+    border-radius: var(--radius-full);
+    background: var(--glass-sheen), var(--glass);
+    box-shadow: var(--glass-rim);
+    color: var(--text-quiet);
   }
 
 }

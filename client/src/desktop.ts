@@ -29,8 +29,11 @@ export function runningInDesktopApp(): boolean {
 /// well — it is the Tauri shell either way — but the shortcut, the menu
 /// bar, the login item, the calendar and the log folder are Mac things,
 /// and the Rust side does not register their commands on iOS at all.
+///
+/// Asked two ways, because either alone has failed somewhere: the user
+/// agent names the device, and a touch screen is the one thing no Mac has.
 export function runningOnPhone(): boolean {
-  return isTauri() && /iPhone|iPad|iPod/.test(navigator.userAgent);
+  return isTauri() && (/iPhone|iPad|iPod/.test(navigator.userAgent) || navigator.maxTouchPoints > 1);
 }
 
 /// Writes to the app's log file (see `tauri_plugin_log` in `lib.rs`), so a

@@ -108,9 +108,12 @@
       flex-direction: row;
       align-items: center;
       gap: var(--space-3);
+      margin: 0;
       padding: 0;
       border: none;
+      border-radius: 0;
       background: none;
+      box-shadow: none;
       /* The bar itself is only a row to lay the two out in; the gaps
          between them must not swallow taps meant for the page. */
       pointer-events: none;
@@ -134,10 +137,13 @@
       gap: 0;
       border: 0.5px solid var(--glass-edge);
       border-radius: var(--radius-full);
-      background: var(--glass);
-      -webkit-backdrop-filter: blur(22px) saturate(170%);
-      backdrop-filter: blur(22px) saturate(170%);
-      box-shadow: var(--glass-shadow);
+      background: var(--glass-sheen), var(--glass);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      box-shadow:
+        var(--glass-rim),
+        var(--glass-shadow);
+      transition: height var(--dur-slow) var(--ease-out);
     }
     .rail-places > li {
       flex: 1 1 0;
@@ -157,6 +163,29 @@
     .rail-place svg {
       width: 23px;
       height: 23px;
+      flex: none;
+    }
+    .rail-place span {
+      max-height: 14px;
+      overflow: hidden;
+      transition:
+        opacity var(--dur-base) var(--ease-out),
+        max-height var(--dur-slow) var(--ease-out);
+    }
+
+    /* Scrolling down into something long, the bar steps back: the names
+       go, the capsule gets lower, and more of the page shows. Scrolling
+       up, or reaching the top, brings them back. */
+    .app.reading .rail-places {
+      height: 50px;
+    }
+    .app.reading .rail-capture {
+      width: 50px;
+      height: 50px;
+    }
+    .app.reading .rail-place span {
+      opacity: 0;
+      max-height: 0;
     }
     /* Hover is not a state a finger has; on a phone it would stick to
        whatever was tapped last. */
@@ -164,8 +193,10 @@
       background: transparent;
       color: var(--text-muted);
     }
+    /* The chosen place sits in a drop of lighter glass inside the bar. */
     .rail-place[aria-current="page"] {
-      background: color-mix(in srgb, var(--text) 9%, transparent);
+      background: color-mix(in srgb, var(--text) 10%, transparent);
+      box-shadow: var(--glass-rim);
       color: var(--accent);
       font-weight: 600;
     }
@@ -182,12 +213,16 @@
       margin: 0;
       padding: 0;
       border-radius: 50%;
+      /* Tinted glass: the same rim of light and sheen as the bar beside
+         it, over clay instead of over the page. */
+      background: var(--glass-sheen), var(--accent);
       box-shadow:
-        var(--glass-shadow),
-        inset 0 1px 0 color-mix(in srgb, var(--paper-50) 30%, transparent);
+        var(--glass-rim),
+        var(--glass-shadow);
       transition:
         transform var(--dur-fast) var(--ease-out),
-        background-color var(--dur-fast) var(--ease-out);
+        width var(--dur-slow) var(--ease-out),
+        height var(--dur-slow) var(--ease-out);
     }
     .rail-capture svg {
       width: 27px;
@@ -204,7 +239,7 @@
       white-space: nowrap;
     }
     .rail-capture:hover {
-      background: var(--accent);
+      filter: none;
     }
     .rail-capture:active {
       transform: scale(0.92);
@@ -224,10 +259,12 @@
       margin: 0;
       padding: var(--space-2) var(--space-4);
       border-radius: var(--radius-full);
-      background: var(--glass);
-      -webkit-backdrop-filter: blur(22px) saturate(170%);
-      backdrop-filter: blur(22px) saturate(170%);
-      box-shadow: var(--glass-shadow);
+      background: var(--glass-sheen), var(--glass);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      box-shadow:
+        var(--glass-rim),
+        var(--glass-shadow);
       font-size: var(--text-xs);
       white-space: nowrap;
     }
@@ -244,7 +281,7 @@
     /* The way back, as the system draws it now: a round glass button in
        the corner, which stays put while the page scrolls under it. The
        word "Back" is still in it for a screen reader. */
-    .page .back-button {
+    .app .page .back-button {
       position: sticky;
       top: calc(var(--safe-top) + var(--space-1));
       z-index: var(--z-overlay);
@@ -261,24 +298,28 @@
       gap: 0;
       border: 0.5px solid var(--glass-edge);
       border-radius: 50%;
-      background: var(--glass);
-      -webkit-backdrop-filter: blur(22px) saturate(170%);
-      backdrop-filter: blur(22px) saturate(170%);
-      box-shadow: var(--glass-shadow);
+      background: var(--glass-sheen), var(--glass);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      box-shadow:
+        var(--glass-rim),
+        var(--glass-shadow);
       color: var(--text-bright);
       font-size: 0;
     }
-    .page .back-button svg {
+    .app .page .back-button svg {
       width: 21px;
       height: 21px;
       margin-left: -2px;
     }
-    .page .back-button:active {
+    .app .page .back-button:active {
       transform: scale(0.92);
     }
 
     /* — the capture sheet — ----------------------------------------- */
 
+    /* Fitted to the visible area by Sheet.tsx, which shrinks it above the
+       on-screen keyboard. */
     .sheet-layer {
       position: fixed;
       inset: 0;
@@ -290,15 +331,26 @@
       background: var(--scrim);
       animation: fade-in var(--dur-slow) var(--ease-out);
     }
+    /* A card, floating: inset from every edge and rounded to sit
+       concentric inside the corners of the screen, the way the system's
+       own sheets have looked since the glass redesign. */
     .sheet {
       position: absolute;
-      inset: calc(var(--safe-top) + var(--space-2)) 0 0;
+      inset: calc(var(--safe-top) + var(--space-2)) var(--space-2)
+        max(var(--space-2), calc(var(--safe-bottom) - var(--space-4)));
       display: flex;
       flex-direction: column;
-      border-radius: 28px 28px 0 0;
-      background: var(--surface);
-      box-shadow: 0 -12px 40px -12px rgb(0 0 0 / 0.5);
-      animation: sheet-in 380ms var(--ease-out);
+      border: 0.5px solid var(--glass-edge);
+      border-radius: 38px;
+      background: var(--glass-sheen), var(--surface);
+      box-shadow:
+        var(--glass-rim),
+        0 24px 60px -12px rgb(0 0 0 / 0.55);
+      overflow: hidden;
+      animation: sheet-in 420ms var(--ease-settle);
+    }
+    .sheet-layer.keyboard .sheet {
+      bottom: var(--space-2);
     }
     .sheet-layer.leaving .sheet {
       animation: sheet-out 220ms var(--ease-in-out) forwards;
@@ -312,12 +364,12 @@
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
-      padding: var(--space-4) var(--space-2) var(--space-1);
+      padding: var(--space-4) var(--space-3) var(--space-1);
       touch-action: none;
     }
     .sheet-grabber {
       position: absolute;
-      top: 6px;
+      top: 7px;
       left: 50%;
       width: 36px;
       height: 5px;
@@ -325,15 +377,9 @@
       background: var(--line-strong);
       transform: translateX(-50%);
     }
-    .sheet-cancel {
+    .sheet-close {
       justify-self: start;
-      min-height: var(--tap-min);
-      padding: 0 var(--space-3);
-      border: none;
-      background: none;
-      color: var(--accent);
-      font-size: var(--text-md);
-      cursor: pointer;
+      color: var(--text-quiet);
     }
     .sheet-title {
       grid-column: 2;
@@ -346,7 +392,7 @@
       min-height: 0;
       overflow: auto;
       overscroll-behavior: contain;
-      padding: 0 var(--space-4) calc(var(--safe-bottom) + var(--space-6));
+      padding: 0 var(--space-4) var(--space-5);
     }
 
     /* What is in the sheet. The mascot shrinks to a greeting, the field
@@ -371,8 +417,21 @@
     .sheet .capture-input {
       font-family: var(--font-display);
       font-size: var(--text-lg);
-      min-height: 30vh;
+      min-height: 26vh;
       resize: none;
+    }
+    /* With the keyboard up there is half a screen left: the greeting
+       goes, and the field and the button are all that stay. */
+    .sheet-layer.keyboard .capture-idle .mascot,
+    .sheet-layer.keyboard .capture-idle h3,
+    .sheet-layer.keyboard .capture-lede {
+      display: none;
+    }
+    .sheet-layer.keyboard .transcript-card {
+      margin-top: var(--space-1);
+    }
+    .sheet-layer.keyboard .capture-input {
+      min-height: 18vh;
     }
     .sheet .capture-actions {
       flex-direction: column-reverse;
@@ -384,8 +443,23 @@
       border-radius: var(--radius-full);
       font-size: var(--text-md);
     }
-    .sheet .key-hints {
+    /* A phone has no keyboard shortcuts, so nothing on it names one. */
+    .key-hints,
+    .kbd,
+    kbd {
       display: none;
+    }
+
+    .search-field {
+      top: calc(var(--safe-top) + var(--space-1));
+      min-height: 48px;
+      border: 0.5px solid var(--glass-edge);
+      background: var(--glass-sheen), var(--glass);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      backdrop-filter: blur(24px) saturate(180%);
+      box-shadow:
+        var(--glass-rim),
+        var(--glass-shadow);
     }
 
     /* — screens — ---------------------------------------------------- */
@@ -413,7 +487,6 @@
       gap: 2px;
       width: 100%;
     }
-    .notepad-foot .kbd,
     .notepad-nowhere {
       display: none;
     }
@@ -430,6 +503,74 @@
     }
     .app-main-bleed .graph-filters > * {
       flex: none;
+    }
+
+    /* The graph's bar: where you are on one line, the tools on the next,
+       the search taking whatever width the two buttons leave. */
+    .graph-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-2);
+      border-bottom: none;
+    }
+    .graph-tools {
+      width: 100%;
+    }
+    .graph-find {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+    }
+    /* The symbol alone: the search needs the width more than the word. */
+    .graph-tidy-word {
+      display: none;
+    }
+    .graph-tidy-toggle {
+      width: 38px;
+      padding: 0;
+    }
+    /* At a phone's width the two rings sit too close for their names to
+       fit beside each other, and the picture reads without them. */
+    .graph-ring-label,
+    .graph-horizon {
+      display: none;
+    }
+
+    /* The card for the entity in the middle, cut to one compact pane
+       along the bottom so it covers the edge of the orbit rather than
+       half of it: the name and its numbers on the left, the two actions
+       stacked on the right. */
+    .graph-overlays {
+      left: var(--space-3);
+      right: var(--space-3);
+      bottom: var(--space-3);
+      width: auto;
+    }
+    .graph-focus {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 2px var(--space-3);
+      padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+      border-radius: 28px;
+    }
+    .graph-focus > * {
+      grid-column: 1;
+    }
+    .graph-focus-name {
+      font-size: var(--text-xl);
+    }
+    .graph-focus .meta {
+      font-size: var(--text-xs);
+    }
+    .graph-focus-actions {
+      grid-column: 2;
+      grid-row: 1 / span 3;
+      flex-direction: column;
+      margin: 0;
+    }
+    .graph-focus > .graph-lonely {
+      grid-column: 1 / -1;
     }
 
     /* Settings as a grouped list: each section a rounded card of rows on

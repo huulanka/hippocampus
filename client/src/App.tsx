@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./styles/index.css";
 import { ThemeProvider } from "./theme";
 import { Rail } from "./components/Rail";
@@ -15,7 +15,7 @@ import { RelationsScreen } from "./screens/RelationsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { LockGate } from "./components/LockGate";
 import { Sheet } from "./components/Sheet";
-import { useEdgeSwipeBack, usePhoneLayout } from "./phone";
+import { useEdgeSwipeBack, usePhoneLayout, useReading } from "./phone";
 import {
   lockStatus,
   onLocked,
@@ -241,8 +241,27 @@ function Shell() {
   const pageRef = useRef<HTMLDivElement>(null);
   useEdgeSwipeBack(mainRef, pageRef, phone && depth > 0 && !sheet, back);
 
+  /// Every page starts at its top, and going back returns to where you
+  /// were on the one underneath. Before this the scroll area simply kept
+  /// its offset, so opening a capture from far down Today landed halfway
+  /// down the capture.
+  const pageKey = `${depth}-${view ? view.kind : place}`;
+  const scrolled = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    el.scrollTop = motion === "pop" ? (scrolled.current.get(pageKey) ?? 0) : 0;
+    const remember = () => scrolled.current.set(pageKey, el.scrollTop);
+    el.addEventListener("scroll", remember, { passive: true });
+    return () => el.removeEventListener("scroll", remember);
+    // Only when the page itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageKey]);
+
+  const readingDown = useReading(mainRef, phone, pageKey);
+
   return (
-    <div className="app">
+    <div className={`app${readingDown ? " reading" : ""}`}>
       <Rail place={place} onGo={go} onCapture={capture} lock={lock} onLockChange={setLock} />
 
       {/* The graph and the notepad are full-bleed. The graph is a canvas
@@ -256,7 +275,7 @@ function Shell() {
       >
         <div
           ref={pageRef}
-          key={`${depth}-${view ? view.kind : place}`}
+          key={pageKey}
           className={`page${motion ? ` page-${motion}` : ""}`}
         >
         {locked ? (
@@ -323,6 +342,7 @@ function Shell() {
               onOpenEntity={openEntity}
               onClose={close}
               locked={lock?.locked ?? false}
+              focusOnOpen={false}
             />
           )}
         </Sheet>

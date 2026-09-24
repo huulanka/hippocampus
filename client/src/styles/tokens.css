@@ -88,6 +88,16 @@
     --glass: color-mix(in srgb, var(--ink-700) 86%, transparent);
     --glass-edge: color-mix(in srgb, var(--sand-0) 11%, transparent);
     --glass-shadow: 0 10px 30px -8px rgb(0 0 0 / 0.55);
+    /* The two things that make glass read as a solid pane rather than a
+     * tinted hole: light caught along the top edge, a touch of shade
+     * along the bottom, and a faint sheen falling across it from above. */
+    --glass-rim:
+      inset 0 1px 0 0 rgb(255 248 236 / 0.14), inset 0 -1px 0 0 rgb(0 0 0 / 0.22);
+    --glass-sheen: linear-gradient(
+      160deg,
+      rgb(255 248 236 / 0.07) 0%,
+      rgb(255 248 236 / 0) 42%
+    );
     /* A grouped list on the phone (Settings): the group is lighter than
      * the ground in the dark theme and whiter than it on paper. */
     --surface-group: var(--ink-700);
@@ -173,8 +183,10 @@
     --radius-xs: 6px; /* chips, kbd */
     --radius-sm: 8px;
     --radius-md: 10px; /* buttons, inputs */
-    --radius-lg: 14px; /* cards */
-    --radius-xl: 18px; /* sheets */
+    /* Rounder than they were, after the system's own move to shapes
+     * concentric with the corners of the screen they sit on. */
+    --radius-lg: 18px; /* cards */
+    --radius-xl: 24px; /* sheets, grouped lists */
     --radius-full: 999px; /* entity pills */
 
     /* — motion — -----------------------------------------------------
@@ -254,6 +266,13 @@
     --glass: color-mix(in srgb, var(--paper-50) 84%, transparent);
     --glass-edge: color-mix(in srgb, #241d16 9%, transparent);
     --glass-shadow: 0 10px 30px -10px rgb(60 40 20 / 0.28);
+    --glass-rim:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.95), inset 0 -1px 0 0 rgb(60 40 20 / 0.05);
+    --glass-sheen: linear-gradient(
+      160deg,
+      rgb(255 255 255 / 0.6) 0%,
+      rgb(255 255 255 / 0) 45%
+    );
     --surface-group: var(--paper-50);
     --scrim: rgb(30 20 10 / 0.32);
 

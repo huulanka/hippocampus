@@ -12,8 +12,8 @@ const DISMISS = 110;
 ///
 /// Tapping the dimmed page above does not close it. A half-spoken note is
 /// the one thing in this app that cannot be got back, and a stray tap
-/// should not be what loses it; Cancel and pulling the handle down are
-/// both deliberate.
+/// should not be what loses it; the close button and pulling the handle
+/// down are both deliberate.
 export function Sheet({
   title,
   onClose,
@@ -25,6 +25,7 @@ export function Sheet({
   children: (close: () => void) => ReactNode;
 }) {
   const [leaving, setLeaving] = useState(false);
+  const layer = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; dy: number } | null>(null);
 
@@ -46,6 +47,28 @@ export function Sheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [close]);
 
+  /// The on-screen keyboard. iOS makes room for it by sliding the whole
+  /// page up underneath, which carried the sheet's top edge off the screen
+  /// with it. Instead the sheet is fitted to what is still visible — the
+  /// visual viewport — so it simply gets shorter and sits on the keyboard.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const el = layer.current;
+    if (!viewport || !el) return;
+    const fit = () => {
+      el.style.top = `${viewport.offsetTop}px`;
+      el.style.height = `${viewport.height}px`;
+      el.classList.toggle("keyboard", window.innerHeight - viewport.height > 120);
+    };
+    fit();
+    viewport.addEventListener("resize", fit);
+    viewport.addEventListener("scroll", fit);
+    return () => {
+      viewport.removeEventListener("resize", fit);
+      viewport.removeEventListener("scroll", fit);
+    };
+  }, []);
+
   const follow = (dy: number, animate: boolean) => {
     const el = panel.current;
     if (!el) return;
@@ -54,7 +77,7 @@ export function Sheet({
   };
 
   return (
-    <div className={`sheet-layer${leaving ? " leaving" : ""}`}>
+    <div ref={layer} className={`sheet-layer${leaving ? " leaving" : ""}`}>
       <div className="sheet-scrim" aria-hidden="true" />
       <div ref={panel} className="sheet" role="dialog" aria-modal="true" aria-label={title}>
         <div
@@ -81,8 +104,10 @@ export function Sheet({
           }}
         >
           <span className="sheet-grabber" aria-hidden="true" />
-          <button type="button" className="sheet-cancel" onClick={close}>
-            Cancel
+          <button type="button" className="glass-button sheet-close" aria-label="Close" onClick={close}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />
+            </svg>
           </button>
           <h2 className="sheet-title">{title}</h2>
         </div>
