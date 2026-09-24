@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getReview, writeStory, type ReviewTopic, type WeeklyReview } from "../api";
 import { BackButton } from "../components/BackButton";
 import { entityColor } from "../entityType";
+import { calendarDaysBetween } from "../ago";
 import { Upcoming } from "./TodayScreen";
 
 /// One calendar week, looked back on.
@@ -398,7 +399,7 @@ function range(start: string, end: string): string {
 }
 
 function ago(iso: string): string {
-  const days = Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  const days = calendarDaysBetween(iso);
   if (days < 1) return "today";
   if (days === 1) return "yesterday";
   if (days < 14) return `${days} days ago`;
