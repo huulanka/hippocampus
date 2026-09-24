@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { sendSession, type SentNote } from "../api";
-import { clearDraft, loadDraft, saveDraft } from "../desktop";
+import { clearDraft, loadDraft, runningOnPhone, saveDraft } from "../desktop";
 
 /// A page you keep adding to for hours and send once.
 ///
@@ -225,7 +225,7 @@ export function NotepadScreen({ onOpenCapture }: { onOpenCapture: (eventId: stri
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--moss)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="m4.5 12.5 5 5 10-11" />
               </svg>
-              Saved on this Mac
+              Saved on this {runningOnPhone() ? "phone" : "Mac"}
             </>
           ) : (
             "Not saved yet"
@@ -308,7 +308,9 @@ export function NotepadScreen({ onOpenCapture }: { onOpenCapture: (eventId: stri
             {notes.length} {notes.length === 1 ? "note" : "notes"} · {words}{" "}
             {words === 1 ? "word" : "words"}
           </span>
-          <span className="notepad-nowhere">Nothing has left this Mac yet.</span>
+          <span className="notepad-nowhere">
+            Nothing has left this {runningOnPhone() ? "phone" : "Mac"} yet.
+          </span>
         </span>
         <span className="notepad-actions">
           <kbd className="kbd">⌘ ↵</kbd>

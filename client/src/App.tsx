@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./styles/index.css";
 import { ThemeProvider } from "./theme";
 import { Rail } from "./components/Rail";
@@ -14,6 +14,8 @@ import { SearchScreen } from "./screens/SearchScreen";
 import { RelationsScreen } from "./screens/RelationsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { LockGate } from "./components/LockGate";
+import { Sheet } from "./components/Sheet";
+import { useEdgeSwipeBack, usePhoneLayout } from "./phone";
 import {
   lockStatus,
   onLocked,
@@ -206,9 +208,16 @@ function Shell() {
   const openEntity = (id: string) => setStack((s) => [...s, { kind: "entity", id }]);
   const openReview = (week?: string) => setStack((s) => [...s, { kind: "review", week }]);
   const openBrief = (key: string) => setStack((s) => [...s, { kind: "brief", key }]);
-  const back = () => setStack((s) => s.slice(0, -1));
+  const back = useCallback(() => setStack((s) => s.slice(0, -1)), []);
 
-  const view = stack[stack.length - 1];
+  const phone = usePhoneLayout();
+  const top = stack[stack.length - 1];
+  /// On the phone, capturing rises as a sheet over the page you were on
+  /// instead of replacing it, so the page underneath keeps being drawn.
+  const sheet = phone && top?.kind === "capture";
+  const view = sheet ? stack[stack.length - 2] : top;
+  const depth = sheet ? stack.length - 1 : stack.length;
+
   // A detail view always reads something, so it is gated whatever place it
   // was opened from. Capturing is not: it only ever adds.
   const reading = view ? view.kind !== "capture" : !OPEN_WHILE_LOCKED.includes(place);
@@ -218,6 +227,19 @@ function Shell() {
     view && view.kind !== "capture"
       ? "This"
       : (PLACES.find((entry) => entry.id === place)?.gatedName ?? "This");
+
+  /// Which way the page moved, so a detail slides in from the right and
+  /// going back slides the one underneath in from the left, as a
+  /// navigation stack does. Only the phone animates it (phone.css).
+  const lastDepth = useRef(depth);
+  const motion = depth > lastDepth.current ? "push" : depth < lastDepth.current ? "pop" : "";
+  useEffect(() => {
+    lastDepth.current = depth;
+  }, [depth]);
+
+  const mainRef = useRef<HTMLElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  useEdgeSwipeBack(mainRef, pageRef, phone && depth > 0 && !sheet, back);
 
   return (
     <div className="app">
@@ -229,8 +251,14 @@ function Shell() {
           screen gets would only be a border shrinking either back into a
           box. */}
       <main
+        ref={mainRef}
         className={`app-main${!view && (place === "graph" || place === "write") ? " app-main-bleed" : ""}`}
       >
+        <div
+          ref={pageRef}
+          key={`${depth}-${view ? view.kind : place}`}
+          className={`page${motion ? ` page-${motion}` : ""}`}
+        >
         {locked ? (
           <LockGate status={lock!} what={gatedName} onUnlocked={setLock} />
         ) : view?.kind === "capture" ? (
@@ -283,7 +311,22 @@ function Shell() {
             onGo={go}
           />
         )}
+        </div>
       </main>
+
+      {sheet && (
+        <Sheet title="New Capture" onClose={back}>
+          {(close) => (
+            <CaptureScreen
+              summons={summons}
+              onOpenCapture={openCapture}
+              onOpenEntity={openEntity}
+              onClose={close}
+              locked={lock?.locked ?? false}
+            />
+          )}
+        </Sheet>
+      )}
     </div>
   );
 }

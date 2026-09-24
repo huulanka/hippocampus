@@ -1,15 +1,17 @@
 /* The frame: a rail down the left, everything else in the rest.
  *
- * Below 720px the rail becomes a bottom tab bar. That switch is the only
- * structural difference between the Mac window and a phone — every screen
- * inside is already one column with a measure, so nothing else has to
- * know which one it is on.
+ * Below 720px the rail becomes a floating tab bar; phone.css has that and
+ * everything else the phone does differently.
  */
 
 @layer screens {
   .app {
     display: flex;
+    /* dvh, not vh: on a phone 100vh is the height with the browser chrome
+       collapsed, which is taller than what is on screen, and the bottom of
+       the app ends up below the glass. */
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
 
@@ -95,6 +97,12 @@
     overflow: hidden;
     position: relative;
   }
+  /* The one wrapper every screen sits in, there so the phone can slide it
+     in and out as a whole. A full-bleed screen fills it like it filled the
+     main area before. */
+  .app-main-bleed > .page {
+    height: 100%;
+  }
 
   /* One column with a measure, everywhere. Screens ask for this rather
      than each inventing its own max-width, which is how the app ended up
@@ -120,43 +128,7 @@
     gap: var(--space-8);
   }
 
-  /* — the phone — ----------------------------------------------------- */
-
-  @media (max-width: 720px) {
-    .app {
-      flex-direction: column-reverse;
-    }
-    .rail {
-      width: auto;
-      flex-direction: row;
-      align-items: stretch;
-      gap: 0;
-      padding: var(--space-1) var(--space-1) env(safe-area-inset-bottom, var(--space-2));
-      border-right: none;
-      border-top: 1px solid var(--line);
-    }
-    /* The brand and the lock button are desk furniture; on a phone the bar
-       is five targets and nothing else. Locking moves to Settings, where
-       there is room to say what it does. */
-    .rail-brand,
-    .rail-lock {
-      display: none;
-    }
-    .rail-places {
-      flex-direction: row;
-      flex-grow: 1;
-    }
-    .rail-places > li {
-      flex: 1 1 0;
-      min-width: 0;
-    }
-    .rail-place {
-      min-height: var(--tap-min);
-    }
-    .app-main {
-      padding: var(--space-5) var(--space-4) var(--space-8);
-    }
-  }
+  /* The phone is its own file, phone.css. */
 }
 
 /* Settings, until its own pass. The legacy rules still draw the rows; this
@@ -206,15 +178,4 @@
     background: color-mix(in srgb, var(--accent) 86%, #000);
   }
 
-  @media (max-width: 720px) {
-    /* On the phone it stops being a column item and becomes the one thing
-       in the middle of the bar, where a thumb already is. */
-    .rail-capture {
-      order: -1;
-      width: auto;
-      min-width: 64px;
-      margin: 0 var(--space-1) 0 0;
-      min-height: var(--tap-min);
-    }
-  }
 }

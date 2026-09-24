@@ -25,6 +25,14 @@ export function runningInDesktopApp(): boolean {
   return isTauri();
 }
 
+/// The same app, on an iPhone. `runningInDesktopApp` is true there as
+/// well — it is the Tauri shell either way — but the shortcut, the menu
+/// bar, the login item, the calendar and the log folder are Mac things,
+/// and the Rust side does not register their commands on iOS at all.
+export function runningOnPhone(): boolean {
+  return isTauri() && /iPhone|iPad|iPod/.test(navigator.userAgent);
+}
+
 /// Writes to the app's log file (see `tauri_plugin_log` in `lib.rs`), so a
 /// failure is on disk for the Logs button to show even if nobody was
 /// looking at a terminal when it happened. Falls back to the console in

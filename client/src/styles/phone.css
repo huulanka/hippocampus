@@ -1,0 +1,561 @@
+/* The phone.
+ *
+ * Everything the app does differently below 720px, in one place, so the
+ * desktop rules stay readable and the phone stays one decision rather
+ * than a footnote at the bottom of every file.
+ *
+ * The model is the system's own apps, not a shrunken Mac window:
+ *
+ * - Content runs edge to edge, under the Dynamic Island and behind the
+ *   tab bar, and the chrome floats on top as glass. A bar that is a solid
+ *   strip reads as part of the page; one you can see through reads as
+ *   above it.
+ * - The tab bar is a capsule of the five places, and capturing is a round
+ *   button of its own beside it — the thing this app exists for gets the
+ *   one control a thumb finds without looking, and it cannot be mistaken
+ *   for a sixth place.
+ * - Capturing rises as a sheet over the page you were on (Sheet.tsx).
+ * - A detail slides in from the right, and pulling from the left edge
+ *   takes it back (phone.ts).
+ * - Nothing is smaller than 44pt to touch, and no text field is smaller
+ *   than 16px, below which iOS zooms the whole page on focus.
+ */
+
+@layer screens {
+  @media (max-width: 720px) {
+    /* — the ground — ------------------------------------------------ */
+
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+    body {
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    button,
+    a,
+    label,
+    input,
+    select,
+    textarea {
+      touch-action: manipulation;
+    }
+    input,
+    select,
+    textarea {
+      font-size: max(16px, 1em);
+    }
+
+    .app {
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* The page scrolls under both bars: it starts below the Dynamic
+       Island and ends far enough above the tab bar that the last line can
+       be read clear of the glass. */
+    .app-main {
+      padding: 0 var(--space-4) calc(var(--tabbar-h) + var(--tabbar-gap) + var(--space-8));
+      overscroll-behavior-y: contain;
+    }
+    /* The top inset is the page's, not the scroll area's: WebKit measures
+       `position: sticky` from the scroll area's content edge, so padding
+       there would push the sticky back button down by exactly this much. */
+    .app-main > .page {
+      padding-top: calc(var(--safe-top) + var(--space-3));
+    }
+    .app-main-bleed {
+      padding: 0;
+    }
+    .app-main-bleed > .page {
+      padding-top: var(--safe-top);
+    }
+    .app-main-bleed .notepad {
+      padding-bottom: calc(var(--tabbar-h) + var(--tabbar-gap) + var(--space-3));
+    }
+
+    /* The top edge. What scrolls up under the Dynamic Island fades and
+       blurs out instead of running into the clock. */
+    .app::before {
+      content: "";
+      position: fixed;
+      inset: 0 0 auto;
+      height: calc(var(--safe-top) + var(--space-4));
+      z-index: var(--z-overlay);
+      pointer-events: none;
+      background: linear-gradient(
+        to bottom,
+        color-mix(in srgb, var(--bg) 94%, transparent) 0%,
+        color-mix(in srgb, var(--bg) 70%, transparent) 55%,
+        transparent
+      );
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
+      mask-image: linear-gradient(to bottom, #000 60%, transparent);
+    }
+
+    /* — the tab bar — ----------------------------------------------- */
+
+    .rail {
+      position: fixed;
+      z-index: var(--z-overlay);
+      left: var(--space-4);
+      right: var(--space-4);
+      bottom: var(--tabbar-gap);
+      width: auto;
+      flex-direction: row;
+      align-items: center;
+      gap: var(--space-3);
+      padding: 0;
+      border: none;
+      background: none;
+      /* The bar itself is only a row to lay the two out in; the gaps
+         between them must not swallow taps meant for the page. */
+      pointer-events: none;
+    }
+    .rail-places,
+    .rail-capture,
+    .rail-pending {
+      pointer-events: auto;
+    }
+    .rail-brand,
+    .rail-lock {
+      display: none;
+    }
+
+    .rail-places {
+      order: 1;
+      flex: 1 1 auto;
+      flex-direction: row;
+      height: var(--tabbar-h);
+      padding: 5px;
+      gap: 0;
+      border: 0.5px solid var(--glass-edge);
+      border-radius: var(--radius-full);
+      background: var(--glass);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
+      backdrop-filter: blur(22px) saturate(170%);
+      box-shadow: var(--glass-shadow);
+    }
+    .rail-places > li {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .rail-place {
+      height: 100%;
+      min-height: 0;
+      padding: 0;
+      gap: 3px;
+      border-radius: var(--radius-full);
+      color: var(--text-muted);
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .rail-place svg {
+      width: 23px;
+      height: 23px;
+    }
+    /* Hover is not a state a finger has; on a phone it would stick to
+       whatever was tapped last. */
+    .rail-place:hover {
+      background: transparent;
+      color: var(--text-muted);
+    }
+    .rail-place[aria-current="page"] {
+      background: color-mix(in srgb, var(--text) 9%, transparent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .rail-place:active {
+      transform: scale(0.94);
+    }
+
+    .rail-capture {
+      order: 2;
+      flex: none;
+      width: var(--tabbar-h);
+      height: var(--tabbar-h);
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+      border-radius: 50%;
+      box-shadow:
+        var(--glass-shadow),
+        inset 0 1px 0 color-mix(in srgb, var(--paper-50) 30%, transparent);
+      transition:
+        transform var(--dur-fast) var(--ease-out),
+        background-color var(--dur-fast) var(--ease-out);
+    }
+    .rail-capture svg {
+      width: 27px;
+      height: 27px;
+    }
+    /* The word stays for a screen reader; the shape is the label for
+       everyone else, as it is on every record button. */
+    .rail-capture span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+    .rail-capture:hover {
+      background: var(--accent);
+    }
+    .rail-capture:active {
+      transform: scale(0.92);
+    }
+
+    /* Waiting captures. On the phone this matters more than on the Mac —
+       a capture made without signal waits here until there is one — so it
+       floats above the bar rather than disappearing. */
+    .rail-pending {
+      position: fixed;
+      left: 50%;
+      bottom: calc(var(--tabbar-gap) + var(--tabbar-h) + var(--space-3));
+      transform: translateX(-50%);
+      flex-direction: row;
+      gap: var(--space-2);
+      width: auto;
+      margin: 0;
+      padding: var(--space-2) var(--space-4);
+      border-radius: var(--radius-full);
+      background: var(--glass);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
+      backdrop-filter: blur(22px) saturate(170%);
+      box-shadow: var(--glass-shadow);
+      font-size: var(--text-xs);
+      white-space: nowrap;
+    }
+
+    /* — moving between pages — -------------------------------------- */
+
+    .page-push {
+      animation: page-push var(--dur-slow) var(--ease-out);
+    }
+    .page-pop {
+      animation: page-pop var(--dur-slow) var(--ease-out);
+    }
+
+    /* The way back, as the system draws it now: a round glass button in
+       the corner, which stays put while the page scrolls under it. The
+       word "Back" is still in it for a screen reader. */
+    .page .back-button {
+      position: sticky;
+      top: calc(var(--safe-top) + var(--space-1));
+      z-index: var(--z-overlay);
+      align-self: flex-start;
+      flex: none;
+      width: var(--tap-min);
+      height: var(--tap-min);
+      min-height: 0;
+      /* The screens space their sections generously; right under the
+         button that gap would read as a missing title. */
+      margin: 0 0 calc(var(--space-4) * -1);
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      border: 0.5px solid var(--glass-edge);
+      border-radius: 50%;
+      background: var(--glass);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
+      backdrop-filter: blur(22px) saturate(170%);
+      box-shadow: var(--glass-shadow);
+      color: var(--text-bright);
+      font-size: 0;
+    }
+    .page .back-button svg {
+      width: 21px;
+      height: 21px;
+      margin-left: -2px;
+    }
+    .page .back-button:active {
+      transform: scale(0.92);
+    }
+
+    /* — the capture sheet — ----------------------------------------- */
+
+    .sheet-layer {
+      position: fixed;
+      inset: 0;
+      z-index: var(--z-sheet);
+    }
+    .sheet-scrim {
+      position: absolute;
+      inset: 0;
+      background: var(--scrim);
+      animation: fade-in var(--dur-slow) var(--ease-out);
+    }
+    .sheet {
+      position: absolute;
+      inset: calc(var(--safe-top) + var(--space-2)) 0 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: 28px 28px 0 0;
+      background: var(--surface);
+      box-shadow: 0 -12px 40px -12px rgb(0 0 0 / 0.5);
+      animation: sheet-in 380ms var(--ease-out);
+    }
+    .sheet-layer.leaving .sheet {
+      animation: sheet-out 220ms var(--ease-in-out) forwards;
+    }
+    .sheet-layer.leaving .sheet-scrim {
+      animation: fade-out 220ms var(--ease-in-out) forwards;
+    }
+    .sheet-head {
+      position: relative;
+      flex: none;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: var(--space-4) var(--space-2) var(--space-1);
+      touch-action: none;
+    }
+    .sheet-grabber {
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      width: 36px;
+      height: 5px;
+      border-radius: var(--radius-full);
+      background: var(--line-strong);
+      transform: translateX(-50%);
+    }
+    .sheet-cancel {
+      justify-self: start;
+      min-height: var(--tap-min);
+      padding: 0 var(--space-3);
+      border: none;
+      background: none;
+      color: var(--accent);
+      font-size: var(--text-md);
+      cursor: pointer;
+    }
+    .sheet-title {
+      grid-column: 2;
+      font-size: var(--text-md);
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+    .sheet-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding: 0 var(--space-4) calc(var(--safe-bottom) + var(--space-6));
+    }
+
+    /* What is in the sheet. The mascot shrinks to a greeting, the field
+       is set in the serif your own words are always set in, and the
+       buttons become the full-width capsules a thumb can't miss. The key
+       hints are a keyboard's, and a phone has none. */
+    .sheet .capture-idle {
+      max-width: none;
+      padding-top: var(--space-2);
+    }
+    .sheet .capture-idle .mascot {
+      transform: scale(0.7);
+      transform-origin: top center;
+      margin-bottom: calc(var(--space-6) * -1);
+    }
+    .sheet .transcript-card {
+      margin-top: var(--space-5);
+      padding: var(--space-4);
+      border-radius: var(--radius-lg);
+      background: var(--bg);
+    }
+    .sheet .capture-input {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      min-height: 30vh;
+      resize: none;
+    }
+    .sheet .capture-actions {
+      flex-direction: column-reverse;
+      align-items: stretch;
+      margin-top: var(--space-5);
+    }
+    .sheet .capture-actions .btn {
+      min-height: 52px;
+      border-radius: var(--radius-full);
+      font-size: var(--text-md);
+    }
+    .sheet .key-hints {
+      display: none;
+    }
+
+    /* — screens — ---------------------------------------------------- */
+
+    .today {
+      gap: var(--space-8);
+    }
+    .today-lead {
+      font-size: var(--text-3xl);
+      max-width: none;
+    }
+
+    /* The writing desk. Its header stacks, since a phone has no room for
+       the title and the state side by side, and the keyboard shortcut goes
+       with the keyboard. */
+    .notepad-head {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-1);
+      padding-block: var(--space-3);
+    }
+    .notepad-title {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      width: 100%;
+    }
+    .notepad-foot .kbd,
+    .notepad-nowhere {
+      display: none;
+    }
+
+    /* The graph's filters sit at its bottom edge, which on the phone is
+       under the tab bar: they get the bar's height as room, and scroll
+       sideways in one line rather than stacking up into the picture. */
+    .app-main-bleed .graph-filters {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: var(--space-2) var(--space-4)
+        calc(var(--tabbar-h) + var(--tabbar-gap) + var(--space-2));
+    }
+    .app-main-bleed .graph-filters > * {
+      flex: none;
+    }
+
+    /* Settings as a grouped list: each section a rounded card of rows on
+       the ground, its name above and its explanation below, both inset to
+       line up with the text in the rows. */
+    .settings {
+      gap: var(--space-8);
+    }
+    .settings-title {
+      padding: 0 var(--space-1);
+    }
+    .settings-section {
+      gap: var(--space-2);
+    }
+    .settings-section > .label-micro,
+    .settings-note,
+    .settings-problem {
+      padding: 0 var(--space-4);
+    }
+    .settings-rows {
+      padding: 0 var(--space-4);
+      border-radius: var(--radius-xl);
+      background: var(--surface-group);
+    }
+    .settings-row {
+      flex-direction: row;
+      align-items: center;
+      gap: var(--space-3);
+      min-height: 52px;
+      padding: var(--space-1) 0;
+      border-bottom: 0.5px solid var(--line);
+    }
+    /* A text field needs the whole width, so its name goes above it. */
+    .settings-row:has(.settings-input:not(.settings-time)) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-2);
+      padding: var(--space-3) 0;
+    }
+    .settings-control {
+      justify-content: flex-end;
+    }
+    .settings-input {
+      max-width: none;
+      min-height: var(--tap-min);
+      border: none;
+      background: var(--bg);
+    }
+    .settings .btn-secondary {
+      min-height: var(--tap-min);
+      padding: 0 var(--space-2);
+      border: none;
+      background: none;
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .settings-note {
+      font-size: var(--text-xs);
+    }
+    .settings .chip {
+      min-height: 36px;
+    }
+
+    /* A setting that is on or off is a switch here, as it is in every
+       other settings list on the phone. Still a real checkbox underneath,
+       so it toggles by keyboard and a screen reader says what it is. */
+    .settings .check input {
+      -webkit-appearance: none;
+      appearance: none;
+      position: relative;
+      width: 51px;
+      height: 31px;
+      border-radius: var(--radius-full);
+      background: var(--line-strong);
+      transition: background-color var(--dur-base) var(--ease-out);
+    }
+    .settings .check input::before {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 27px;
+      height: 27px;
+      border-radius: 50%;
+      background: var(--paper-50);
+      box-shadow: 0 2px 5px rgb(0 0 0 / 0.3);
+      transition: transform var(--dur-base) var(--ease-out);
+    }
+    .settings .check input:checked {
+      background: var(--accent);
+    }
+    .settings .check input:checked::before {
+      transform: translateX(20px);
+    }
+  }
+
+  @keyframes page-push {
+    from {
+      transform: translateX(30%);
+      opacity: 0;
+    }
+  }
+  @keyframes page-pop {
+    from {
+      transform: translateX(-12%);
+      opacity: 0.3;
+    }
+  }
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-out {
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+}

@@ -173,11 +173,37 @@ reserves the space for it, so the item never changes width.
 
 ## On the phone
 
-The 76px sidebar becomes a tab bar at the bottom, and the Capture button
-moves to the middle, where a thumb already is. Nothing else changes: every
-screen is already a single column with a measure. Type goes down one step;
-spacing, radii, colours and controls stay, and every target is at least
-44px.
+Below 720px the app follows the phone's own apps rather than shrinking the
+Mac window. All of it lives in `client/src/styles/phone.css` and
+`client/src/phone.ts`.
+
+- **Content runs edge to edge.** It scrolls under the Dynamic Island,
+  where it fades and blurs out instead of running into the clock, and
+  behind the tab bar, which leaves room for the last line to be scrolled
+  clear of it.
+- **The chrome floats, as glass.** The tab bar is a capsule of the five
+  places, the back button a round glass button in the top corner that
+  stays put while the page scrolls. A bar you can see through reads as
+  above the page; a solid strip reads as part of it.
+- **Capturing is a round button of its own**, beside the tab bar rather
+  than in it: the one control a thumb finds without looking, shaped like
+  every record button, and impossible to mistake for a sixth place.
+- **It opens as a sheet** that rises over the page you were on, so closing
+  it is visibly a return. Cancel or pulling the handle down closes it;
+  tapping the dimmed page above does not, because a half-written note is
+  the one thing here that cannot be got back.
+- **Pages move like a navigation stack.** A detail slides in from the
+  right, and pulling from the left edge takes it back, following the
+  finger so the gesture can be abandoned halfway.
+- **Type goes up a step**, towards the system's 17pt body; the tokens
+  change, nothing else does. Every target is at least 44pt, and no text
+  field is under 16px, below which iOS zooms the page on focus.
+- **Settings is a grouped list**: rounded cards of rows, on-and-off as
+  switches, text fields full width under their name. What only a Mac has
+  (the shortcut, the login item, the weekly notification, the calendar,
+  the log folder) is not shown at all.
+- **Hover does nothing.** A finger has no hover, and on a phone it would
+  stick to whatever was tapped last.
 
 ## The graph
 
@@ -201,7 +227,8 @@ two.
 
 ## Still open
 
-- The phone layout is thought through but hasn't been reviewed.
+- The phone layout has been looked at in a phone-sized WebKit, not yet on
+  a phone.
 - The one-off kinds are a symptom of the type vocabulary coming out of
   extraction; consolidation (`docs/consolidation.md`) is the place to fix
   that, not the interface.

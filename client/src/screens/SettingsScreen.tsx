@@ -20,6 +20,7 @@ import {
   openExternalLink,
   openLogDirectory,
   runningInDesktopApp,
+  runningOnPhone,
   setAutostartEnabled,
   setBackendUrl,
   setCaptureShortcut,
@@ -50,6 +51,12 @@ const IDLE_CHOICES = [1, 5, 15, 60];
 /// and its autostart toggle, added later, are the real thing.
 export function SettingsScreen() {
   const { theme, setTheme } = useTheme();
+  /// The Mac app, as opposed to the browser build or the phone. The
+  /// shortcut, the login item, the weekly notification, the calendar and
+  /// the log folder only exist there; the phone's Rust side does not even
+  /// register their commands.
+  const mac = runningInDesktopApp() && !runningOnPhone();
+  const phone = runningOnPhone();
   const [shortcut, setShortcut] = useState(DEFAULT_CAPTURE_SHORTCUT);
   const [capturing, setCapturing] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
@@ -94,7 +101,7 @@ export function SettingsScreen() {
       setReview(settings.review);
     });
     speechAvailable().then(setCanSpeak);
-    autostartEnabled().then(setAutostart);
+    if (runningInDesktopApp() && !runningOnPhone()) autostartEnabled().then(setAutostart);
     if (runningInDesktopApp()) getVersion().then(setClientVersion);
     getBackendVersion()
       .then(setBackendVersion)
@@ -265,6 +272,7 @@ export function SettingsScreen() {
         </Row>
       </Section>
 
+      {!phone && (
       <Section
         title="Capture"
         note={
@@ -291,7 +299,7 @@ export function SettingsScreen() {
             {capturing ? "Cancel" : "Change"}
           </button>
         </Row>
-        {runningInDesktopApp() && (
+        {mac && (
           <Row label="Start at login">
             <label className="check">
               <input
@@ -312,6 +320,7 @@ export function SettingsScreen() {
         {error && <Problem>{error}</Problem>}
         {autostartError && <Problem>{autostartError}</Problem>}
       </Section>
+      )}
 
       <Section
         title="Backend"
@@ -351,11 +360,11 @@ export function SettingsScreen() {
         title="Cloudflare Access"
         note={
           cfStatus === "saved"
-            ? "Saved — the secret is in the macOS Keychain."
+            ? `Saved — the secret is in the ${phone ? "phone's" : "macOS"} Keychain.`
             : cfStatus === "error"
               ? undefined
               : cfConfigured
-                ? "A secret is saved in the macOS Keychain. Leave the field empty to keep it, type a new one to replace it, or clear both and save to remove it."
+                ? `A secret is saved in the ${phone ? "phone's" : "macOS"} Keychain. Leave the field empty to keep it, type a new one to replace it, or clear both and save to remove it.`
                 : "Only needed once the backend sits behind Cloudflare Access — a Zero Trust Service Token, not your own login. Leave both blank on a local or LAN backend. The secret goes to the Keychain, never to a file."
         }
       >
@@ -405,7 +414,9 @@ export function SettingsScreen() {
         title="Reading"
         note={
           lock === null || lock.mechanism === "none"
-            ? runningInDesktopApp()
+            ? phone
+              ? "Locking with Face ID is not built for the phone yet. Until it is, the app stays open, the same as the phone itself once it is unlocked."
+              : runningInDesktopApp()
               ? "This Mac has no device authentication set up, so there is nothing to lock with. Turn on Touch ID or a login password in System Settings and this becomes available — until then the app deliberately stays open rather than shutting you out of your own notes."
               : "Only the desktop app can lock — this is the browser build."
             : "Reading is what is guarded: the timeline, search, entities, the graph, a capture and its recording. Capturing is not — speaking a note only ever adds, and a prompt in front of the shortcut would cost the fastest thing the app does. The clock only runs while the window is not in front, so nothing disappears while you are reading it."
@@ -455,7 +466,7 @@ export function SettingsScreen() {
         )}
       </Section>
 
-      {runningInDesktopApp() && review && (
+      {mac && review && (
         <Section
           title="Weekly review"
           note="The one notification this app sends: once a week, at the time you set, saying the week is ready to look back on. It never shows what is in your notes — reading stays behind the lock."
@@ -505,14 +516,16 @@ export function SettingsScreen() {
         </Section>
       )}
 
-      {runningInDesktopApp() && <MeetingsSection />}
+      {mac && <MeetingsSection />}
 
       <Section
         title="Speech"
         note={
           canSpeak
-            ? "On-device, always. Your voice is the most revealing thing this system holds, so the audio never leaves this Mac — only the transcript is sent on."
-            : "The speech model is not installed. Run scripts/fetch-asr-model.sh to enable spoken capture; typing works either way."
+            ? `On-device, always. Your voice is the most revealing thing this system holds, so it is heard on this ${phone ? "phone" : "Mac"}, not by a service somewhere else.`
+            : phone
+              ? "Speaking a note is not built for the phone yet; it will use the same model as the Mac, on the phone itself. Typing works now."
+              : "The speech model is not installed. Run scripts/fetch-asr-model.sh to enable spoken capture; typing works either way."
         }
       />
 
@@ -521,6 +534,7 @@ export function SettingsScreen() {
         note="Recordings are kept for good, alongside their transcripts — the recording is the original, the transcript is one reading of it. Nothing here deletes anything yet."
       />
 
+      {!phone && (
       <Section
         title="Logs"
         note={
@@ -540,6 +554,7 @@ export function SettingsScreen() {
           </button>
         </Row>
       </Section>
+      )}
 
       <Section title="About">
         <Row label="Versions">
