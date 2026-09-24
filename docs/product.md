@@ -130,7 +130,8 @@ system with anything personal at all.
   been captured overall.
 - How many echo matches are too many? Three to start with, the threshold
   found empirically.
-- Does the iPhone need its own app (local Whisper), or is a Shortcut with
-  Apple dictation enough? Decide after the Mac path.
+- Does the iPhone need its own app, or is a Shortcut with Apple dictation
+  enough? **Its own app**; keyboard dictation gets too much wrong with fast
+  speech. See `docs/iphone.md`.
 - Does `current_summary` stay a stored field or is it computed when read?
   See `docs/memory-model.md`.
