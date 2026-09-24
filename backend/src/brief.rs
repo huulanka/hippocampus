@@ -236,11 +236,7 @@ mod tests {
         assert_eq!(by_name[0].on, MatchedOn::Attendee);
         assert_eq!(by_name[0].text, "Paul Hartmann");
 
-        let by_mail = find(
-            &paul,
-            "Weekly",
-            &["paul.hartmann@northwind.example".into()],
-        );
+        let by_mail = find(&paul, "Weekly", &["paul.hartmann@northwind.example".into()]);
         assert_eq!(ids(&by_mail), vec![1]);
     }
 
@@ -271,7 +267,11 @@ mod tests {
 
     #[test]
     fn accents_and_eszett_fold_on_both_sides() {
-        let found = find(&[candidate(4, &["Günter Strauß"])], "1:1 Gunter Strauss", &[]);
+        let found = find(
+            &[candidate(4, &["Günter Strauß"])],
+            "1:1 Gunter Strauss",
+            &[],
+        );
         assert_eq!(ids(&found), vec![4]);
     }
 
