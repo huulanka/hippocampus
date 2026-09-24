@@ -6,7 +6,7 @@
 
 [package]
 name = "client"
-version = "1.17.0"
+version = "1.17.1"
 description = "Hippocampus desktop client (capture + browse)"
 authors = ["Andreas Bauer"]
 edition = "2021"
@@ -30,7 +30,7 @@ tauri-plugin-log = "2"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-contracts = { version = "1.17.0", path = "../../contracts" }
+contracts = { version = "1.17.1", path = "../../contracts" }
 anyhow = "1"
 hound = "3"
 # Recording and Parakeet in Swift on the phone, since `cpal` and `ort` do

@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/huulanka/hippocampus/compare/v1.17.0...v1.17.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* the echo shows up again, judged by a model whose provider answers ([#12](https://github.com/huulanka/hippocampus/issues/12)) ([c5554ad](https://github.com/huulanka/hippocampus/commit/c5554ad01bd2b96569c6292244ea902b49d37f35))
+
 # [1.17.0](https://github.com/huulanka/hippocampus/compare/v1.16.0...v1.17.0) (2026-09-24)
 
 
