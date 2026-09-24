@@ -21,6 +21,11 @@ import { ChangesScreen } from "./ChangesScreen";
 /// How far the pointer may travel between press and release and still
 /// count as a click rather than a drag.
 const CLICK_SLOP = 4;
+const TOUCH_SLOP = 10;
+/// How far past its drawn edge a node still takes a tap. A dot the size of
+/// a letter is fine under a pointer and a guess under a fingertip; the
+/// invisible ring around it is what makes it a target.
+const HIT_MARGIN = 12;
 /// How many entities the search offers at once.
 const MAX_MATCHES = 6;
 /// How many type chips before the rest are folded away. The extraction
@@ -213,32 +218,103 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
   }
 
   // — panning and zooming -------------------------------------------------
+  //
+  // One pointer pans, two pinch. Every pointer on the canvas is tracked,
+  // because a pinch is two touches that arrive one after the other: the
+  // first starts a pan, and the second turns it into a zoom about the
+  // point between the two fingers, the way a map does.
   const drag = useRef<{ x: number; y: number; from: { x: number; y: number }; moved: boolean } | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number; mid: { x: number; y: number }; pan: { x: number; y: number } } | null>(null);
+  // Mirrors of the two, so a gesture reads where it started from rather
+  // than a render behind.
+  const view2 = useRef({ zoom, pan });
+  view2.current = { zoom, pan };
+
+  const local = (x: number, y: number) => {
+    const box = sky.current?.getBoundingClientRect();
+    return { x: x - (box?.left ?? 0), y: y - (box?.top ?? 0) };
+  };
+  /// The zoom changed about a fixed point on screen: whatever was under
+  /// that point before is still under it after.
+  const zoomAbout = (
+    point: { x: number; y: number },
+    from: { zoom: number; pan: { x: number; y: number } },
+    next: number,
+  ) => {
+    const clamped = Math.min(3.2, Math.max(0.45, next));
+    const k = clamped / from.zoom;
+    setZoom(clamped);
+    setPan({ x: point.x - (point.x - from.pan.x) * k, y: point.y - (point.y - from.pan.y) * k });
+  };
 
   function onPointerDown(event: React.PointerEvent) {
-    if (event.button !== 0) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = {
+        distance: Math.hypot(a.x - b.x, a.y - b.y),
+        zoom: view2.current.zoom,
+        mid: local((a.x + b.x) / 2, (a.y + b.y) / 2),
+        pan: view2.current.pan,
+      };
+      // Two fingers are never a tap on whatever the first one landed on.
+      if (drag.current) drag.current.moved = true;
+      return;
+    }
     drag.current = { x: event.clientX, y: event.clientY, from: pan, moved: false };
   }
   function onPointerMove(event: React.PointerEvent) {
+    if (!pointers.current.has(event.pointerId)) return;
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    const pinching = pinch.current;
+    if (pinching && pointers.current.size >= 2) {
+      const [a, b] = [...pointers.current.values()];
+      const mid = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+      const moved = { x: pinching.pan.x + mid.x - pinching.mid.x, y: pinching.pan.y + mid.y - pinching.mid.y };
+      zoomAbout(mid, { zoom: pinching.zoom, pan: moved }, pinching.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinching.distance));
+      return;
+    }
+
     const held = drag.current;
     if (!held) return;
     const dx = event.clientX - held.x;
     const dy = event.clientY - held.y;
-    if (!held.moved && (Math.abs(dx) > CLICK_SLOP || Math.abs(dy) > CLICK_SLOP)) {
+    // A fingertip wobbles further than a mouse does while it taps.
+    const slop = event.pointerType === "touch" ? TOUCH_SLOP : CLICK_SLOP;
+    if (!held.moved && (Math.abs(dx) > slop || Math.abs(dy) > slop)) {
       held.moved = true;
       // Captured only once it is a drag. Capturing on press sent the
       // release — and so the click — to the canvas instead of the node
       // under the pointer, and no node on either view could be clicked.
       (event.currentTarget as Element).setPointerCapture(event.pointerId);
     }
-    setPan({ x: held.from.x + dx, y: held.from.y + dy });
+    if (held.moved) setPan({ x: held.from.x + dx, y: held.from.y + dy });
   }
-  function onPointerUp() {
-    drag.current = null;
+  function onPointerUp(event: React.PointerEvent) {
+    pointers.current.delete(event.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (pointers.current.size === 1) {
+      // One finger lifted from a pinch: the other carries on as a pan
+      // from where it is now, rather than jumping back to where it began.
+      const [rest] = [...pointers.current.values()];
+      drag.current = { x: rest.x, y: rest.y, from: view2.current.pan, moved: true };
+      return;
+    }
+    if (pointers.current.size === 0) {
+      // Cleared after the click that follows this release has been seen,
+      // so a node can still tell a tap from the end of a drag.
+      window.setTimeout(() => {
+        if (pointers.current.size === 0) drag.current = null;
+      }, 0);
+    }
   }
+  /// A wheel or a trackpad pinch zooms about the pointer, not the corner.
   function onWheel(event: React.WheelEvent) {
-    const next = Math.min(2.6, Math.max(0.45, zoom * (event.deltaY < 0 ? 1.09 : 1 / 1.09)));
-    setZoom(next);
+    const step = event.ctrlKey ? Math.exp(-event.deltaY / 100) : event.deltaY < 0 ? 1.09 : 1 / 1.09;
+    zoomAbout(local(event.clientX, event.clientY), view2.current, view2.current.zoom * step);
   }
   const framed = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
 
@@ -345,6 +421,7 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
           <button
             type="button"
             className="btn btn-secondary graph-tidy-toggle"
+            aria-label="Tidying"
             aria-expanded={tidyOpen}
             onClick={() => setTidyOpen((open) => !open)}
             title="Duplicates, merges, and everything that has been done to the arrangement"
@@ -354,7 +431,7 @@ export function RelationsScreen({ onOpenEntity }: { onOpenEntity: (id: string) =
               <circle cx="18.5" cy="12" r="3" fill="currentColor" />
               <path d="M9 12h6M13 9.6 15.6 12 13 14.4" />
             </svg>
-            Tidying
+            <span className="graph-tidy-word">Tidying</span>
           </button>
         </div>
       </header>
@@ -732,6 +809,7 @@ function OrbitDrawing({
               }`}
               onClick={() => onPick(placed.node)}
             >
+              <circle className="graph-hit" cx={position.x} cy={position.y} r={position.r + HIT_MARGIN} />
               <circle
                 cx={position.x}
                 cy={position.y}
@@ -902,6 +980,7 @@ function MapDrawing({
           </text>
           {cluster.members.map((placed) => (
             <g key={placed.node.id} className="graph-node" onClick={() => onPick(placed.node)}>
+              <circle className="graph-hit" cx={placed.x} cy={placed.y} r={placed.r + HIT_MARGIN} />
               <circle
                 cx={placed.x}
                 cy={placed.y}

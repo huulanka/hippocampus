@@ -364,3 +364,64 @@
     clip-path: inset(50%);
   }
 }
+
+/* — glass — ------------------------------------------------------------
+ *
+ * The one material for chrome that floats above the page: the Mac's
+ * sidebar, the phone's tab bar, a back button, a sheet's close button. The
+ * page is paper, the controls lie on it as glass; that division is the
+ * same on both, which is what makes the two read as one app rather than a
+ * Mac app and its phone port.
+ *
+ * Four layers, each doing one thing: a translucent tint, the blur of what
+ * is underneath, a rim of light along the top edge, and a soft shadow that
+ * lifts the whole pane off the page.
+ */
+@layer components {
+  .glass {
+    border: 0.5px solid var(--glass-edge);
+    background: var(--glass-sheen), var(--glass);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      var(--glass-rim),
+      var(--glass-shadow);
+  }
+
+  /* A round glass control holding one symbol. */
+  .glass-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--tap-min);
+    height: var(--tap-min);
+    padding: 0;
+    border: 0.5px solid var(--glass-edge);
+    border-radius: 50%;
+    background: var(--glass-sheen), var(--glass);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      var(--glass-rim),
+      var(--glass-shadow);
+    color: var(--text-bright);
+    cursor: pointer;
+    transition: transform var(--dur-fast) var(--ease-out);
+  }
+  .glass-button:active {
+    transform: scale(0.92);
+  }
+
+  /* Buttons are capsules now, on both. A rounded rectangle next to a
+     capsule tab bar and round glass controls read as two design systems
+     arguing. */
+  .btn,
+  .segmented,
+  .segmented > button {
+    border-radius: var(--radius-full);
+  }
+  .btn-primary {
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.22);
+  }
+}

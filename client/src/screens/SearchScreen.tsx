@@ -8,6 +8,7 @@ import {
   type SearchResult,
 } from "../api";
 import { entityColor } from "../entityType";
+import { usePhoneLayout } from "../phone";
 
 /// Finding something again, and — with the field empty — everything.
 ///
@@ -68,6 +69,7 @@ export function SearchScreen({
 
   const days = useMemo(() => groupByDay(everything ?? []), [everything]);
   const searching = results !== null;
+  const phone = usePhoneLayout();
 
   return (
     <div className="column search">
@@ -83,7 +85,10 @@ export function SearchScreen({
           id="search-field"
           className="input"
           type="search"
-          autoFocus
+          // On a Mac the keyboard is already there; on a phone the cursor
+          // would throw the on-screen keyboard over the list you came to
+          // look at before you have asked for it.
+          autoFocus={!phone}
           value={query}
           placeholder="Search everything you have said…"
           onChange={(event) => {

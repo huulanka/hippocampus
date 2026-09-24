@@ -60,6 +60,7 @@ export function CaptureScreen({
   onOpenEntity,
   onClose,
   locked = false,
+  focusOnOpen = true,
 }: {
   summons?: number;
   onOpenCapture: (eventId: string) => void;
@@ -75,6 +76,11 @@ export function CaptureScreen({
   /// Capturing works either way — this only decides whether the echo can
   /// be shown, which is the one part of this screen that reads.
   locked?: boolean;
+  /// Whether the field takes the cursor as soon as the sheet opens. Right
+  /// on a Mac, where the keyboard is already there. On a phone it would
+  /// throw the on-screen keyboard up over a sheet you have only just seen,
+  /// before you have decided to type rather than speak.
+  focusOnOpen?: boolean;
 }) {
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
@@ -116,7 +122,7 @@ export function CaptureScreen({
     setText("");
 
     if (canSpeakRef.current) void beginRecording();
-    else inputRef.current?.focus();
+    else if (focusOnOpen) inputRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [summons]);
 
@@ -439,7 +445,7 @@ export function CaptureScreen({
         <textarea
           ref={inputRef}
           className="capture-input"
-          autoFocus
+          autoFocus={focusOnOpen}
           rows={5}
           value={text}
           disabled={working}

@@ -297,9 +297,16 @@
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-4);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
+    /* Glass: it lies over the picture, and the picture should still be
+       faintly there behind it. */
+    border: 0.5px solid var(--glass-edge);
+    border-radius: var(--radius-xl);
+    background: var(--glass-sheen), var(--glass);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    box-shadow:
+      var(--glass-rim),
+      var(--glass-shadow);
   }
   .graph-merge {
     border-color: var(--accent);
@@ -508,5 +515,14 @@
       width: 100%;
       border-left: none;
     }
+  }
+}
+
+@layer screens {
+  /* The invisible ring that makes a node a fingertip's target (HIT_MARGIN
+     in RelationsScreen.tsx). Transparent but painted, so it takes events. */
+  .graph-hit {
+    fill: transparent;
+    stroke: none;
   }
 }

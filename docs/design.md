@@ -171,13 +171,67 @@ open, `thinking` while the backend is working on something. In the menu
 bar it stays completely still and a dot next to it breathes; the template
 reserves the space for it, so the item never changes width.
 
+## Glass
+
+Chrome that floats above the page is glass, on the Mac and on the phone
+alike: the Mac's sidebar, the phone's tab bar, the back button, a sheet's
+close button, the card over the graph. The page is paper and the controls
+lie on it as glass; that one division, kept the same on both, is what
+makes them read as one app rather than a Mac app and its phone port.
+
+Glass is four layers, each with one job (`.glass` in `components.css`,
+the values in `tokens.css`): a translucent tint, the blur of what is
+underneath, a rim of light along the top edge with a touch of shade along
+the bottom, and a soft shadow that lifts the pane off the page. Tinted
+glass, the record button, is the same over clay instead of over the page.
+
+The chosen place, in the sidebar and in the tab bar, sits in a drop of
+lighter glass rather than being coloured in. Buttons are capsules and
+cards are rounder than they were, so nothing square sits next to
+something round.
+
 ## On the phone
 
-The 76px sidebar becomes a tab bar at the bottom, and the Capture button
-moves to the middle, where a thumb already is. Nothing else changes: every
-screen is already a single column with a measure. Type goes down one step;
-spacing, radii, colours and controls stay, and every target is at least
-44px.
+Below 720px the app follows the phone's own apps rather than shrinking the
+Mac window. All of it lives in `client/src/styles/phone.css` and
+`client/src/phone.ts`.
+
+- **Content runs edge to edge.** It scrolls under the Dynamic Island,
+  where it fades and blurs out instead of running into the clock, and
+  behind the tab bar, which leaves room for the last line to be scrolled
+  clear of it.
+- **The tab bar is a capsule of the five places**, and capturing is a round
+  button of its own beside it: the one control a thumb finds without
+  looking, shaped like every record button, and impossible to mistake for
+  a sixth place. Scrolling down into something long, the bar steps back —
+  the names go and it gets lower — and scrolling up brings it back.
+- **Capturing opens as a floating card** that rises over the page you were
+  on, inset from every edge and rounded to sit inside the screen's
+  corners, so closing it is visibly a return. The field does not take the
+  cursor by itself: the keyboard comes up when you tap it, not before you
+  have decided to type. With the keyboard up the card is fitted to what
+  is still visible and sits on top of it, instead of iOS sliding the whole
+  page up underneath. The close button or pulling the handle down closes
+  it; tapping the dimmed page above does not, because a half-written note
+  is the one thing here that cannot be got back.
+- **Pages move like a navigation stack.** A detail slides in from the
+  right, and pulling from the left edge takes it back, following the
+  finger so the gesture can be abandoned halfway. Every page starts at its
+  top, and going back returns to where you were on the one underneath.
+- **The app does not zoom.** It is laid out for the screen it is on, and a
+  pinch only took the bars out of proportion. The graph zooms itself: two
+  fingers zoom about the point between them, and a node takes a tap a
+  little way past its drawn edge, with more wobble allowed for a finger
+  than for a mouse.
+- **Type goes up a step**, towards the system's 17pt body; the tokens
+  change, nothing else does. Every target is at least 44pt, and no text
+  field is under 16px, below which iOS zooms the page on focus.
+- **Settings is a grouped list**: rounded cards of rows, on-and-off as
+  switches, text fields full width under their name. What only a Mac has
+  (the shortcut, the login item, the weekly notification, the calendar,
+  the log folder) is not shown, and no keyboard shortcut is named anywhere.
+- **Hover does nothing.** A finger has no hover, and on a phone it would
+  stick to whatever was tapped last.
 
 ## The graph
 
@@ -201,7 +255,8 @@ two.
 
 ## Still open
 
-- The phone layout is thought through but hasn't been reviewed.
+- The phone layout has been looked at in a phone-sized WebKit, not yet on
+  a phone.
 - The one-off kinds are a symptom of the type vocabulary coming out of
   extraction; consolidation (`docs/consolidation.md`) is the place to fix
   that, not the interface.
