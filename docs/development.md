@@ -128,6 +128,18 @@ xcrun devicectl device install app --device <UDID> \
 xcrun devicectl device process launch --device <UDID> com.andreasbauer.hippocampus
 ```
 
+The app icon comes from the same source as the Mac's: run
+`python3 scripts/render-brand.py` after `init` to copy it into the
+generated project, or the app shows Tauri's default icon.
+
+An extension (a control, later a Live Activity) is a second target in
+`project.yml`. Three things XcodeGen does not do by itself: the team has
+to be set on that target too (`DEVELOPMENT_TEAM`, since Tauri only
+passes it to the app), and both the App Group entitlement and the
+extension's `NSExtension` dictionary have to be written as `properties`
+in `project.yml`, because XcodeGen regenerates the `.entitlements` and
+`Info.plist` files from it and an edit made to those files is lost.
+
 The first launch is refused until the developer profile is trusted on
 the phone (Settings, General, VPN & Device Management). A free signature
 lasts seven days; building and installing again renews it, and the
@@ -178,3 +190,9 @@ and every raster form of it is rendered from there by
 [`client/src/brand/Mascot.tsx`](../client/src/brand/Mascot.tsx);
 `scripts/render-readme-art.py` turns that same grid into the SVG at the top
 of the README, so the two cannot drift apart.
+
+The iPhone's icon is the same mark on a full-bleed, opaque ground
+(`ios_icon`), because iOS rounds the corners itself and fills
+transparency with black; the Mac icon's margin and squircle would show
+there as a black frame. It goes to `client/src-tauri/icons/ios/`, and into
+the Xcode project when one has been generated.
