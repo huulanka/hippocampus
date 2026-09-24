@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/huulanka/hippocampus/compare/v1.17.1...v1.18.0) (2026-09-24)
+
+
+### Features
+
+* a note remembers the meeting and the thought it belonged to, and your notes answer questions ([#13](https://github.com/huulanka/hippocampus/issues/13)) ([01e1881](https://github.com/huulanka/hippocampus/commit/01e1881d6fb16edc4278adf2f6b1f22a56ce4410))
+
 ## [1.17.1](https://github.com/huulanka/hippocampus/compare/v1.17.0...v1.17.1) (2026-09-24)
 
 
