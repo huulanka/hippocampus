@@ -57,6 +57,10 @@ No formatter/linter config files exist anywhere (no `.rustfmt.toml`, `clippy.tom
 
 `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_ZDR` (zero-data-retention routing, default strict), `CF_ACCESS_AUD`/`CF_ACCESS_TEAM_DOMAIN` (backend refuses to start if only one is set), `CORS_ALLOWED_ORIGINS` (wildcard rejected outright), `ECHO_MIN_SIMILARITY`, `HIPPOCAMPUS_RERANKER`, `CONSOLIDATION_ENABLED` (off by default — consolidation is deliberately manual via `/consolidation/preview` + `/consolidation/apply`).
 
-## Docs are mostly in German
+## Docs
 
-Only `docs/install.md`, `docs/how-it-works.md`, `docs/development.md`, and the ADRs under `docs/adr/` are in English. The deeper design docs (`docs/product.md`, `docs/memory-model.md`, `docs/consolidation.md`, `docs/entity-resolution.md`, etc.) are in German — check `docs/README.md` for the index before assuming a doc doesn't exist just because it doesn't parse as English.
+All documentation is in English; `docs/README.md` is the index. Docs describe the system as reference material, not as a development log: no dated narration, no quotes from conversations.
+
+## Never put real data into the repository
+
+This repository is public, and the app stores someone's private notes. Nothing from real notes, a real database or a conversation goes into code, tests, fixtures, LLM prompt examples, comments, migrations, docs, commit messages or PR descriptions: no names of people, customers, employers or projects, no health or private details, no figures measured on a real archive. Examples are always invented (the README screenshots' demo data is the tone to match). If a real case explains a bug, describe its shape ("a customer and its project"), not its content.
