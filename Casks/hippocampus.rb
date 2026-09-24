@@ -1,6 +1,6 @@
 cask "hippocampus" do
-  version "1.17.0"
-  sha256 "d58ebf8d0c37a4c5debb42f4818352a556362bfb0cd4f400cde21dc47df0d319"
+  version "1.17.1"
+  sha256 "b6c539629528099b7e227c14e1bb54f527a0d68fa2f903a337352cb861f3470e"
 
   url "https://github.com/huulanka/hippocampus/releases/download/v#{version}/Hippocampus_#{version}_aarch64.dmg"
   name "Hippocampus"
