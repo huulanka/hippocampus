@@ -45,7 +45,7 @@ do it (recording, speech recognition, Face ID, App Intents).
 | I7 | **Reading is behind Face ID, capturing is not** | ADR 0011, unchanged. |
 | I8 | **Set up by scanning a QR code** from the Mac's Settings | The Cloudflare Access client ID and secret would otherwise have to be typed or pasted on the phone. The Mac shows the code only after Touch ID and only briefly; the phone keeps the secret in its keychain. Keychain sync through iCloud is out, because free signing has no iCloud entitlement. |
 | I9 | **The audio goes to the NAS**, like the Mac's | ADR 0004. The phone keeps a recording only until the outbox has delivered it. |
-| I10 | **Structuring stays on the backend** in version 1 | Whether Apple's on-device model can take over is a separate question with its own measurement (see below and ADR 0014). The app does not wait for the answer. |
+| I10 | **Structuring stays on the backend**, through OpenRouter, like the echo judge and the reranking | Spike d) measured Apple's on-device models against it and neither was good enough (ADR 0014). The only model the phone runs is speech recognition (I4). |
 | I11 | **No Watch app.** The Watch is reached through a control on the iPhone | Since watchOS 26, a Control Center control of an iPhone app appears on the Watch without a Watch app of its own: in Control Center, in the Smart Stack and on the Action Button of an Ultra. The action runs on the iPhone. A Watch app would need signing that is not realistic with a free account. |
 | I12 | **Recording from a control uses `AudioRecordingIntent`** and shows a Live Activity with a stop button | A control whose action brings the app to the foreground does not appear on the Watch, so the recording has to start in the background, and iOS requires a Live Activity while it runs. The Live Activity is mirrored into the Watch's Smart Stack. The recording uses the iPhone's microphone, which is worse from a pocket. |
 
@@ -107,7 +107,8 @@ watchOS on the Watch as well.
 
 ### 4. Structuring on the devices
 
-Only if spike d) says the on-device models are good enough. See ADR 0014.
+Not planned. Spike d) found the on-device models not good enough; ADR 0014
+records what was measured and what would reopen it.
 
 ## Out of scope
 

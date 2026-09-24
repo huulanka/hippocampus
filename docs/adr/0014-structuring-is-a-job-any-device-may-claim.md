@@ -1,8 +1,10 @@
 # ADR 0014: Structuring is a job any device may claim
 
 ## Status
-Proposed (2026-09-24). Built only if spike d) in `docs/iphone.md` shows
-that an on-device model structures German notes well enough.
+Not built (2026-09-24). Spike d) in `docs/iphone.md` ran the structuring
+prompt over real notes on the devices that can run a model, and neither
+model was good enough to take the job from the backend. The design below
+stands if a later model changes that; see *Measured* at the end.
 
 ## Context
 Structuring runs on the backend and goes through OpenRouter (P10),
@@ -77,3 +79,30 @@ capture would both structure it.
   The prompt must exist once, not in two copies that drift apart.
 - The echo judge (ADR 0010) is a separate question. It can move the same
   way later, but this decision does not cover it.
+
+## Measured
+The unchanged production prompt, run over real notes with the same
+context the backend would give, compared with what the current OpenRouter
+model had made of the same notes.
+
+- **The smaller model** (3B, the one an M1 runs) found most of the same
+  entities under the same names and types, but reported an intention in
+  almost every note, although the prompt says most notes have none, and
+  most of those quotes were not the speaker's words. It invented more
+  relations than there were, a good share of them pointing at entities it
+  had not named. Its 4096-token context did not hold the longest note.
+- **The larger model** (20B, on an iPhone 17 Pro) was more sensible about
+  intentions and dates, but found fewer of the entities, still produced
+  relations pointing nowhere, and returned JSON with a list left open in a
+  sizeable share of answers. Guided generation would prevent the last
+  one; it does not change the rest.
+- **Both** were stopped by Apple's safety filter on a private note now and
+  then, which the backend's model never is.
+- **Private Cloud Compute** answered neither a command-line tool nor an
+  app signed by a free Personal Team: the request never returned. It
+  would only ever have been reachable from a device anyway, since the
+  backend runs on Linux.
+
+What would reopen this: a model that at least matches the backend's on
+entities and intentions, under the free signing the app lives with.
+
