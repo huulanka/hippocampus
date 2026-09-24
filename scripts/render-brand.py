@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -178,6 +180,25 @@ def app_icon(size: int) -> Image.Image:
     return canvas.resize((size, size), Image.LANCZOS)
 
 
+def ios_icon(size: int = 1024) -> Image.Image:
+    """The mark on a full-bleed, opaque ground, as iOS wants it.
+
+    iOS cuts the corners itself and fills any transparency with black, so
+    the squircle and the margin of the Mac icon would show up there as a
+    black frame around a smaller tile.
+    """
+    # Drawn at twice the size and scaled down, like `app_icon`: stroking
+    # at the final size leaves hairline seams between the segments.
+    big = size * 2
+    canvas = Image.new("RGBA", (big, big), GROUND)
+    inner = round(big * 0.66)
+    canvas.alpha_composite(
+        glyph(inner, INK, filled=False, ground=GROUND, supersample=1),
+        ((big - inner) // 2, (big - inner) // 2),
+    )
+    return canvas.resize((size, size), Image.LANCZOS).convert("RGB")
+
+
 def tray_template() -> Image.Image:
     """The menu-bar mark: black plus alpha, for macOS to tint.
 
@@ -262,6 +283,30 @@ def main() -> None:
         leftover.unlink()
     iconset.rmdir()
     print("icon.icns")
+
+    # Tauri knows the sizes and names an asset catalogue wants; only the
+    # `ios/` part of what `tauri icon` writes is kept.
+    with tempfile.TemporaryDirectory() as scratch:
+        source = Path(scratch) / "ios.png"
+        ios_icon().save(source)
+        subprocess.run(
+            ["npx", "tauri", "icon", str(source), "-o", str(Path(scratch) / "out")],
+            cwd=ROOT / "client",
+            check=True,
+            capture_output=True,
+        )
+        shutil.rmtree(ICONS / "ios", ignore_errors=True)
+        shutil.copytree(Path(scratch) / "out" / "ios", ICONS / "ios")
+    print(f"{len(list((ICONS / 'ios').iterdir()))} iOS icons")
+
+    # The Xcode project is generated and not in the repository, so the
+    # icons are copied in whenever it exists: run this again after
+    # `tauri ios init`.
+    catalogue = ROOT / "client/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset"
+    if catalogue.is_dir():
+        for icon in (ICONS / "ios").iterdir():
+            shutil.copy(icon, catalogue / icon.name)
+        print("copied into the Xcode project")
 
     app_icon(256).save(ICONS / "icon.ico", sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (256, 256)])
     print("icon.ico")

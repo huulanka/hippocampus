@@ -103,9 +103,23 @@ capture to its entities as a list, and the graph stays a desk view.
 
 ### 3. Control, Live Activity, Watch
 
-Only if spike b) says free signing carries it. One control, "Record", on
-the iPhone's Control Center, Lock Screen and Action Button, and through
-watchOS on the Watch as well.
+One control, "Record", on the iPhone's Control Center, Lock Screen and
+Action Button, and through watchOS on the Watch as well.
+
+Spike b) showed that free signing carries it. A widget extension with a
+control, signed by a Personal Team next to the app, gets its own
+provisioning profile with the App Group; a press runs the control's
+intent in the extension, which writes into the group's shared defaults,
+and the app reads it on its next launch, also after a rebuild and
+reinstall. The control is offered on the Watch without a Watch app.
+Two things to build for:
+
+- A press from the Watch can arrive twice within the same millisecond.
+  Starting a recording has to be idempotent, or one press makes two
+  captures.
+- The extension is a second app ID. With the app, that is two of the
+  ten a free account may register in a week, and each renewal of the
+  signature is two profiles rather than one.
 
 ### 4. Structuring on the devices
 
@@ -125,7 +139,8 @@ records what was measured and what would reopen it.
 ## Open questions
 
 - Does Tauri's webview graph run well enough on a phone? Phase 2 finds out.
-- Do free signing and SideStore keep an App Group intact across a
-  renewal? Spike b) finds out.
+- Does SideStore keep the App Group and the keychain entry intact when
+  it renews the signature? Xcode does; SideStore rewrites bundle
+  identifiers, which may put the app in a new container.
 - How much does a capture from a control lose by using the iPhone's
   microphone in a pocket, compared to taking the phone out?
