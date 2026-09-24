@@ -63,14 +63,15 @@ have.
 
 ## Phase 4: reaching further
 
-- iPhone: a Shortcut with Apple dictation, or an app of its own with local
-  Whisper.
+- iPhone: an app of its own, Tauri on iOS, signed for free. Scope and
+  phases in [`docs/iphone.md`](iphone.md); structuring on the devices is
+  proposed in ADR 0014.
 - Weekly review, tied to a review appointment you set anyway. **Done.**
 - Remembering ahead: intentions that hang on people and subjects, and a
   context echo before meetings. **Done**; scope in
   [`docs/prospective-memory.md`](prospective-memory.md), architecture in
-  ADR 0013. Next in line: an iPhone app (Tauri on iOS, possibly with
-  Apple's on-device model) and "how my thinking changes over time".
+  ADR 0013. Next in line: the iPhone app, then "how my thinking changes
+  over time".
 - Revisit chat, MCP and documents, each with the question of whether it
   solves a problem that by then actually exists.
 
