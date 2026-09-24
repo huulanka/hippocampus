@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select phase, minutes, verdict from capture_occasions",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "phase",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_occasions",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "minutes",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "capture_occasions",
+            "name": "minutes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "verdict",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_occasions",
+            "name": "verdict"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "6ad3ed8b8ac12701952ee8e41f66b3c095a1c5ef504741f7b73ec8ab1f4030b6"
+}

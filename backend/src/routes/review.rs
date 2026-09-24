@@ -497,7 +497,7 @@ pub async fn write_story(
         .await
         .map_err(|err| AppError::from(err.context("writing the week up")))?;
 
-    let sentences = sourced(written, &by_tag);
+    let sentences = sourced(written, &by_tag, MAX_SENTENCES);
     if sentences.is_empty() {
         return Err(AppError::bad_request(
             "the model wrote nothing it could source to a note, so nothing was kept",
@@ -556,9 +556,10 @@ pub async fn write_story(
 /// Keeps the sentences that cite at least one real note, with their tags
 /// turned back into capture ids. A tag the model invented is dropped from
 /// its sentence; a sentence left with no source is dropped whole.
-fn sourced(
+pub(crate) fn sourced(
     written: Vec<crate::openrouter::WrittenSentence>,
     by_tag: &HashMap<&str, Uuid>,
+    max: usize,
 ) -> Vec<StorySentence> {
     written
         .into_iter()
@@ -574,7 +575,7 @@ fn sourced(
             }
             (!text.is_empty() && !sources.is_empty()).then_some(StorySentence { text, sources })
         })
-        .take(MAX_SENTENCES)
+        .take(max)
         .collect()
 }
 
@@ -622,6 +623,7 @@ mod tests {
                 },
             ],
             &by_tag,
+            MAX_SENTENCES,
         );
         assert_eq!(kept.len(), 1);
         assert_eq!(kept[0].sources, vec![id]);

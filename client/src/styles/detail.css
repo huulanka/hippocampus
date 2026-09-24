@@ -257,4 +257,38 @@
     font-size: var(--text-sm);
     color: var(--text-dim);
   }
+
+  /* The meeting a note belonged to: a quiet line under the time, marked
+     as a reading like everything else a model decided. */
+  .said-occasion {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: 0;
+  }
+  .said-occasion-name {
+    padding: 0;
+    color: var(--text-quiet);
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px;
+  }
+  .said-occasion-name:hover {
+    color: var(--accent);
+  }
+
+  /* An episode is a short run in time, so it reads as a thread: a hairline
+     down the left and this note marked in its place. */
+  .said-episode {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 var(--space-4);
+    border-left: 1px solid var(--line-strong);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .said-episode-here {
+    padding: var(--space-1) 0;
+  }
 }

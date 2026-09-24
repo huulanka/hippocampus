@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into entity_gists (entity_id, sentences, model, observations_seen, event_id)\n        values ($1, $2, $3, $4, $5)\n        on conflict (entity_id) do update set\n            sentences = excluded.sentences,\n            model = excluded.model,\n            observations_seen = excluded.observations_seen,\n            event_id = excluded.event_id,\n            written_at = now()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Text",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fdc096d9dd54f5593aa75a7098b013055bcdf24bdd979b0ee8ea371747beb622"
+}

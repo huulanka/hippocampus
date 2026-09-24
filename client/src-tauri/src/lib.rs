@@ -21,6 +21,7 @@ mod foresight;
 mod keychain;
 mod lock;
 pub mod microphone;
+mod occasions;
 mod outbox;
 #[cfg_attr(mobile, path = "mobile/recorder.rs")]
 mod recorder;
@@ -300,6 +301,9 @@ pub fn run() {
                 app.handle(),
             )?));
             foresight::watch(app.handle().clone());
+            // Looks notes up in the same ticked calendars, for the
+            // meeting they were said around (ADR 0016).
+            occasions::watch(app.handle().clone());
 
             // No Dock icon, no Cmd+Tab entry: the menu bar is now the
             // one place this app lives when its window is not open,

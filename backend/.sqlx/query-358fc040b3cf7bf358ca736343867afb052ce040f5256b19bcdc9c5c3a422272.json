@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into capture_continuations (capture_event_id, previous_event_id, continues, model) values ($1, $2, $3, 'test-model')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "358fc040b3cf7bf358ca736343867afb052ce040f5256b19bcdc9c5c3a422272"
+}

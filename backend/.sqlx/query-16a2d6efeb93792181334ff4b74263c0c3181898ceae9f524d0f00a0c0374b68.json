@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into entity_gists (entity_id, sentences, model, observations_seen, event_id) values ($1, $2, 'test-model', $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16a2d6efeb93792181334ff4b74263c0c3181898ceae9f524d0f00a0c0374b68"
+}

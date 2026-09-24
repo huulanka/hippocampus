@@ -1,4 +1,5 @@
 pub mod captures;
+mod context;
 pub mod entities;
 mod graph;
 pub mod intentions;
@@ -79,6 +80,9 @@ pub fn router() -> Router<AppState> {
         .route("/review", get(review::week))
         .route("/review/story", post(review::write_story))
         .route("/search", get(search::search))
+        .route("/ask", post(context::ask))
+        .route("/occasions/pending", get(context::pending))
+        .route("/occasions", post(context::offer))
         .route("/pipeline", get(captures::pipeline_status))
         .route("/pipeline/retry", post(captures::retry_all))
 }

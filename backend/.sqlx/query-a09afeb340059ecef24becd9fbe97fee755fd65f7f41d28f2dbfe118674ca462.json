@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update capture_occasions set verdict = null, model = null, judged_at = null where capture_event_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a09afeb340059ecef24becd9fbe97fee755fd65f7f41d28f2dbfe118674ca462"
+}

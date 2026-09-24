@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "update capture_occasions set verdict = 'belongs', model = 'test-model'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "a3e224a3f41ce1c4a2fc3ce85d1fd6e833c5ef6d6f222b5238b784d60f7688dc"
+}

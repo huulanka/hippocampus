@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select transcript, occurred_at from capture_search where event_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transcript",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "transcript"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "occurred_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "occurred_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "769d18d7805cda0f3db600b88f0a262fdb0676387ba985b7a0fe870fcefe5ddc"
+}

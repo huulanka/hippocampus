@@ -28,7 +28,7 @@ Eight tabs became five, plus a button.
 |---|---|
 | **Capture** (a button, not a place) | "Something just occurred to me." |
 | **Today** | "What's on right now?" The only place that speaks first |
-| **Search** | "Where was that again?" Empty, it shows everything, by day |
+| **Search** | "Where was that again?" Empty, it shows everything, by day. A question gets an answer above the matches (`docs/finding-again.md`) |
 | **Write** | "I'm sitting in a four-hour workshop." |
 | **Graph** | "What does this connect to?" |
 | **Settings** | Everything that isn't a note |

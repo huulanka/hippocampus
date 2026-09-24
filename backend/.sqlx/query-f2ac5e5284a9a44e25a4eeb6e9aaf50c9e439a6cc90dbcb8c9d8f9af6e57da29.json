@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with recursive edges as (\n            select capture_event_id as a, previous_event_id as b\n            from capture_continuations where continues\n            union all\n            select previous_event_id, capture_event_id\n            from capture_continuations where continues\n        ),\n        walk (id, depth) as (\n            select $1::uuid, 0\n            union\n            select e.b, w.depth + 1\n            from walk w\n            join edges e on e.a = w.id\n            where w.depth < $2\n        )\n        select distinct cs.event_id as \"event_id!\", cs.transcript as \"transcript!\", cs.occurred_at as \"occurred_at!\"\n        from walk w\n        join capture_search cs on cs.event_id = w.id\n        where w.id <> $1\n        order by 3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "transcript!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "transcript"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "occurred_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "occurred_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f2ac5e5284a9a44e25a4eeb6e9aaf50c9e439a6cc90dbcb8c9d8f9af6e57da29"
+}

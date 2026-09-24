@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select e.id as \"id!\"\n        from entities e\n        join observations o on o.entity_id = e.id\n        left join entity_gists g on g.entity_id = e.id\n        where e.merged_into is null\n        group by e.id, g.observations_seen\n        having count(*) >= $1\n           and (g.observations_seen is null or g.observations_seen <> count(*))\n        order by max(o.created_at) desc\n        limit $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6e60eae4c013c2bc886be3668bef8a2f7b3c9be00063d9041158da152e13dafb"
+}

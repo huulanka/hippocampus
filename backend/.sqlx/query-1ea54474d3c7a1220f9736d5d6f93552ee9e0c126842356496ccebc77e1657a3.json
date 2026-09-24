@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from capture_context_judged\n        where capture_event_id = $1\n           or capture_event_id in (\n               select cs.event_id from capture_search cs, capture_search me\n               where me.event_id = $1\n                 and cs.occurred_at > me.occurred_at\n                 and cs.occurred_at <= me.occurred_at + make_interval(mins => $2)\n           )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1ea54474d3c7a1220f9736d5d6f93552ee9e0c126842356496ccebc77e1657a3"
+}

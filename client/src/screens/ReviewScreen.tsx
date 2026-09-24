@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getReview, writeStory, type ReviewTopic, type WeeklyReview } from "../api";
+import { Sourced } from "../components/Sourced";
 import { BackButton } from "../components/BackButton";
 import { entityColor } from "../entityType";
 import { calendarDaysBetween } from "../ago";
@@ -210,35 +211,7 @@ export function ReviewScreen({
 
 /// The paragraph, each sentence followed by the notes it rests on.
 function Story({ data, onOpenCapture }: { data: WeeklyReview; onOpenCapture: (id: string) => void }) {
-  const story = data.story!;
-  // Numbered across the whole paragraph, in order of first citation, so
-  // the same note is the same number wherever it is cited.
-  const numbers = new Map<string, number>();
-  for (const sentence of story.sentences) {
-    for (const source of sentence.sources) {
-      if (!numbers.has(source)) numbers.set(source, numbers.size + 1);
-    }
-  }
-  return (
-    <p className="prose review-story">
-      {story.sentences.map((sentence, index) => (
-        <span key={index}>
-          {sentence.text}
-          {sentence.sources.map((source) => (
-            <button
-              key={source}
-              type="button"
-              className="review-source"
-              title="Open the note this rests on"
-              onClick={() => onOpenCapture(source)}
-            >
-              {numbers.get(source)}
-            </button>
-          ))}{" "}
-        </span>
-      ))}
-    </p>
-  );
+  return <Sourced sentences={data.story!.sentences} onOpenCapture={onOpenCapture} className="prose review-story" />;
 }
 
 function StoryActions({

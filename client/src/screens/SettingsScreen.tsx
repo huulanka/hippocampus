@@ -4,6 +4,7 @@ import { useTheme } from "../theme";
 import {
   DEFAULT_CAPTURE_SHORTCUT,
   FORESIGHT_LEADS,
+  OCCASION_WINDOWS,
   acceleratorFromEvent,
   autostartEnabled,
   calendarAccess,
@@ -682,7 +683,7 @@ function MeetingsSection() {
   return (
     <Section
       title="Meetings"
-      note="Shortly before a meeting with someone you have talked about, Hippocampus brings up what you meant to say — and afterwards asks whether you did. Only the calendars ticked here are read, only on this Mac, and a meeting is matched against what you know and then forgotten: it never becomes part of your notes. The banner says which meeting, never what is in your notes."
+      note="Shortly before a meeting with someone you have talked about, Hippocampus brings up what you meant to say — and afterwards asks whether you did. Notes spoken near a meeting also remember who it was with, once a reading of the note says it belongs there. Only the calendars ticked here are read, only on this Mac; a meeting's title and attendees are matched against what you know and then forgotten. The banner says which meeting, never what is in your notes."
     >
       {access === "granted" ? (
         <>
@@ -740,6 +741,21 @@ function MeetingsSection() {
               />
               <span className="sr-only">Show a banner before a meeting</span>
             </label>
+          </Row>
+          <Row label="Notes near a meeting">
+            <div className="settings-choices">
+              {OCCASION_WINDOWS.map((minutes) => (
+                <button
+                  key={minutes}
+                  type="button"
+                  className="chip"
+                  aria-pressed={foresight.window_minutes === minutes}
+                  onClick={() => save({ ...foresight, window_minutes: minutes })}
+                >
+                  {minutes} min around
+                </button>
+              ))}
+            </div>
           </Row>
         </>
       ) : access === "denied" || access === "write_only" ? (

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select capture_event_id, previous_event_id\n        from capture_continuations\n        where continues and capture_event_id = any($1)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "capture_event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "capture_continuations",
+            "name": "capture_event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "previous_event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "capture_continuations",
+            "name": "previous_event_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "417a3129b15042ed39fba67203df44491a635829ed40a7510f282336dc904792"
+}

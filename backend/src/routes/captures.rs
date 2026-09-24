@@ -747,6 +747,9 @@ pub async fn detail(
         return Err(AppError::not_found("no such capture"));
     };
 
+    let occasions = crate::context::occasions_for(&state.pool, id).await?;
+    let episode = crate::context::episode(&state.pool, id).await?;
+
     let transcripts = sqlx::query!(
         r#"
         select event_id, text, model, language, created_at, supersedes
@@ -910,6 +913,8 @@ pub async fn detail(
                 payload: e.payload,
             })
             .collect(),
+        occasions,
+        episode,
     }))
 }
 
@@ -1004,6 +1009,12 @@ pub async fn correct_transcript(
     // its entities and never put them back.
     if state.openrouter.is_some() {
         invalidate_derived(&state, id, stored.id).await?;
+        // Read again against its neighbours and meetings, from the new
+        // wording; and any gist that retold the old wording goes.
+        crate::context::reread(&state.pool, id).await?;
+        let mut tx = state.pool.begin().await?;
+        crate::gist::forget_citing(&mut tx, id).await?;
+        tx.commit().await?;
     } else {
         tracing::warn!(
             %id,
@@ -1217,6 +1228,27 @@ pub async fn redact(
     sqlx::query!(r#"delete from intentions where source_event_id = $1"#, id)
         .execute(&mut *tx)
         .await?;
+
+    // What was read about its surroundings, and every written summary
+    // that rests on it: a gist or a week's paragraph citing this note is
+    // the model's retelling of its words. The gist is written again from
+    // what is left; the paragraph can be written again by hand.
+    crate::context::forget(&mut tx, id).await?;
+    crate::gist::forget_citing(&mut tx, id).await?;
+    sqlx::query!(
+        r#"
+        delete from weekly_story w
+        where exists (
+            select 1
+            from jsonb_array_elements(w.sentences) s,
+                 jsonb_array_elements_text(s -> 'sources') src
+            where src = $1::text
+        )
+        "#,
+        id.to_string(),
+    )
+    .execute(&mut *tx)
+    .await?;
 
     let relations_removed = sqlx::query!(r#"delete from relations where source_event_id = $1"#, id)
         .execute(&mut *tx)

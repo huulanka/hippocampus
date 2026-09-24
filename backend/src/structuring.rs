@@ -232,9 +232,13 @@ async fn known_graph(pool: &PgPool, transcript: &str) -> KnownGraph {
     let entities = sqlx::query!(
         r#"
         -- Column overrides because sqlx cannot see through a UNION to
-        -- the NOT NULL on the underlying columns.
+        -- the NOT NULL on the underlying columns. The gist's first
+        -- sentence, where there is one, says which Paul this is better
+        -- than whatever was observed about him last.
         (
-            select e.id, e.name as "name!", e.entity_type as "entity_type!", e.current_summary
+            select e.id, e.name as "name!", e.entity_type as "entity_type!",
+                   coalesce((select g.sentences->0->>'text' from entity_gists g where g.entity_id = e.id),
+                            e.current_summary) as "current_summary?"
             from entities e
             where word_similarity(e.name, $1) > $2
             order by word_similarity(e.name, $1) desc
@@ -242,7 +246,9 @@ async fn known_graph(pool: &PgPool, transcript: &str) -> KnownGraph {
         )
         union
         (
-            select e.id, e.name as "name!", e.entity_type as "entity_type!", e.current_summary
+            select e.id, e.name as "name!", e.entity_type as "entity_type!",
+                   coalesce((select g.sentences->0->>'text' from entity_gists g where g.entity_id = e.id),
+                            e.current_summary) as "current_summary?"
             from entities e
             order by e.updated_at desc
             limit $4

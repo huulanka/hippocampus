@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into events (stream_id, version, event_type, payload, source)\n               values (gen_random_uuid(), 1, 'entity.gist_written', '{}'::jsonb, 'test')\n               returning id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "events",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "797a814d216185b7f9893294120239862a9e236d9ab84e24616bcbb2c6a07d07"
+}

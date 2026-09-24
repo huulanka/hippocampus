@@ -36,31 +36,6 @@
     color: var(--text);
     max-width: 62ch;
   }
-  /* A source is a small number riding on its sentence: present enough to
-   * be followed, quiet enough not to be read aloud by the eye. */
-  .review-source {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 17px;
-    height: 17px;
-    margin-left: 3px;
-    padding: 0 4px;
-    border: 1px solid var(--line-strong);
-    border-radius: 9px;
-    background: none;
-    color: var(--text-dim);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    line-height: 1;
-    vertical-align: 2px;
-    cursor: pointer;
-  }
-  .review-source:hover,
-  .review-source:focus-visible {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
   .review-actions {
     display: flex;
     flex-wrap: wrap;

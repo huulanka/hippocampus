@@ -115,6 +115,22 @@ export function CaptureDetailScreen({
         <p className="meta said-when">
           {fullStamp(detail.occurred_at)} · {spoken ? "spoken" : "typed"} on {detail.device}
         </p>
+        {(detail.occasions ?? []).map((occasion, index) => (
+          <p key={index} className="meta said-occasion" title={`Read as belonging to this meeting by ${occasion.model ?? "a model"}`}>
+            <span className="derived-dot" aria-hidden="true" />
+            <span>
+              {occasionLead(occasion.phase, occasion.minutes)}{" "}
+              {occasion.entities.map((entity, i) => (
+                <span key={entity.id}>
+                  {i > 0 && (i === occasion.entities.length - 1 ? " and " : ", ")}
+                  <button type="button" className="btn-quiet said-occasion-name" onClick={() => onOpenEntity(entity.id)}>
+                    {entity.name}
+                  </button>
+                </span>
+              ))}
+            </span>
+          </p>
+        ))}
 
         {draft === null ? (
           <p className={detail.redacted ? "said-words said-words-gone" : "said-words"}>
@@ -280,6 +296,34 @@ export function CaptureDetailScreen({
         )}
       </section>
 
+      {(detail.episode?.length ?? 0) > 0 && (
+        <section className="said-section">
+          {/* Not the echo: these are close in time, not in meaning, and a
+              model read each pair as one train of thought. */}
+          <h2 className="label-micro">Said in the same stretch — one train of thought, as a model read it</h2>
+          <ol className="said-episode">
+            {withThisNote(detail).map((note) =>
+              note.capture_event_id === detail.event_id ? (
+                <li key={note.capture_event_id} className="said-episode-here">
+                  <span className="meta said-when">{clockOnly(note.occurred_at)} · this note</span>
+                </li>
+              ) : (
+                <li key={note.capture_event_id}>
+                  <button
+                    type="button"
+                    className="card said-echo"
+                    onClick={() => onOpenCapture(note.capture_event_id)}
+                  >
+                    <span className="meta said-when">{clockOnly(note.occurred_at)}</span>
+                    <span className="said-echo-words">{note.transcript_text}</span>
+                  </button>
+                </li>
+              ),
+            )}
+          </ol>
+        </section>
+      )}
+
       {detail.transcripts.length > 1 && (
         <section className="said-section">
           <h2 className="label-micro">How the words changed — oldest first; nothing was overwritten</h2>
@@ -311,6 +355,30 @@ export function CaptureDetailScreen({
       </details>
     </div>
   );
+}
+
+/// How a note stood to a meeting, from the note's side.
+function occasionLead(phase: "before" | "during" | "after", minutes: number): string {
+  if (phase === "during") return "During a meeting with";
+  const span = minutes < 1 ? "just" : `${minutes} min`;
+  return phase === "before" ? `${span} before a meeting with` : `${span} after a meeting with`;
+}
+
+/// The episode in time order, with this note in its place.
+function withThisNote(detail: CaptureDetail): { capture_event_id: string; transcript_text: string; occurred_at: string }[] {
+  const all = [
+    ...(detail.episode ?? []),
+    { capture_event_id: detail.event_id, transcript_text: detail.text ?? "", occurred_at: detail.occurred_at },
+  ];
+  return all.sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
+}
+
+function clockOnly(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function DetailFrame({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        insert into capture_context_judged (capture_event_id, model) values ($1, $2)\n        on conflict (capture_event_id) do nothing\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "621816afb434a52ec58efdcbd5b43a483e80e61b89580413aac9df9cc4a100c5"
+}

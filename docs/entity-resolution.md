@@ -207,7 +207,9 @@ around 0.9 cosine, so it can't be the primary order.
 
 ## Still open
 
-- **Stage 7**, a rolling summary per entity. Only needed once an entity no
-  longer fits into a prompt with its observations.
+- **Stage 7**, a rolling summary per entity, is built as the gist
+  (`docs/finding-again.md`). The consolidation run does not read it yet;
+  that only matters once an entity no longer fits into a prompt with its
+  observations.
 - **Re-derivation** of the archive with the new extraction prompt (phase 2
   of the roadmap). Decided, not built yet.

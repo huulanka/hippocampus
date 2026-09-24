@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- Column overrides because sqlx cannot see through a UNION to\n        -- the NOT NULL on the underlying columns. The gist's first\n        -- sentence, where there is one, says which Paul this is better\n        -- than whatever was observed about him last.\n        (\n            select e.id, e.name as \"name!\", e.entity_type as \"entity_type!\",\n                   coalesce((select g.sentences->0->>'text' from entity_gists g where g.entity_id = e.id),\n                            e.current_summary) as \"current_summary?\"\n            from entities e\n            where word_similarity(e.name, $1) > $2\n            order by word_similarity(e.name, $1) desc\n            limit $3\n        )\n        union\n        (\n            select e.id, e.name as \"name!\", e.entity_type as \"entity_type!\",\n                   coalesce((select g.sentences->0->>'text' from entity_gists g where g.entity_id = e.id),\n                            e.current_summary) as \"current_summary?\"\n            from entities e\n            order by e.updated_at desc\n            limit $4\n        )\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "entity_type!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "current_summary?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "dcbb0713f954f792516d9a072be2f093a285d74e5cd99aba9bce16b689c6516e"
+}

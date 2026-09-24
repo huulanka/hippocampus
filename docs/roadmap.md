@@ -56,7 +56,9 @@ and get tested on dozens along the way.
   with a checkbox per proposal.
 - Relations across capture boundaries. **Done.**
 - Settle `entities.current_summary`: remove it or consolidate for real.
-  **Open.**
+  **Done** as the gist, a rolling summary with sources per entity
+  ([`docs/finding-again.md`](finding-again.md)); `current_summary` stays
+  as "most recently observed".
 
 *Go on when:* the graph has at least once shown something echo would not
 have.
@@ -72,8 +74,12 @@ have.
   [`docs/prospective-memory.md`](prospective-memory.md), architecture in
   ADR 0013. Next in line: the iPhone app, then "how my thinking changes
   over time".
-- Revisit chat, MCP and documents, each with the question of whether it
-  solves a problem that by then actually exists.
+- Finding things again: the meeting around a note, episodes, the gist,
+  and answering questions from the notes. **Done**; scope in
+  [`docs/finding-again.md`](finding-again.md), architecture in ADR 0016
+  and 0017.
+- Revisit MCP and documents, each with the question of whether it solves
+  a problem that by then actually exists.
 
 ## Smaller open items
 

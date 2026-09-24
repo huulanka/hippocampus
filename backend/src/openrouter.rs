@@ -265,6 +265,34 @@ impl OpenRouterClient {
         &self.model
     }
 
+    /// One JSON-answering call with a system prompt of the caller's own.
+    ///
+    /// For the readings that live next to the code they serve (the context
+    /// judge, the gist, the answer to a question) rather than in here. Same
+    /// model, same zero-retention routing, same telemetry as extraction.
+    pub(crate) async fn complete_json<T: serde::de::DeserializeOwned>(
+        &self,
+        purpose: &str,
+        system: &str,
+        user: &str,
+    ) -> anyhow::Result<T> {
+        let body = json!({
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "response_format": {"type": "json_object"},
+            "provider": {"zdr": self.zdr},
+        });
+
+        let response = chat(&self.http, &self.api_key, purpose, &self.model, &body).await?;
+        let content = response["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("{purpose} response had no content"))?;
+        Ok(serde_json::from_str(strip_fences(content))?)
+    }
+
     pub async fn extract(
         &self,
         transcript: &str,
@@ -309,6 +337,16 @@ struct RawExtraction {
     relations: Vec<Value>,
     #[serde(default)]
     intentions: Vec<Value>,
+}
+
+/// A model asked for bare JSON still wraps it in a Markdown fence now
+/// and then.
+pub(crate) fn strip_fences(raw: &str) -> &str {
+    raw.trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim()
 }
 
 /// Parses the model's JSON response. Split out from `extract` so it can be
