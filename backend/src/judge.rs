@@ -212,9 +212,10 @@ struct Verdict {
     score: f32,
 }
 
+/// No `#[serde(default)]` on `scores`: an answer without the key is not
+/// an answer, and a default would store it as "nothing echoes" for good.
 #[derive(Deserialize)]
 struct Verdicts {
-    #[serde(default)]
     scores: Vec<Verdict>,
 }
 
@@ -282,9 +283,24 @@ impl RemoteJudge {
 /// model that forgets one of ten candidates should cost that candidate
 /// its place, not cost the capture its echo. Split out from the request
 /// so it can be tested without a network.
+///
+/// Two answers are errors rather than verdicts, because a judgement is
+/// stored for good: one without a `scores` key would read as "nothing
+/// echoes" forever, and one numbered from 1 would put every score on the
+/// note after the one it was meant for. As errors they are retried after
+/// a backoff instead.
 fn parse_scores(content: &str, expected: usize) -> anyhow::Result<Vec<f32>> {
     let verdicts: Verdicts = serde_json::from_str(content.trim())
         .map_err(|err| anyhow::anyhow!("the judge did not answer with usable JSON: {err}"))?;
+
+    // The last id is one past the end when counting from 0, so seeing it
+    // without a 0 is what numbering from 1 looks like.
+    let counted_from_one = expected > 0
+        && verdicts.scores.iter().any(|v| v.id == expected)
+        && !verdicts.scores.iter().any(|v| v.id == 0);
+    if counted_from_one {
+        anyhow::bail!("the judge numbered the notes from 1, not 0");
+    }
 
     let mut scores = vec![0.0_f32; expected];
     for verdict in verdicts.scores {
@@ -317,6 +333,23 @@ mod tests {
     fn a_missing_verdict_is_a_zero_not_an_error() {
         let scores = parse_scores(r#"{"scores":[{"id":0,"score":1.0}]}"#, 3).unwrap();
         assert_eq!(scores, vec![1.0, 0.0, 0.0]);
+    }
+
+    /// Valid JSON in the wrong shape is not "nothing echoes". Stored as
+    /// that, the capture would never be judged again.
+    #[test]
+    fn an_answer_without_scores_is_an_error() {
+        assert!(parse_scores("{}", 3).is_err());
+        assert!(parse_scores(r#"{"results":[{"id":0,"score":1.0}]}"#, 3).is_err());
+    }
+
+    /// Counted from 1, every score would land on the note after the one
+    /// it was meant for.
+    #[test]
+    fn numbering_from_one_is_an_error() {
+        let answer =
+            r#"{"scores":[{"id":1,"score":0.9},{"id":2,"score":0.0},{"id":3,"score":0.1}]}"#;
+        assert!(parse_scores(answer, 3).is_err());
     }
 
     #[test]
