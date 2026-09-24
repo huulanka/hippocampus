@@ -12,7 +12,10 @@
 //! reached, saving fails and says so: a silent downgrade to plain text is
 //! exactly the failure this module exists to prevent.
 
+#[cfg(not(target_os = "ios"))]
 use keyring::{Entry, Error};
+#[cfg(target_os = "ios")]
+use keyring_core::{Entry, Error};
 
 /// Matches the bundle identifier, so the entry is recognisable in
 /// Keychain Access rather than looking like something that wandered in.
@@ -23,7 +26,25 @@ const SERVICE: &str = "com.andreasbauer.hippocampus";
 /// `settings.json`, so it would only be a second copy to keep in sync.
 const ACCOUNT: &str = "cf-access-service-token";
 
+#[cfg(not(target_os = "ios"))]
 fn entry() -> Result<Entry, Error> {
+    Entry::new(SERVICE, ACCOUNT)
+}
+
+/// On iOS the item goes into the app's own data-protection keychain,
+/// readable once the phone has been unlocked. Whether it outlives a
+/// renewal of a free signature is one of the things spike a) in
+/// `docs/iphone.md` is there to find out: the keychain access group is
+/// derived from the signing team, not from the app.
+#[cfg(target_os = "ios")]
+fn entry() -> Result<Entry, Error> {
+    static STORE: std::sync::Once = std::sync::Once::new();
+    STORE.call_once(
+        || match apple_native_keyring_store::protected::Store::new() {
+            Ok(store) => keyring_core::set_default_store(store),
+            Err(err) => log::error!("could not open the keychain: {err}"),
+        },
+    );
     Entry::new(SERVICE, ACCOUNT)
 }
 

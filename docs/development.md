@@ -78,6 +78,68 @@ What is *not* split, and why:
   development build a different combination in its own settings — it has
   its own `settings.json` now, so it sticks.
 
+## The iPhone build
+
+The same client builds for iOS (`docs/iphone.md`). What only a Mac has
+(the menu bar, the global shortcut, the login item, Parakeet through
+ONNX, the calendar, Touch ID) is left out with `#[cfg(desktop)]`, and
+`asr`, `recorder` and `tray` are replaced by stand-ins under
+`client/src-tauri/src/mobile/`. Typed capture and reading work; speech
+does not yet.
+
+It needs Xcode (not only the Command Line Tools), CocoaPods and
+XcodeGen, and a free Apple ID added in Xcode under Settings, Accounts,
+which gives a "Personal Team". Nothing here needs a paid membership.
+
+```sh
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+brew install cocoapods xcodegen
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+cd client
+npx tauri ios init
+```
+
+`src-tauri/gen/` is not in the repository, so the generated project is
+yours to regenerate. Two things `init` gets wrong for now, both fixed by
+hand in `src-tauri/gen/apple/project.yml` followed by
+`xcodegen generate` in that directory:
+
+- `deploymentTarget` must be `iOS: 26.0`. The iOS 27 SDK rejects 14.0,
+  and speech and the on-device model need 26 anyway.
+- The signing team is not kept. Pass it on every build instead, as
+  `APPLE_DEVELOPMENT_TEAM`; it is the ten characters shown next to your
+  Personal Team in Xcode, and it stays out of the repository.
+
+`src-tauri/Info.ios.plist` adds a scene manifest. Without it an app
+built with the iOS 27 SDK exits on launch ("UIScene life cycle is
+required"), and tao only adopts scenes when the manifest says multiple
+scenes are supported.
+
+To build, install and start it on a phone connected by cable, with
+Developer Mode switched on (Settings, Privacy & Security, visible once
+Xcode has seen the phone):
+
+```sh
+APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX npx tauri ios build --debug --target aarch64
+xcrun devicectl list devices
+xcrun devicectl device install app --device <UDID> \
+  ~/Library/Developer/Xcode/DerivedData/client-*/Build/Products/debug-iphoneos/Hippocampus.app
+xcrun devicectl device process launch --device <UDID> com.andreasbauer.hippocampus
+```
+
+The first launch is refused until the developer profile is trusted on
+the phone (Settings, General, VPN & Device Management). A free signature
+lasts seven days; building and installing again renews it, and the
+settings and the keychain entry survive that, because the keychain
+access group follows the signing team, not the build. The app's log
+goes to the phone's system log: `idevicesyslog -u <UDID> -p Hippocampus`.
+
+On iOS the Cloudflare secret lives in the app's own data-protection
+keychain, not in the login keychain the Mac uses; `keyring`'s v1 API has
+no store there, so `keychain.rs` uses `apple-native-keyring-store`
+directly.
+
 ## Queries are checked offline
 
 Run `cargo sqlx prepare` (from `backend/`, with `DATABASE_URL` set and

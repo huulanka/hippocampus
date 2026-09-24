@@ -11,7 +11,7 @@ reasoning behind everything else.
 
 ## Working on it
 
-- **[Developing Hippocampus](development.md)** — Running from source, the two installs, releases, the brand assets
+- **[Developing Hippocampus](development.md)** — Running from source, the two installs, the iPhone build, releases, the brand assets
 - **[Verification](verification.md)** — What the tests cover, and what can only be checked by hand
 
 ## Design and decisions

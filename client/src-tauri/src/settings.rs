@@ -21,7 +21,9 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
+#[cfg(desktop)]
 use tauri_plugin_autostart::ManagerExt;
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::keychain;
@@ -410,6 +412,7 @@ impl SettingsState {
 
     /// The shortcut as the plugin wants it, or the default if what is
     /// stored no longer parses.
+    #[cfg(desktop)]
     pub fn capture_shortcut(&self) -> Shortcut {
         parse(&self.snapshot().capture_shortcut).unwrap_or_else(|_| {
             parse(DEFAULT_CAPTURE_SHORTCUT).expect("the default shortcut must parse")
@@ -445,6 +448,7 @@ impl SettingsState {
     }
 }
 
+#[cfg(desktop)]
 fn parse(accelerator: &str) -> anyhow::Result<Shortcut> {
     accelerator
         .parse::<Shortcut>()
@@ -469,6 +473,7 @@ pub fn get_settings(
 /// The new shortcut is registered before the old one is forgotten, so a
 /// combination the system has already claimed leaves the user with the
 /// shortcut they had rather than with none at all.
+#[cfg(desktop)]
 #[tauri::command]
 pub fn set_capture_shortcut(
     app: tauri::AppHandle,
@@ -752,6 +757,7 @@ pub fn set_foresight(
 /// the OS launch-agent registration rather than mirrored in
 /// `settings.json` — that registration already *is* the durable state,
 /// and a copy of it here could only ever fall out of sync with it.
+#[cfg(desktop)]
 #[tauri::command]
 pub fn autostart_enabled(app: tauri::AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
@@ -761,6 +767,7 @@ pub fn autostart_enabled(app: tauri::AppHandle) -> bool {
 /// — starting a background process before anyone has asked for it is not
 /// a call this app gets to make on its own, unlike the lock above, whose
 /// silence is read the safer way round.
+#[cfg(desktop)]
 #[tauri::command]
 pub fn set_autostart_enabled(app: tauri::AppHandle, enabled: bool) -> Result<bool, String> {
     let autolaunch = app.autolaunch();
