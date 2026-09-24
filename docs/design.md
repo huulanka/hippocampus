@@ -1,217 +1,207 @@
-# Das Interface
+# The interface
 
-Stand: 2026-09-23. Dieses Dokument sagt, **wo jede Funktion geblieben
-ist** und **warum es so aussieht, wie es aussieht**. Es geht der
-Umsetzung nicht vor wie `docs/product.md` — es hält fest, was entschieden
-wurde, damit man nachprüfen kann statt zu glauben.
+This document records **where every function ended up** and **why the
+interface looks the way it does**. Unlike `docs/product.md`, it doesn't
+come before the implementation; it writes down what was decided, so it can
+be checked rather than taken on trust.
 
-## Warum überhaupt
+## Why it changed
 
-Der alte Zuschnitt war ein Kostüm: eine Monospace-Schrift für alles,
-Scanlines über jeder Fläche, Bedienelemente als ASCII gezeichnet
-(`[ New Capture ]`, `[x] depth`). Drei Befunde haben den Umbau ausgelöst.
+The old look was a costume: one monospace font for everything, scanlines
+over every surface, controls drawn in ASCII (`[ New Capture ]`,
+`[x] depth`). Three problems prompted the rebuild.
 
-1. **Die Hierarchie stand auf dem Kopf.** Laut ADR 0004 ist das
-   Gesprochene das Original. Es rendelte als 13px, gedämpft, monospace —
-   unscheinbarer als die goldenen Etiketten drumherum.
-2. **Nichts war mit der Tastatur erreichbar.** Jedes Bedienelement war
-   ein `<span onClick>`. Tab sprang über alle hinweg.
-3. **Der Graph war eine zweite App.** Eigener Hintergrund, eigene
-   Scanlines — im CSS stand wörtlich, dass er sich einer eigenen Bildwelt
-   verschreibt. Genau deshalb fügte er sich nicht ein.
+1. **The hierarchy was upside down.** According to ADR 0004, what you said
+   is the original. It rendered at 13px, muted and monospace, less
+   noticeable than the gold labels around it.
+2. **Nothing could be reached by keyboard.** Every control was a
+   `<span onClick>`. Tab skipped over all of them.
+3. **The graph was a second app.** Its own background, its own scanlines;
+   the CSS literally said it committed to a visual world of its own. That
+   is exactly why it didn't fit in.
 
-## Die Orte
+## The places
 
-Aus acht Reitern wurden fünf, plus ein Knopf.
+Eight tabs became five, plus a button.
 
-| Ort | Was er beantwortet |
+| Place | The question it answers |
 |---|---|
-| **Capture** (Knopf, kein Ort) | „Mir ist gerade etwas eingefallen." |
-| **Today** | „Was ist gerade dran?" — das Einzige, was von selbst spricht |
-| **Search** | „Wo ist das nochmal?" — leer zeigt es alles, nach Tagen |
-| **Write** | „Ich sitze vier Stunden in einem Workshop." |
-| **Graph** | „Womit hängt das zusammen?" |
-| **Settings** | alles, was keine Notiz ist |
+| **Capture** (a button, not a place) | "Something just occurred to me." |
+| **Today** | "What's on right now?" The only place that speaks first |
+| **Search** | "Where was that again?" Empty, it shows everything, by day |
+| **Write** | "I'm sitting in a four-hour workshop." |
+| **Graph** | "What does this connect to?" |
+| **Settings** | Everything that isn't a note |
 
-**Die Wochenrückschau ist auch kein Ort.** Sie ist eine Seite, an der man
-ankommt — über „Look back on the week" auf Today, das Tray-Menü oder die
-eine Mitteilung pro Woche — und schließt wie ein Detail zurück dorthin, wo
-man war. Ein sechster Reiter für etwas, das man einmal pro Woche öffnet,
-wäre die Leiste, die wieder wächst.
+**The weekly review isn't a place either.** It's a page you arrive at,
+through "Look back on the week" on Today, the tray menu or the one
+notification a week, and it closes like a detail view back to where you
+were. A sixth tab for something opened once a week would be the sidebar
+starting to grow again.
 
-**Capture ist kein Ort.** Der Shortcut ist der Aufnahmeknopf (ADR 0012),
-also öffnet Aufnehmen über dem, wo man gerade war, und schließt dorthin
-zurück. Als Reiter war die Handlung, die man zwanzigmal am Tag macht,
-zugleich die einzige, die wegwirft, wo man war. Der Knopf oben in der
-Leiste ist der sichtbare Beweis, dass es den Shortcut gibt — und der Weg
-hinein auf dem Telefon, im Browser-Build und wenn die Tastenkombination
-belegt ist.
+**Capture isn't a place.** The shortcut is the record button (ADR 0012),
+so capturing opens over wherever you were and closes back to it. As a tab,
+the action you take twenty times a day was also the only one that threw
+away where you were. The button at the top of the sidebar is visible proof
+that the shortcut exists, and the way in on the phone, in the browser
+build, and when the key combination is taken.
 
-## Inventar: wo jede Funktion geblieben ist
+## Inventory: where every function went
 
-Nichts darf ohne Eintrag verschwinden. Wenn hier etwas fehlt, ist es ein
-Fehler, keine Entscheidung.
+Nothing may disappear without an entry here. If something is missing, that
+is a bug, not a decision.
 
-| Vorher | Jetzt | Anmerkung |
+| Before | Now | Note |
 |---|---|---|
-| Sidebar → `[ New Capture ]` | Capture-Knopf oben in der Leiste | |
-| Sidebar → Laufende Arbeit | unverändert in der Leiste | |
-| Sidebar → `[ lock now ]` | Leiste unten; auf dem Telefon in Settings | |
-| Capture: aufnehmen, tippen, verwerfen, sichern | unverändert, als Overlay | |
-| Capture: Echo direkt danach | unverändert | |
-| Resurface: „kommt auf dich zu" | **Today**, oberster Abschnitt | |
-| Resurface: „darauf kommst du zurück" | **Today**, zweiter Abschnitt | |
-| Timeline: alles nach Tagen | **Search**, Leerzustand | war dieselbe Frage ein drittes Mal |
-| Search: Anfrage, Typfilter, Treffer | **Search**, unverändert | |
-| Relations: Graph, Suche, Filter, Merge | **Graph**: Map als Einstieg, Klick → Orbit | siehe „Der Graph“ |
-| Tidying: Vorschau, Vorschläge, Anwenden | **Graph**, Schublade rechts | es geht um den Graphen |
-| Tidying: Protokoll und Rückgängig | **Graph**, dieselbe Schublade | |
-| Chat | **entfernt** | war „soon" in der Hauptnavigation |
-| Capture-Detail (alles) | unverändert im Umfang, neu gesetzt | echte Knöpfe, Audio als Range-Input |
-| Entity-Detail (alles) | unverändert im Umfang, neu gesetzt | Relationen zusammengefasst, Zeitleiste |
-| Settings (alles) | unverändert | |
-| — | **Write**, neu | siehe unten |
+| Sidebar → `[ New Capture ]` | Capture button at the top of the sidebar | |
+| Sidebar → pending work | unchanged, in the sidebar | |
+| Sidebar → `[ lock now ]` | bottom of the sidebar; in Settings on the phone | |
+| Capture: record, type, discard, save | unchanged, as an overlay | |
+| Capture: echo straight afterwards | unchanged | |
+| Resurface: "coming up" | **Today**, first section | |
+| Resurface: "you keep coming back to this" | **Today**, second section | |
+| Timeline: everything by day | **Search**, empty state | it was the same question a third time |
+| Search: query, type filter, results | **Search**, unchanged | |
+| Relations: graph, search, filter, merge | **Graph**: Map to start, click → Orbit | see "The graph" |
+| Tidying: preview, proposals, apply | **Graph**, drawer on the right | it's about the graph |
+| Tidying: log and undo | **Graph**, same drawer | |
+| Chat | **removed** | it sat in the main navigation as "soon" |
+| Capture detail (all of it) | same scope, redesigned | real buttons, audio as a range input |
+| Entity detail (all of it) | same scope, redesigned | relations grouped, a timeline |
+| Settings (all of it) | unchanged | |
+| (nothing) | **Write**, new | see below |
 
-## Write: eine Sitzung
+## Write: a session
 
-Der Fall, für den es vorher nichts gab: vier Stunden Workshop, laufend
-mitschreiben, am Ende einmal abschicken. Zwei Entscheidungen tragen den
-Bildschirm, und beide sind darauf zu sehen.
+The case nothing covered before: a four-hour workshop, writing along the
+whole time, sending once at the end. Two decisions carry the screen, and
+both are visible on it.
 
-**Es bleiben mehrere Notizen, nicht eine.** Eine Leerzeile trennt Blöcke;
-jeder Block wird ein eigenes Capture. Vier Stunden als eine Textwand
-würden das Echo ertränken — es vergleicht ganze Captures — und der
-Extraktion nichts geben, woran sie sich festhalten kann.
+**It stays several notes, not one.** A blank line separates blocks; each
+block becomes its own capture. Four hours as one wall of text would drown
+echo, which compares whole captures, and give extraction nothing to hold
+on to.
 
-**Jede Notiz behält die Zeit, zu der sie geschrieben wurde.** Nicht die
-Sendezeit. Die Uhrzeiten stehen im Bund, während man tippt, damit das
-eine sichtbare Tatsache ist und keine Behauptung. Stünde überall 14:00,
-würde die Timeline darüber lügen, wann man etwas gedacht hat — und die
-Timeline ist das Meiste, wofür es dieses System gibt.
+**Each note keeps the time it was written**, not the time it was sent.
+The times sit in the gutter while you type, so that it's a visible fact
+and not a claim. If everything said 14:00, the timeline would lie about
+when you thought something, and the timeline is most of what this system
+is for.
 
-Der Entwurf liegt über `client/src-tauri/src/draft.rs` auf der Platte,
-bewusst **nicht** in der Outbox: die hält fertige Captures, die nicht
-mehr verändert werden können, hier liegt ein Dokument, das sich bei jedem
-Tastendruck ändert. Geschrieben wird über eine Temp-Datei mit Rename, ein
-abgebrochener Schreibvorgang lässt den vorherigen Entwurf unangetastet.
+The draft is kept on disk through `client/src-tauri/src/draft.rs`,
+deliberately **not** in the outbox: the outbox holds finished captures that
+can no longer change, while this is a document that changes with every
+keystroke. It is written through a temporary file and a rename, so an
+interrupted write leaves the previous draft untouched.
 
-Eine Sitzung ist **keine Entität** und erscheint nicht im Graphen. Die
-Extraktion findet Entitäten in dem, was *gesagt* wurde; eine Überschrift,
-die in ein Textfeld getippt wurde, wurde nicht gesagt. Einen Knoten daraus
-zu machen hieße, dass die Oberfläche eine Vermutung in den Graphen
-schreibt — die Grenze, die P12 zieht. Der Titel liegt in
-`capture_sessions`, wo er änderbar und löschbar ist; ins Event-Payload
-geht nur die Id (ADR 0005: das Log wird nie verändert).
+A session is **not an entity** and doesn't appear in the graph. Extraction
+finds entities in what was *said*; a heading typed into a text field was
+not said. Turning it into a node would mean the interface writing a guess
+into the graph, which is the line P12 draws. The title lives in
+`capture_sessions`, where it can be changed and deleted; only the ID goes
+into the event payload (ADR 0005: the log is never changed).
 
-## Das Fundament
+## The foundation
 
-`client/src/styles/tokens.css` ist die einzige Datei, die eine Farbe,
-eine Größe oder eine Dauer benennen darf. Vorher gab es zwölf
-Schriftgrade zwischen 10 und 14px in derselben Ansicht — nicht weil das
-jemand so wollte, sondern weil es keinen Ort gab, an dem der richtige
-Wert stand.
+`client/src/styles/tokens.css` is the only file allowed to name a colour,
+a size or a duration. Before, the same view had twelve font sizes between
+10 and 14px, not because anyone wanted that, but because there was no
+place where the right value was written down.
 
-Die Ebenen (`@layer tokens, base, components, screens`) sind das zweite
-Stück davon: ein Screen schlägt immer eine Komponente, eine Komponente
-immer die Basis, und keiner muss den anderen mit mehr Selektoren
-überbieten. Das alte Blatt trug ein `:not(.graph-ring)` mit sich herum,
-nur damit eine allgemeine Regel eine spezielle nicht übermalt.
+The layers (`@layer tokens, base, components, screens`) are the second
+part: a screen always beats a component, a component always beats the
+base, and nobody has to out-specify anybody else. The old stylesheet
+carried a `:not(.graph-ring)` around just so a general rule wouldn't paint
+over a specific one.
 
-### Drei Schriften, drei Aufgaben
+### Three typefaces, three jobs
 
-| Schrift | Wofür |
+| Typeface | For |
 |---|---|
-| **Fraunces** | Deine Worte, und die Namen von Dingen |
-| **Instrument Sans** | Alles, was die Oberfläche sagt |
-| **JetBrains Mono** | Maschinenwahrheit: Zeitstempel, Zahlen, Ids |
+| **Fraunces** | Your words, and the names of things |
+| **Instrument Sans** | Everything the interface says |
+| **JetBrains Mono** | Machine truth: timestamps, numbers, IDs |
 
-Mono auf Fließtext war der Grund, warum jeder Bildschirm dieselbe flache
-Textur hatte. Die Schriften liegen im Bundle (206 KB), nicht im CDN: eine
-App, deren Audio den Mac nicht verlässt, darf beim Start keine Schrift
-nachladen.
+Monospace on running text was why every screen had the same flat texture.
+The fonts ship in the bundle (206 KB), not from a CDN: an app whose audio
+never leaves the Mac shouldn't fetch a font on launch.
 
-### Vier Akzente, je eine Aufgabe
+### Four accents, one job each
 
-| Farbe | Bedeutung |
+| Colour | Meaning |
 |---|---|
-| **Clay** | Handlungen, und was im Fokus steht |
-| **Ember** | Zeit: wann gesagt, wann fällig |
-| **Moss** | Von der Maschine abgeleitet — nie deine eigenen Worte |
-| **Plum** | Personen, und der vierte Entitäts-Farbton |
+| **Clay** | Actions, and what is in focus |
+| **Ember** | Time: when something was said, when it's due |
+| **Moss** | Derived by the machine, never your own words |
+| **Plum** | People, and the fourth entity hue |
 
-Entitätsfarben kommen aus diesen vieren, über einen FNV-1a-Hash des
-Typnamens. Vorher hing es an der Reihenfolge, in der die laufende Sitzung
-den Typen zum ersten Mal begegnete — nach jedem Neustart eine andere
-Farbe, während der Kommentar oben in `entityType.ts` das Gegenteil
-behauptete. Farbe war damit das Einzige auf dem Schirm, das man nicht
-lernen konnte.
+Entity colours come from these four, through an FNV-1a hash of the type
+name. Before, the colour depended on the order in which the running
+session first met each type: a different colour after every restart,
+while the comment at the top of `entityType.ts` claimed the opposite.
+That made colour the one thing on screen you couldn't learn.
 
-### Bedienelemente
+### Controls
 
-Echte `<button>`, `<input>`, `<label>`, `<input type="checkbox">`. Ein
-2px-Ring in Ember auf `:focus-visible`, durch die Grundfarbe abgesetzt.
+Real `<button>`, `<input>`, `<label>`, `<input type="checkbox">`. A 2px
+Ember ring on `:focus-visible`, set off by the background colour.
 
-Ein Chip, der eine Liste *einengt*, ist nicht ausgewählt — nur leise. Ein
-Chip, der einen Teil eines Bildes *versteckt* (die Typfilter im Graphen),
-ist durchgestrichen: dort fehlt dem Bild vor dir etwas, und du musst
-sehen können, was.
+A chip that *narrows* a list isn't selected, just quiet. A chip that
+*hides* part of a picture (the type filters in the graph) is struck
+through: the picture in front of you is missing something, and you need
+to be able to see what.
 
-## Die Marke
+## The mark
 
-Ein Gehirn im Seitenprofil, nach links. Beide Vorgänger wurden aus einer
-gespiegelten Hälfte gebaut und liefen unten mittig spitz zu — das ist die
-Konstruktion eines Herz-Glyphs, und beide lasen sich auch so. Ein Gehirn
-erkennt man am Profil: asymmetrisch, zwölf Wölbungen entlang der Kontur
-(die Gyri *sind* die Silhouette, deshalb überleben sie das
-Herunterskalieren), ein langer Sulcus, ein Kleinhirn hinten und ein Stamm
-außermittig.
+A brain in side profile, facing left. Both predecessors were built from a
+mirrored half and came to a point at the bottom centre, which is how a
+heart glyph is constructed, and both read like one. A brain is recognised
+by its profile: asymmetric, twelve bulges along the outline (the gyri *are*
+the silhouette, which is why they survive being scaled down), one long
+sulcus, a cerebellum at the back and a stem off-centre.
 
-Die Geometrie liegt in `client/src/brand/mark.json` und nirgends sonst.
-`scripts/render-brand.py` rendert daraus App-Icon, `.icns` und die
-Menüleisten-Vorlage — Fenster und Menüleiste können nicht mehr
-auseinanderdriften.
+The geometry lives in `client/src/brand/mark.json` and nowhere else.
+`scripts/render-brand.py` renders the app icon, the `.icns` and the menu
+bar template from it, so the window and the menu bar can no longer drift
+apart.
 
-Das Zeichen bewegt sich nie von selbst. Es blinkt und wippt nicht; es
-sagt nur, wenn etwas wirklich passiert: `listening`, solange das Mikrofon
-offen ist, `thinking`, solange das Backend an etwas arbeitet. In der
-Menüleiste steht es vollkommen still und ein Punkt daneben atmet — die
-Vorlage reserviert den Platz dafür, damit das Element nie die Breite
-wechselt.
+The mark never moves on its own. It doesn't blink or bob; it only shows
+when something is really happening: `listening` while the microphone is
+open, `thinking` while the backend is working on something. In the menu
+bar it stays completely still and a dot next to it breathes; the template
+reserves the space for it, so the item never changes width.
 
-## Auf dem Telefon
+## On the phone
 
-Die 76px-Leiste wird eine Tab-Bar unten, der Capture-Knopf wandert in die
-Mitte, wo ein Daumen ohnehin ist. Sonst ändert sich nichts: jeder Screen
-ist schon eine Spalte mit Maß. Typo geht eine Stufe herunter, Abstände,
-Radien, Farben und Bedienelemente bleiben, jedes Ziel ist mindestens
+The 76px sidebar becomes a tab bar at the bottom, and the Capture button
+moves to the middle, where a thumb already is. Nothing else changes: every
+screen is already a single column with a measure. Type goes down one step;
+spacing, radii, colours and controls stay, and every target is at least
 44px.
 
-## Der Graph
+## The graph
 
-**Er öffnet auf der Map, nicht auf einem Orbit.** Der erste Wurf öffnete
-zentriert auf das zuletzt Besprochene. Oben stand dann nur „Lena“ —
-und das las sich, als sei der Graph schon auf eine Person gefiltert,
-bevor man irgendetwas angefasst hatte. Jetzt ist „Everything“ der erste
-Schritt jedes Wegs und der Weg zurück; ein Klick auf einen Punkt oder
-Namen der Map öffnet dessen Orbit.
+**It opens on the Map, not on an Orbit.** The first version opened
+centred on whatever was discussed last. The top then said only "Lena",
+which read as though the graph was already filtered to one person before
+you had touched anything. Now "Everything" is the first step of every path
+and the way back; clicking a dot or a name on the Map opens its Orbit.
 
-**Map:** jede Art mit mindestens zwei Einträgen bekommt eine eigene
-Scheibe, die Einzelstücke teilen sich „One-off kinds“. Die Scheiben
-werden gegeneinander gepackt (größte in die Mitte, jede weitere an die
-freie Stelle, die der Mitte am nächsten ist) und das Ganze auf das
-Fenster skaliert. Namen stehen nur an dem, was mehr als einmal gesagt
-wurde, und nur dort, wo sie nichts überdecken — eine echte
-Kollisionsprüfung, keine Versätze.
+**Map:** every kind with at least two entries gets its own disc, and the
+one-offs share "One-off kinds". The discs are packed against each other
+(the largest in the middle, each further one in the free spot closest to
+the middle) and the whole thing is scaled to the window. Names appear only
+on what was said more than once, and only where they cover nothing. That
+is a real collision check, not offsets.
 
-**Orbit:** beide Ringe passen immer ins Bild (`ringRadii` in `orbit.ts`),
-Namen zeigen radial nach außen, Relationen suchen sich entlang ihrer
-Speiche einen freien Platz über oder unter ihr. Zwei Relationen zum
-selben Nachbarn ergeben einen Knoten und eine Linie, nicht zwei.
+**Orbit:** both rings always fit (`ringRadii` in `orbit.ts`), names point
+radially outwards, and relations find a free spot above or below their
+spoke. Two relations to the same neighbour make one node and one line, not
+two.
 
-## Was noch aussteht
+## Still open
 
-- Das Telefon-Layout ist mitgedacht, aber nicht durchgesehen.
-- Die Einzelstück-Arten („One-off kinds“) sind ein Symptom des
-  Typ-Vokabulars aus der Extraktion; die Konsolidierung
-  (`docs/consolidation.md`) ist der Ort, das zu beheben, nicht die
-  Oberfläche.
+- The phone layout is thought through but hasn't been reviewed.
+- The one-off kinds are a symptom of the type vocabulary coming out of
+  extraction; consolidation (`docs/consolidation.md`) is the place to fix
+  that, not the interface.

@@ -1,37 +1,42 @@
-# ADR 0006: Echo vor Graph
+# ADR 0006: Echo before graph
 
 ## Status
 Accepted (2026-09-20)
 
 ## Context
-Erklärtes Produktziel ist Verknüpfung, nicht bloßes Wiederfinden. Dafür gibt
-es zwei sehr unterschiedlich teure Mechanismen.
+The stated product goal is connection, not just finding things again. There
+are two mechanisms for it, at very different cost.
 
-**Echo** — nach dem Erfassen semantisch nahe frühere Captures zeigen. Beruht
-allein auf Embedding-Ähnlichkeit. Der Kern davon läuft bereits
-(`embedding.rs`, `pgvector`, `capture_search`). Funktioniert ab etwa 20
-Captures und kann nichts erfinden, weil es ausschließlich eigene Worte zeigt.
+**Echo** shows earlier captures close in meaning right after capturing. It
+rests on embedding similarity alone. Its core already runs (`embedding.rs`,
+`pgvector`, `capture_search`). It works from about twenty captures on and
+cannot invent anything, because it only ever shows your own words.
 
-**Graph** — typisierte Entitäten und Beziehungen, navigierbar. Hängt
-vollständig an verlässlicher Entitäts-Zusammenführung. Heute passiert die
-über exakten String-Vergleich (`structuring.rs:99`), und Relationen entstehen
-nur innerhalb eines einzelnen Transkripts (`structuring.rs:65-73`) — der
-Graph ist derzeit eine Menge unverbundener Sterne.
+**Graph** means typed entities and relations you can navigate. It depends
+entirely on reliable entity resolution. At this point that is an exact
+string comparison, and relations only come out of a single transcript, so
+the graph is a scattering of unconnected stars.
 
 ## Decision
-Echo wird zuerst gebaut und muss allein tragen. Der Graph bleibt als Ziel
-bestehen, wird aber erst nach Capture-Volumen und funktionierender
-Review-Queue weiterentwickelt und nach etwa 1.000 Captures neu bewertet.
+Echo is built first and has to carry the product on its own. The graph
+remains a goal, but is only developed further once there is capture volume
+and a working review step, and is re-evaluated at around a thousand
+captures.
 
-Konkret: kein weiterer Ausbau von Entitäts-/Relations-UI, bevor der
-Capture-Pfad und Echo im täglichen Gebrauch stehen.
+In practice: no further work on entity or relation interfaces until the
+capture path and echo are in daily use.
 
 ## Consequences
-- Der schnellste Weg zu erlebbarem Produktwert; Echo ist in Tagen, nicht
-  Monaten erreichbar.
-- Die vorhandene Strukturierung läuft unverändert im Hintergrund weiter und
-  sammelt Daten, an denen sich die Qualität der Extraktion später an echtem
-  Material beurteilen lässt.
-- Risiko: Echo könnte sich als ausreichend erweisen und der Graph nie gebaut
-  werden. Das wäre kein Scheitern, sondern ein Ergebnis — festgestellt an
-  echten Daten statt an einer Vorab-Annahme.
+- The fastest route to value you can actually feel; echo is days away, not
+  months.
+- The existing structuring keeps running in the background and collects
+  data on which the quality of extraction can later be judged against real
+  material.
+- Risk: echo may turn out to be enough and the graph may never get built.
+  That would not be a failure but a result, established on real data
+  rather than assumed in advance.
+
+## Later
+
+The graph did get built, once consolidation could connect things across
+notes (`docs/consolidation.md`).

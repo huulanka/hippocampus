@@ -1,163 +1,147 @@
-# Was geprüft ist — und was nicht
+# What has been checked, and what hasn't
 
-Automatisierte Tests decken das meiste ab, aber nicht alles. Manches
-lässt sich von einem Agenten grundsätzlich nicht verifizieren: ein Token,
-das Cloudflare erst ausstellt, wenn der Tunnel existiert, ein Shortcut,
-der aus einer fremden App heraus greifen muss, und alles, was sich erst
-im fertigen Fenster zeigt. Diese Liste hält fest, was davon offen ist,
-damit es nicht in PR-Beschreibungen versickert.
+Automated tests cover most things, but not everything. Some things an
+automated run fundamentally can't verify: a token Cloudflare only issues
+once the tunnel exists, a shortcut that has to fire from inside another
+app, and anything that only shows in the finished window. This list keeps
+track of what is still open, so it doesn't get lost in pull request
+descriptions.
 
-Das Mikrofon stand lange hier und steht jetzt in der Tabelle darunter —
-der Nutzer hat es am 21.09.2026 selbst geprüft.
+## Open: needs a person
 
-## Offen — braucht einen Menschen
+### Remembering ahead in the bundled build
+Everything that depends on macOS only works in the real app (like the
+microphone and Touch ID):
 
-### Zukunft erinnern im gebündelten Build
-Alles, was an macOS hängt, geht nur in der echten App (wie Mikrofon und
-Touch ID):
+1. Settings → Meetings → *Allow…*. Expected: the system dialog with the
+   text from `Info.plist`, then the calendars, grouped by account and in
+   their colours. Tick only the calendars that belong on this Mac.
+2. Create a meeting nine minutes from now, with a known name in the title
+   ("Jour fixe Paul"), and beforehand say something about Paul that is an
+   intention. Expected: the brain in the menu bar turns clay, two sparks
+   twinkle for about 40 seconds and then stay still; a banner "In 9 min: …"
+   (not in a Focus mode); clicking the icon opens the menu with the meeting
+   at the top, showing only "Something to bring up" while locked and the
+   quote after "Unlock…"; the meeting entry opens the brief page, "Write a
+   Note…" opens the capture sheet for typing.
+3. After the meeting ends: a banner "… is over. Did you bring it up?", and
+   the icon stays lit until it's answered on the brief page.
+4. Look at it on a light and a dark menu bar. The two palettes have only
+   been checked as pixels (`tray::tests::tray_preview`), never in the real
+   bar.
 
-1. Settings → Meetings → *Allow…*. Erwartet: der System-Dialog mit dem
-   Text aus `Info.plist`, danach die Kalender, nach Konto gruppiert und in
-   ihrer Farbe. Auf dem privaten Mac nur iCloud anhaken, auf dem
-   Arbeits-Mac nur Exchange.
-2. Einen Termin in 9 Minuten anlegen, Titel mit einem bekannten Namen
-   („Jour fixe Paul"), und vorher etwas über Paul sagen, das eine Absicht
-   ist. Erwartet: das Gehirn in der Menüleiste wird clay, zwei Funken
-   funkeln ~40 s und bleiben dann ruhig stehen; ein Banner „In 9 min: …"
-   (nicht im Fokus-Modus); ein Klick aufs Icon öffnet das Menü mit dem
-   Termin oben, gesperrt nur „Something to bring up", nach „Unlock…" das
-   Zitat; der Termin-Eintrag öffnet die Brief-Seite, „Write a Note…" das
-   Capture-Sheet zum Tippen.
-3. Nach Terminende: Banner „… is over — Did you bring it up?", das Icon
-   leuchtet weiter, bis auf der Brief-Seite geantwortet ist.
-4. Auf heller und dunkler Menüleiste ansehen — die zwei Paletten sind nur
-   als Pixel geprüft (`tray::tests::tray_preview`), nie in der echten Bar.
+Checked so far: matching meetings to entities (`brief::tests`), the phases
+and banner decisions (`foresight::tests`), the routes against Postgres
+(`routes::intentions::db_tests`), and every page in the browser against a
+running backend with a Tauri stub.
 
-Geprüft ist: Abgleich Termin ↔ Entität (8 Tests plus echte Namen der
-Dev-DB), die Phasen und Banner-Entscheidungen (`foresight::tests`), die
-Routen gegen Postgres (`routes::intentions::db_tests`), und alle Seiten im
-Browser gegen echte Daten mit einem Tauri-Stub.
+### Intention detection against the real model
+The prompt has **never run against OpenRouter** from a development
+machine. The parser (missing key, empty text, unknown `about`) and the
+quote check are tested. Open: how often the model detects an intention
+that isn't one, and how often it misses one. Look at a week of real notes
+after deploying; the [x] in the interface is the measurement (count
+`intention.dismissed` in the log).
 
-### Die Absichts-Erkennung gegen das echte Modell
-Der Prompt ist neu und **nie gegen OpenRouter gelaufen** — lokal liegt kein
-Schlüssel. Geprüft sind Parser (fehlender Schlüssel, leerer Text,
-unbekanntes `about`) und die Zitat-Prüfung. Offen: wie oft das Modell eine
-Absicht erkennt, die keine ist, und wie oft es eine übersieht. Nach dem
-Deploy an einer Woche echter Notizen ansehen — die [x] in der UI sind
-dafür die Messung (`intention.dismissed` im Log zählen).
+### The recorded shortcut
+Press `[ Change ]` in Settings, type a combination, then trigger it from
+another app. Expected: it works immediately, without a restart, and
+survives a restart.
 
-### Der aufgezeichnete Shortcut
-In den Einstellungen `[ Change ]` drücken, eine Kombination tippen,
-danach aus einer anderen App heraus auslösen. Erwartet: greift sofort,
-ohne Neustart, und überlebt einen Neustart.
+### Connecting to the NAS from the finished app
+Enter the backend URL and service token in Settings, save, then capture,
+search and play a recording. Expected: "Saved, checked reachable just
+now.", and every screen talks to the NAS instead of localhost. How the
+client reacts to 200, 302 and 403, and that the headers actually go over
+the wire, is tested against real sockets (`backend.rs`); the path through
+the real tunnel isn't.
 
-### Die Verbindung zur NAS aus der fertigen App
-Backend-URL und Service Token in den Einstellungen eintragen, speichern,
-danach erfassen, suchen und eine Aufnahme abspielen. Erwartet: „Saved —
-checked reachable just now.", und alle Screens sprechen mit der NAS statt
-mit localhost. Gegen echte Sockets getestet ist, wie der Client auf 200,
-302 und 403 reagiert und dass die Header tatsächlich auf der Leitung
-liegen (`backend.rs`); ungeprüft ist der Weg durch den echten Tunnel.
+### The remote echo judge against the real API
+The call to OpenRouter has the same shape as the one structuring has been
+making all along, and parsing the answer is unit-tested with six cases
+(missing verdict, invented ID, values outside 0–1, prose instead of JSON,
+empty list, order). A real call from the deployed backend shows from the
+outside: `GET /captures/{id}/echo` then fills `judged_by` with the model
+name instead of `similarity`.
 
-### Der entfernte Echo-Judge gegen die echte API
-Der Aufruf an OpenRouter ist in der Form identisch zu dem, den die
-Strukturierung seit Monaten macht, und das Auswerten der Antwort ist mit
-sechs Fällen unit-getestet (fehlendes Urteil, erfundene ID, Werte außerhalb
-0-1, Prosa statt JSON, leere Liste, Reihenfolge). **Ungeprüft ist ein
-echter Aufruf**: lokal liegt kein OpenRouter-Schlüssel, der Schlüssel lebt
-auf der NAS. Das entscheidet sich beim nächsten Redeploy — und ist von
-außen messbar, weil `GET /captures/{id}/echo` dann `judged_by` mit dem
-Modellnamen füllt statt mit `similarity`.
+### The remote judge's threshold
+0.5 is set because the model is explicitly asked for a 0–1 relevance and
+half is the sensible midpoint, **not because it was measured**. It needs
+the same calibration the cross-encoder thresholds got, once there are
+enough real captures. `?min_rerank=-99` returns the values for it and
+costs nothing, because every candidate is stored with its score.
 
-### Die Schwelle des entfernten Judges
-0,5 ist gesetzt, weil das Modell ausdrücklich nach einer 0-1-Relevanz
-gefragt wird und die Hälfte der sinnvolle Mittelpunkt ist — **nicht, weil
-sie gemessen wurde**. Sie braucht dieselbe Kalibrierung, die die
-Cross-Encoder-Schwellen bekommen haben, sobald genug echte Captures da
-sind. `?min_rerank=-99` gibt die Werte dafür aus und kostet nichts mehr,
-weil jeder Kandidat mit seiner Bewertung gespeichert ist.
+### A real Cloudflare Access token
+Signature checking is tested against self-generated key pairs (valid,
+foreign `aud`, foreign team, expired, forged, `alg: none`). Whether a
+token actually issued by Cloudflare passes can only be checked once the
+tunnel is up.
 
-### Ein echtes Cloudflare-Access-Token
-Die Signaturprüfung ist gegen selbst erzeugte Schlüsselpaare getestet
-(gültig, fremde `aud`, fremdes Team, abgelaufen, gefälscht, `alg: none`).
-Ungeprüft ist, ob ein von Cloudflare tatsächlich ausgestelltes Token
-durchgeht — das geht erst, wenn der Tunnel steht.
+### Correcting your own text
+`[ fix a word ]` in the detail view, change the text, save. Expected: the
+new version appears everywhere (timeline, search, entities), the old one
+below it under `[ HOW THE WORDS CHANGED ]`. Run against a development
+database, but not by a person in the app.
 
-### Die Korrektur am eigenen Text
-`[ fix a word ]` in der Detailansicht, Text ändern, speichern. Erwartet:
-die neue Fassung steht überall (Timeline, Suche, Entitäten), die alte
-darunter unter `[ HOW THE WORDS CHANGED ]`. Gegen die Entwicklungs-
-datenbank durchgespielt, aber nicht von einem Menschen in der App.
+### Audio playback in the real app
+The player has been checked in the browser against the running service,
+not in the Tauri webview, and since ADR 0009 it no longer fetches the
+recording through `<audio src>` but as a blob through Rust, because a
+`src` can't carry the Access headers. Both deserve one listen in the
+finished app.
 
-### Die Audiowiedergabe in der echten App
-Der Player ist im Browser gegen den laufenden Dienst geprüft, nicht im
-Tauri-Webview — und er holt die Aufnahme seit ADR 0009 nicht mehr über
-`<audio src>`, sondern als Blob über Rust, weil ein `src` die
-Access-Header nicht tragen kann. Beides gehört in der fertigen App
-einmal angehört.
+### candle on the target hardware
+The prebuilt ONNX Runtime binary from `ort` crashed with SIGILL on a
+Celeron NAS without AVX2, before the first log line was written. The move
+to `candle` (ADR 0008) is built, tested and verified locally, including
+with `docker build --platform linux/amd64`, which confirms the container
+build. What a local Docker build on Apple Silicon **cannot** check is
+whether the SIGILL is really gone on that hardware, because QEMU emulation
+doesn't reproduce the same (missing) CPU features.
 
-### Der Wechsel auf candle, tatsächlich auf der Zielhardware
-`ort`s vorgebaute ONNX-Runtime-Binary hat auf der Synology DS220+ (Celeron
-J4025, kein AVX2) mit SIGILL abgestürzt, noch bevor die erste Log-Zeile
-geschrieben wurde. Der Umstieg auf `candle` (ADR 0008) ist lokal gebaut,
-getestet und gegen echte Captures verifiziert — auch per
-`docker build --platform linux/amd64`, das den Container-Build bestätigt.
-Was das lokale Docker-Build auf einem Apple-Silicon-Mac **nicht** prüfen
-kann: ob SIGILL auf der echten NAS-Hardware tatsächlich weg ist, weil die
-QEMU-Emulation dort nicht dieselben (fehlenden) CPU-Features nachbildet.
-Das entscheidet sich erst beim echten Redeploy auf der NAS.
+## Checked, and how
 
-## Geprüft — und wie
-
-| Was | Wie |
+| What | How |
 | --- | --- |
-| Die Sprachaufnahme am echten Mikrofon | Vom Nutzer am 21.09.2026 bestätigt: Dialog kam, Sprache wurde transkribiert. |
-| Echo-Schwelle (Kosinus) | An echten Captures gemessen: Rauschgrenze 0,877, echte Treffer ab 0,905. Schwelle 0,89 — gilt nur noch ohne Reranker. |
-| Echo-Schwelle (Cross-Encoder, Jina — abgelöst 21.09.2026) | Über alle 38 Captures kalibriert. *Sauna ↔ Sauna* +0,02, *Sauna ↔ Aufguss* −2,03, *cardamom buns ↔ Sauna* −2,15. Schwelle −2,0 dazwischen; der Abstand ist mit 0,12 schmal. Gilt für ein Modell, das nicht mehr läuft (siehe ADR 0008). |
-| Echo-Schwelle (Cross-Encoder, BGE über candle) | Gegen zwei echte Captures über den laufenden Dienst gemessen: ein echter Treffer +0,193, fünf unpassende Kandidaten −8,37 bis −10,33. Schwelle −4,0 mittig in der Lücke — ein echter Treffer bisher, keine Korpus-Kalibrierung wie bei Jina. |
-| Reranker-Latenz (Jina — abgelöst 21.09.2026) | Zehn Kandidaten: Jina 178 ms, BGE (via `ort`) 605 ms (`examples/rerank_latency.rs`). |
-| Reranker-Latenz (BGE über candle) | Zehn Kandidaten auf diesem Mac: kalt 1,6s, warm 1,3s (`examples/rerank_latency.rs`, nach dem Umstieg auf candle — siehe ADR 0008). Langsamer als die `ort`-Version auf derselben Maschine; noch nicht auf der NAS gemessen. |
-| Zeitauflösung | Notiz um 00:24 Berlin: „morgen Abend um halb acht" → 2026‑09‑22 17:30 UTC, „nächsten Dienstag" → 2026‑09‑29. Beide richtig, inklusive der Feinheit, dass morgen schon Dienstag ist. |
-| Korrektur-Kette | Typ-Capture zweimal korrigiert: Versionen `you, typed` → `you, corrected` → `you, corrected`, Entitäten neu abgeleitet, `structuring.invalidated` geschrieben. |
-| Entitätsseiten | „Lena" führt drei Captures von verschiedenen Tagen und fünf Kanten auf einer Seite zusammen. |
-| Hybride Suche (RRF) | „HPortal" steht bei zwei Retrievern vorn (0,0328) vor Einzeltreffern (0,0161). |
-| Audio-Upload und -Ablage | Inhaltsadressiert, Dedup, Größenlimit, Formatprüfung — Unit-Tests plus curl gegen den laufenden Dienst. |
-| Fehlerantworten | 400 bei leerem Capture, falschem MIME-Typ, fehlendem Transkript; 404 bei unbekannter Capture. |
-| Zugriffsschutz | 401 ohne und mit Müll-Token, `/health` offen, CORS nur für die Client-Origins, Start bricht bei halber Konfiguration ab. |
-| Backup und Restore | Einmal vollständig zurückgespielt, siehe `operations.md`. |
-| Resampling, Mono-Mischung, WAV | Unit-Tests im Client. |
-| Einstellungen | Default parst, Accelerator round-trippt, Unsinn wird abgelehnt, kaputte Datei fällt auf den Default zurück. |
-| Secret in der Keychain | Schreiben, Lesen, Löschen und nochmals Löschen gegen die echte macOS-Keychain durchgespielt (`cargo test --lib -- --ignored`, 21.09.2026). Ein Unit-Test hält zusätzlich fest, dass `persist` das Secret nie in `settings.json` schreibt. |
-| Access-Fehler sind unterscheidbar | Gegen echte Sockets: 200 wird akzeptiert, ein 302 auf die Cloudflare-Login-Seite wird als abgelehnter Service Token gemeldet statt als gesunder Backend, ein 403 nennt die Access-Policy, eine URL ohne Schema sagt das. |
-| Echo-Persistenz, Ende zu Ende | Gegen die lokale Datenbank durchgespielt (21.09.2026): Capture speichern 81 ms mit `echo_pending: true`, Detailansicht 22 ms, Echo erneut lesen 2,5 ms, `?min_rerank=-99` liefert alle gespeicherten Kandidaten ohne Neuberechnung. Datenbank enthält Marker mit Provenienz plus die gerankten Zeilen. |
-| Nachziehen und Neubewerten | Ein Capture ohne gespeichertes Urteil antwortet beim ersten Lesen mit `pending: true` und beim zweiten mit dem Ergebnis. Eine Korrektur löscht das Urteil und löst ein neues aus — nachgeprüft über `judged_at`. |
-| Reranker-Latenz auf der NAS (BGE über candle) | Gegen das laufende Backend gemessen, 21.09.2026: 17,7 s bei zwei Kandidaten, 27,9 s bei drei, 36,6 s bei vier — linear, **9,4 s pro Kandidat**. Zum Vergleich auf demselben Weg: `/search` 247 ms, alle reinen Lese-Endpunkte 120-135 ms, `/health` 160 ms. Der Engpass ist ausschließlich der Cross-Encoder, und weil die Zeit linear mit der Kandidatenzahl wächst (Gewichte werden pro Batch einmal gelesen), ist es Rechenleistung und nicht Speicher. |
-| Redaktion, Ende zu Ende | Gegen den laufenden Dienst durchgespielt (21.09.2026): `DELETE` meldet, was entfernt wurde; das Capture ist danach aus Timeline und Suche verschwunden; über seine ID geöffnet zeigt es `redacted: true`, keinen Text und keine Transkripte; ein zweites `DELETE` antwortet mit 200 statt mit einem Fehler. |
-| Echo-Judge, echter Aufruf | Gegen OpenRouter gemessen (21.09.2026, lokal): `mistralai/mistral-small-2603` über den Anbieter Mistral, **zehn Kandidaten in 1,0 s**, 547 Prompt- und 147 Completion-Token. Auf der NAS dauerte derselbe Aufruf bei *fünf* Kandidaten 12,3 s — dasselbe Modell, derselbe Anbieter, also liegt der Unterschied am Weg der NAS nach draußen und nicht am Modell. Ab jetzt steht das in den Logs. |
-| Was das Backend über sich selbst sagt | Eine Zeile je Anfrage mit Dauer, eine je Modellaufruf mit Anbieter, Dauer und Token, eine je Echo-Urteil mit Dauer, bestem und zweitbestem Wert. Gegen den laufenden Dienst geprüft, Beispiele in `operations.md`. |
-| Service-Token-Header auf der Leitung | Gegen einen echten Socket geprüft: mit Credentials stehen `cf-access-client-id` und `cf-access-client-secret` im Request, ohne Credentials steht keiner der beiden drin (statt leerer Header). |
+| Recording from the real microphone | Checked by hand in the bundled app: the permission dialog appeared and speech was transcribed. |
+| Echo threshold (cosine) | Measured on real captures: noise up to 0.877, real matches from 0.905. Threshold 0.89, which now only applies without a reranker. |
+| Echo threshold (cross-encoder, Jina, since replaced) | Calibrated across the whole development archive. The threshold of −2.0 sat between a real match and a near miss, with a narrow gap of 0.12. Applies to a model that no longer runs (see ADR 0008). |
+| Echo threshold (cross-encoder, BGE via candle) | Measured through the running service: a real match at +0.193, five unrelated candidates between −8.37 and −10.33. Threshold −4.0 in the middle of the gap. One real match so far; no corpus-wide calibration yet. |
+| Reranker latency (Jina, since replaced) | Ten candidates: Jina 178 ms, BGE via `ort` 605 ms (`examples/rerank_latency.rs`). |
+| Reranker latency (BGE via candle) | Ten candidates on an Apple Silicon Mac: 1.6 s cold, 1.3 s warm (`examples/rerank_latency.rs`). Slower than the `ort` version on the same machine. |
+| Resolving time | A note at 00:24 Berlin time: "morgen Abend um halb acht" → 2026-09-22 17:30 UTC, "nächsten Dienstag" → 2026-09-29. Both right, including the subtlety that "tomorrow" is already Tuesday. |
+| Correction chain | A typed capture corrected twice: versions `you, typed` → `you, corrected` → `you, corrected`, entities re-derived, `structuring.invalidated` written. |
+| Entity pages | One entity brings together captures from different days and all of its edges on one page. |
+| Hybrid search (RRF) | A proper noun found by both retrievers ranks ahead (0.0328) of single-retriever matches (0.0161). |
+| Audio upload and storage | Content-addressed, deduplicated, size limit, format check: unit tests plus curl against the running service. |
+| Error responses | 400 for an empty capture, a wrong MIME type, a missing transcript; 404 for an unknown capture. |
+| Access control | 401 without a token and with a junk token, `/health` open, CORS only for the client origins, startup aborts on half a configuration. |
+| Backup and restore | Restored once from start to finish; see `operations.md`. |
+| Resampling, mono mixdown, WAV | Unit tests in the client. |
+| Settings | The default parses, the accelerator round-trips, nonsense is rejected, a broken file falls back to the default. |
+| Secret in the Keychain | Write, read, delete and delete again against the real macOS Keychain (`cargo test --lib -- --ignored`). A unit test also pins down that `persist` never writes the secret into `settings.json`. |
+| Access errors can be told apart | Against real sockets: 200 is accepted, a 302 to the Cloudflare login page is reported as a rejected service token rather than a healthy backend, a 403 names the Access policy, a URL without a scheme says so. |
+| Echo persistence, end to end | Against a local database: saving a capture 81 ms with `echo_pending: true`, detail view 22 ms, reading the echo again 2.5 ms, `?min_rerank=-99` returns all stored candidates without recomputing. The database holds a marker with provenance plus the ranked rows. |
+| Catching up and re-judging | A capture without a stored judgement answers the first read with `pending: true` and the second with the result. A correction deletes the judgement and triggers a new one, confirmed through `judged_at`. |
+| Reranker latency on the NAS (BGE via candle) | Measured against the running backend: 17.7 s for two candidates, 27.9 s for three, 36.6 s for four. Linear, **9.4 s per candidate**. On the same path, `/search` takes 247 ms, every read-only endpoint 120–135 ms, `/health` 160 ms. The bottleneck is purely the cross-encoder, and because time grows linearly with candidates (weights are read once per batch), it's compute, not memory. |
+| Redaction, end to end | Against the running service: `DELETE` reports what was removed; the capture then disappears from timeline and search; opened by its ID it shows `redacted: true`, no text and no transcripts; a second `DELETE` answers 200 instead of an error. |
+| Echo judge, real call | Against OpenRouter from a development machine: `mistralai/mistral-small-2603` through the provider Mistral, **ten candidates in 1.0 s**, 547 prompt and 147 completion tokens. From the NAS the same call with *five* candidates took 12.3 s: same model, same provider, so the difference is the NAS's route out, not the model. This is now in the logs. |
+| What the backend says about itself | One line per request with its duration, one per model call with provider, duration and tokens, one per echo judgement with duration, best and runner-up. Checked against the running service; examples in `operations.md`. |
+| Service token headers on the wire | Against a real socket: with credentials, `cf-access-client-id` and `cf-access-client-secret` are in the request; without credentials neither is (rather than empty headers). |
 
-## Bekannter Zustand
+## Known state
 
-- In der Entwicklungsdatenbank liegen ein paar Test-Captures von mir
-  („Hotkey-Test…", „Rasenmäher…"). Redaction ist noch nicht gebaut, sie
-  lassen sich also derzeit nicht entfernen. Spätere Test-Captures sind
-  aus den Projektionen entfernt (Timeline, Suche, Entitäten sehen sie
-  nicht mehr); ihre Events stehen aus demselben Grund weiterhin im Log.
-- Die Beobachtungen aus der Zeit vor #24 haben kein aufgelöstes Datum.
-  Sie bekommen eins erst, wenn die Re-Derivation gebaut ist oder das
-  jeweilige Capture korrigiert wird — der Abschnitt „you said this was
-  coming" füllt sich also erst mit neuen Notizen.
-- Der Bi-Encoder sortiert weiterhin nachweislich falsch, und das ist jetzt
-  dokumentiert statt erinnert: eine Notiz „Ich war heute Abend in der
-  Sauna, der finnische Aufguss war richtig gut" bekam am 21.09.2026 gegen
-  den lokalen Bestand **Kardamom-Espresso mit 0,9192 vor dem finnischen
-  Aufguss mit 0,9064** und der Sauna-Notiz mit 0,9053. Genau dafür gibt es
-  die zweite Stufe.
-- Der Client spricht seit ADR 0009 nicht mehr aus dem Webview mit dem
-  Backend, sondern aus Rust. Die CORS-Konfiguration des Backends betrifft
-  damit nur noch den Browser-Entwicklungsbuild.
-- Dependabot meldet `glib` 0.18.5 (unsound `Iterator`-Implementierung).
-  Kommt über GTK aus Tauris Linux-Webview-Stack, wird auf macOS nicht
-  kompiliert, und Tauri 2.11 lässt sich nicht auf `glib` 0.20 heben.
-  Nichts, was sich hier beheben ließe.
+- Observations from before time resolution was added have no resolved
+  date. They only get one once re-derivation is built or the capture is
+  corrected, so "you said this was coming" only fills up with new notes.
+- The bi-encoder demonstrably still ranks wrongly: a note about a sauna
+  evening ranked an unrelated note about cardamom espresso slightly above
+  the one about the sauna infusion. That is exactly what the second stage
+  is for.
+- Since ADR 0009 the client talks to the backend from Rust, not from the
+  webview. The backend's CORS configuration now only matters for the
+  browser development build.
+- Dependabot reports `glib` 0.18.5 (unsound `Iterator` implementation). It
+  comes in through GTK from Tauri's Linux webview stack, isn't compiled on
+  macOS, and Tauri 2.11 can't be moved to `glib` 0.20. Nothing that can
+  be fixed here.

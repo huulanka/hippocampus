@@ -61,7 +61,7 @@ Three ways to join the two were on the table:
 - A meeting is only as matchable as its title and attendees. "Abstimmung
   Q3" with nobody invited matches nothing. Accepted: a fuzzy match would
   light the bar for meetings it has no business lighting it for.
-- Title and attendee names reach the user's own NAS in the request body.
+- Title and attendee names reach your own NAS in the request body.
   They are not written anywhere there, and do not reach OpenRouter —
   matching involves no model call.
 - Calendar permission, like the microphone and Touch ID, only exists for a

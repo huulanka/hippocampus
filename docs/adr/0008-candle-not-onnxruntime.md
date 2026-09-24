@@ -6,7 +6,7 @@ Accepted (2026-09-21)
 ## Context
 The backend ran its embedding model (`intfloat/multilingual-e5-small`) and
 its cross-encoder reranker through `fastembed`, a wrapper around `ort`
-(ONNX Runtime bindings). Deployed to the user's Synology DS220+ — an
+(ONNX Runtime bindings). Deployed to a Synology DS220+ — an
 Intel Celeron J4025, Goldmont Plus microarchitecture — the backend
 container exited immediately with code 132 (SIGILL) on every start, before
 a single log line was written.

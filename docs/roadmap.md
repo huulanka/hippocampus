@@ -1,82 +1,87 @@
 # Roadmap
 
-Reihenfolge, nicht Termine. Jede Phase hat ein Abbruch-/Weitermachen-Kriterium.
+An order, not dates. Each phase has a criterion for going on or stopping.
 
-## Phase 0 — Vertrauenswürdig machen (Voraussetzung)
+## Phase 0: make it trustworthy (prerequisite). Done
 
-Ohne das darf nichts Persönliches ins System.
+Nothing personal goes into the system without this.
 
-- Cloudflare-Access-JWT im Backend verifizieren (`CF_ACCESS_AUD` ist
-  dokumentiert, aber nirgends im Code geprüft).
-- `CorsLayer::permissive()` auf konkrete Origins einschränken.
-- Backup **und getesteten Restore** einmal vollständig durchspielen.
+- The backend verifies the Cloudflare Access JWT.
+- CORS is limited to an explicit list of origins.
+- Backup **and a tested restore**, run through once from start to finish
+  (`docs/operations.md`).
 
-*Weiter, wenn:* ein Restore aus dem Backup nachweislich funktioniert hat.
+*Go on when:* a restore from backup has demonstrably worked.
 
-## Phase 1 — Capture & Echo (der eigentliche MVP)
+## Phase 1: capture and echo (the actual MVP). Done
 
-- Audio-Aufnahme und -Speicherung nach ADR 0004, Event-Umbau
-  (`capture.recorded` ohne Text, `transcript.derived`).
-- `transcribe-rs` in den Tauri-Client, globaler Hotkey, Push-to-talk.
-- ~~Lokale Outbox: Erfassen gelingt offline, Sync mit Retry im
-  Hintergrund.~~ **Gebaut**, zusammen mit der Wiedervorlage für
-  Strukturierung und Indexierung und der Zustandszeile in der Sidebar.
-  Siehe `docs/issues.md`. Damit gilt: ist ein Capture gespeichert, ist das
-  Speichern gelungen — vorher konnte ein Upload-Fehler eine bereits
-  gesprochene Notiz vernichten.
-- `GET /captures/{id}/echo` und Anzeige direkt nach dem Erfassen.
-- Suche reparieren: Reciprocal Rank Fusion statt gewichteter Score-Addition,
-  Zeitfilter, `entity_type`-Parameter entweder implementieren oder entfernen.
+- Audio is recorded and kept as the original (ADR 0004); the event model
+  records `capture.recorded` without text and `transcript.derived` next
+  to it.
+- Local transcription in the Tauri client, global shortcut, push-to-talk.
+- A local outbox: capturing works offline and syncs in the background,
+  with retry. Structuring and indexing are retried the same way on the
+  backend. From here on, once a capture is stored, storing it succeeded;
+  everything after that is a delay, not a failure.
+- `GET /captures/{id}/echo`, shown straight after capturing.
+- Search uses Reciprocal Rank Fusion instead of adding weighted scores, and
+  has time filters.
 
-*Weiter, wenn:* eine Woche freiwillige tägliche Nutzung ohne Erinnerung.
-*Sonst:* Ursache klären, bevor irgendetwas anderes gebaut wird.
+*Go on when:* a week of voluntary daily use without reminders.
+*Otherwise:* find out why before building anything else.
 
-## Phase 2 — Vertrauen im Alltag
+## Phase 2: trust in everyday use
 
-- Transkript-Korrektur (ADR 0005), inkl. Neu-Einbettung und Neu-Extraktion.
-- Redaktion mit Tombstone.
-- Re-Derivation: `structure --all` über den gesamten Bestand. Das ist der
-  Punkt, an dem Event Sourcing seine Existenz rechtfertigt.
-- JSONL-Spiegel der Rohdaten für Format-Langlebigkeit.
+- Transcript correction (ADR 0005), including re-embedding and
+  re-extraction. **Done.**
+- Redaction with a tombstone. **Done.**
+- Re-derivation: re-structure the whole archive. This is where event
+  sourcing earns its keep. **Open.**
+- A JSONL mirror of the raw data, so it outlives this program. **Open.**
 
-## Phase 3 — Der Graph verdient sich seinen Platz
+## Phase 3: the graph earns its place
 
-**Vom Nutzer am 22.09.2026 als nächstes großes Thema angemeldet** und
-damit vorgezogen: die automatisch erzeugten Verbindungen müssen zyklisch
-nachkonsolidiert werden — Dubletten erkennen, gleiche Themen mit
-unterschiedlicher Schreibweise zusammenführen, Kanten unter dem richtigen
-Schlagwort führen. Zuschnitt, Auslöser und Reihenfolge stehen in
-[`docs/consolidation.md`](consolidation.md), inklusive des Nachtrags vom
-selben Tag.
+Brought forward: the automatically created connections need consolidating
+after the fact. That means spotting duplicates, merging the same subject
+under different spellings, and filing edges under the right word. Scope,
+triggers and order are in [`docs/consolidation.md`](consolidation.md).
 
-Die Mengenschwelle unten bleibt als *Nutzen*-Argument richtig, nicht als
-Bauverbot: die Mechanik bei 500 Entitäten zu bauen ist das Ziel, sie bei
-54 zu testen der Weg dorthin.
+The volume threshold is still right as an argument about *value*, but it
+is not a ban on building: the mechanics are meant for hundreds of entities
+and get tested on dozens along the way.
 
-- Entitäts-Zusammenführung mit Kandidatensuche (`pg_trgm` + Embedding).
-- Review-Queue, eine Oberfläche für Merges und Korrekturen.
-- Relationen über Capture-Grenzen hinweg (heute unmöglich,
-  `structuring.rs:65-73`).
-- `entities.current_summary` klären: entfernen oder echt konsolidieren.
+- Entity resolution with a candidate search (`pg_trgm` and embeddings).
+  **Done.**
+- A review surface for merges and corrections. **Done**, as a preview
+  with a checkbox per proposal.
+- Relations across capture boundaries. **Done.**
+- Settle `entities.current_summary`: remove it or consolidate for real.
+  **Open.**
 
-*Weiter, wenn:* der Graph mindestens einmal etwas gezeigt hat, das Echo
-nicht gezeigt hätte.
+*Go on when:* the graph has at least once shown something echo would not
+have.
 
-## Phase 4 — Ausbreitung
+## Phase 4: reaching further
 
-- iOS: Kurzbefehl mit Apple-Diktat, oder eigene App mit lokalem Whisper.
-- ~~Wöchentliche Rückschau, gekoppelt an den ohnehin nötigen Review-Termin.~~
-  **Gebaut**, siehe `docs/issues.md`.
-- ~~Zukunft erinnern: Absichten, die an Menschen und Themen hängen, und
-  das Kontext-Echo vor Terminen.~~ **Gebaut** (23.09.2026), Zuschnitt in
-  [`docs/prospective-memory.md`](prospective-memory.md), Architektur in
-  ADR 0013. Danach vorgemerkt: iPhone-App (Tauri iOS über SideStore, mit
-  der Frage nach Apples On-Device-Modell) und „Wie sich mein Denken
-  ändert".
-- Neu bewerten: Chat, MCP, Dokumente. Alle drei mit der Frage, ob sie ein
-  Problem lösen, das dann tatsächlich existiert.
-- Konsolidierungslauf: nicht mehr offen, sondern geschnitten. Zuschnitt,
-  Auslöser, Events und Reihenfolge in
-  [`docs/consolidation.md`](consolidation.md). Schritt 1 daraus
-  (Zeitkontext im Extraktions-Prompt) gehört vorgezogen — er verbessert
-  jede neue Notiz sofort.
+- iPhone: a Shortcut with Apple dictation, or an app of its own with local
+  Whisper.
+- Weekly review, tied to a review appointment you set anyway. **Done.**
+- Remembering ahead: intentions that hang on people and subjects, and a
+  context echo before meetings. **Done**; scope in
+  [`docs/prospective-memory.md`](prospective-memory.md), architecture in
+  ADR 0013. Next in line: an iPhone app (Tauri on iOS, possibly with
+  Apple's on-device model) and "how my thinking changes over time".
+- Revisit chat, MCP and documents, each with the question of whether it
+  solves a problem that by then actually exists.
+
+## Smaller open items
+
+- **Re-evaluate the search cut-off.** On a small archive the semantic
+  retriever returns every capture, so a tail of noise follows the real
+  matches. The ranking is right, only the length is not. Deliberately not
+  solved yet: a threshold calibrated on a handful of captures is
+  overfitting, and at a few hundred captures the candidate depth filters
+  on its own. Measure again on real volume.
+- **Resurface "a year ago today"**, once the archive is old enough for it
+  to mean anything.
+- **Querying by time** ("what is on this week"). The index for it exists.

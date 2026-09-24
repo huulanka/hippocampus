@@ -1,121 +1,120 @@
-# Memory Model
+# Memory model
 
-Welche Konzepte das System kennt, welche es bewusst *nicht* kennt, und wie
-sie auf Events und Projektionen abgebildet werden.
+Which concepts the system knows, which it deliberately does *not* know, and
+how they map onto events and projections.
 
-## Konzepte
+## Concepts
 
-Nur diese sechs. Alles andere ist Ableitung oder Darstellung.
+Only these six. Everything else is derived or presentation.
 
-| Konzept | Definition | Veränderlich? |
+| Concept | Definition | Can it change? |
 |---|---|---|
-| **Capture** | Ein Erfassungsvorgang. Die Aufnahme selbst (Audio) oder ein direkt eingegebener Text. | Nie |
-| **Transcript** | Text zu einem Capture. Ergebnis eines ASR-Modells — bereits Interpretation. | Neue Fassungen, alte bleiben |
-| **Entity** | Etwas, worüber wiederholt gesprochen wird: Person, Projekt, Thema, Ort, Rezept. | Identität kann korrigiert werden |
-| **Observation** | Was ein einzelner Capture über eine Entity aussagt. Immer an Quelle und Modell gebunden. | Nie, nur ergänzt |
-| **Relation** | Eine Verbindung zwischen zwei Entities, mit Quelle und Modell. | Vorgeschlagen → bestätigt/abgelehnt |
-| **Echo** | Menge semantisch naher früherer Captures zu einem neuen Capture. Nicht gespeichert, zur Laufzeit berechnet. | n/a |
+| **Capture** | One act of capturing: the recording itself (audio) or text typed in directly. | Never |
+| **Transcript** | Text for a capture. The output of a speech model, and therefore already an interpretation. | New versions; old ones stay |
+| **Entity** | Something that gets talked about repeatedly: a person, project, subject, place, recipe. | Its identity can be corrected |
+| **Observation** | What a single capture says about an entity. Always tied to its source and the model that read it. | Never, only added to |
+| **Relation** | A connection between two entities, with its source and model. | Proposed, then kept or taken back |
+| **Echo** | The earlier captures close in meaning to a new one. | Judged once and remembered (ADR 0010) |
 
-### Bewusst nicht modelliert
+### Deliberately not modelled
 
-- **Knowledge als eigene Ebene.** „Was glaube ich aktuell" ist die Summe der
-  Observations einer Entity, geordnet nach Zeit. Eine zusätzliche
-  Belief-Ebene mit Confidence-Werten wäre ohne Kalibrierungsdaten geraten.
-- **Decay.** Nichts wird schwächer oder verschwindet. Bei Bedarf Ranking.
-- **Reconsolidation.** Bedeutet, dass Erinnerung sich beim Abruf verändert —
-  das exakte Gegenteil des Kernprinzips.
-- **Zustandsmaschine `NEW → CAPTURED → INTERPRETED → …`.** Das ist ein
-  Boolean („strukturiert ja/nein"), verkleidet als Neurobiologie.
+- **Knowledge as a separate layer.** "What do I currently believe" is the
+  sum of an entity's observations, in time order. An extra belief layer
+  with confidence values would be guesswork without calibration data.
+- **Decay.** Nothing fades or disappears. If needed, as a ranking factor.
+- **Reconsolidation.** It means memory changes when it is recalled, which
+  is the exact opposite of the core principle.
+- **A state machine `NEW → CAPTURED → INTERPRETED → …`.** That is a
+  boolean ("structured or not") dressed up as neuroscience.
 
-## Schichten
+## Layers
 
 ```
-capture.recorded         Audio/Text — Original, unantastbar
+capture.recorded         audio or text: the original, never touched
       ↓
-transcript.derived       ASR-Ausgabe — erste Interpretation, mit Modell
-transcript.corrected     Mensch überschreibt, Original bleibt daneben
+transcript.derived       speech model output: first interpretation, with model
+transcript.corrected     a person overrides it; the original stays next to it
       ↓
-entity.* / relation.*    LLM-Ausgabe — zweite Interpretation, mit Modell
+entity.* / relation.*    LLM output: second interpretation, with model
       ↓
-Projektionen             entities, observations, relations, capture_search
+projections              entities, observations, relations, capture_search
 ```
 
-Jede Schicht kennt ihre Quelle und das Modell, das sie erzeugt hat. Jede
-Schicht außer der ersten ist aus der jeweils darüberliegenden vollständig
-neu ableitbar. Das ist der einzige Grund, warum dieses System Event Sourcing
-benutzt — ohne einen tatsächlich implementierten Re-Derivation-Pfad wäre die
-`events`-Tabelle bloß ein Audit-Log (siehe ADR 0003 und Issue „Re-Derivation").
+Each layer knows its source and the model that produced it. Every layer
+except the first can be rebuilt entirely from the one above. That is the
+only reason this system uses event sourcing; without a re-derivation path
+that actually exists, the `events` table would just be an audit log (see
+ADR 0003).
 
-## Event-Typen
+## Event types
 
-### Erfassung
-- `capture.recorded` — `{ origin: "audio"|"text", content_ref, device, duration_ms }`.
-  Enthält **keinen** Text mehr (Änderung gegenüber heute, siehe ADR 0004).
-- `transcript.derived` — `{ capture_event_id, model, language }`
-- `transcript.corrected` — `{ capture_event_id, supersedes, corrected_by: "user" }`
-- `capture.redacted` — `{ capture_event_id, scope: "content"|"all", reason? }`
+### Capturing
+- `capture.recorded`: `{ origin: "audio"|"text", content_ref, device, duration_ms }`.
+  Contains **no** text (ADR 0004).
+- `transcript.derived`: `{ capture_event_id, model, language }`
+- `transcript.corrected`: `{ capture_event_id, supersedes, corrected_by: "user" }`
+- `capture.redacted`: `{ capture_event_id, scope: "content"|"all", reason? }`
 
-### Ableitung
-- `entity.created` — `{ entity_type, name }` *(existiert)*
-- `entity.observed` — `{ text, source_event_id }` *(existiert)*
-- `relation.proposed` — `{ from_entity_id, to_entity_id, relation_type }` *(existiert)*
-- `relation.confirmed` / `relation.rejected` — `{ decided_by: "user" }`
+### Derivation
+- `entity.created`: `{ entity_type, name }`
+- `entity.observed`: `{ text, source_event_id }`
+- `relation.proposed`: `{ from_entity_id, to_entity_id, relation_type }`
+- `structuring.invalidated`: written when a correction throws away the
+  derived rows of the old wording. A full replay has to respect it, or it
+  brings back a reading of a sentence that no longer exists.
 
-### Identität
-- `entity.merge_proposed` — `{ from_entity_id, into_entity_id, score, reason }`
-- `entity.merged` — `{ from_entity_id, into_entity_id, decided_by }`
-- `entity.unmerged` — `{ merge_event_id }` — jede Verschmelzung ist umkehrbar
+### Identity
+- `entity.merged`: `{ from_entity_id, into_entity_id, decided_by }`
+- `entity.unmerged`: `{ merge_event_id }`. Every merge can be undone.
 
-## Wo Inhalte liegen — und warum nicht im Event Log
+Consolidation adds its own events on top; see `docs/consolidation.md`.
 
-`events` ist per DB-Regel gegen UPDATE und DELETE gesperrt. Redaktion
-(bewusstes Entfernen von Inhalten) wäre damit unmöglich — außer man weicht
-die Regel auf und verliert jede Aussage über Unantastbarkeit.
+## Where content lives, and why not in the event log
 
-**Auflösung:** Das Event Log enthält nur *Struktur und Verweise*, niemals
-Inhalte. Inhalte liegen in eigenen Tabellen, die auf die Event-ID verweisen:
+A database rule blocks UPDATE and DELETE on `events`. That would make
+redaction (deliberately removing content) impossible, unless the rule is
+loosened and every claim about immutability goes with it.
+
+**The way out:** the event log holds only *structure and references*,
+never content. Content lives in its own tables that point at the event ID:
 
 ```
-events                 (unantastbar: was passierte, wann, durch wen/welches Modell)
-capture_content        (event_id → audio_path | text)        ← redigierbar
-transcript_content     (event_id → text, model, superseded_by) ← redigierbar
+events                 (immutable: what happened, when, by whom or which model)
+capture_content        (event_id → audio_path | text)          ← redactable
+transcript_content     (event_id → text, model, superseded_by)  ← redactable
 ```
 
-Redaktion nullt den Inhalt in `capture_content`/`transcript_content`, löscht
-abgeleitete Observations und hängt ein `capture.redacted`-Event an. Die Kette
-der Ereignisse bleibt lückenlos und prüfbar; der Inhalt ist weg. Siehe
-ADR 0005.
+Redaction empties the content in `capture_content` and
+`transcript_content`, removes derived observations and appends a
+`capture.redacted` event. The chain of events stays complete and
+checkable; the content is gone. See ADR 0005.
 
-## Projektionen
+## Projections
 
-Bestehend: `entities`, `observations`, `relations`, `capture_search`,
-`entity_type_registry`.
+`entities`, `observations`, `relations`, `capture_search`,
+`entity_type_registry`, plus the consolidation tables (`entity_alias`,
+`entity_merge_block`).
 
-Zu ändern:
-- `capture_search.transcript` muss künftig die **aktuelle** Transkriptfassung
-  spiegeln und bei jeder Korrektur neu eingebettet werden.
-- `entities.current_summary` wird heute von der jeweils letzten Observation
-  überschrieben (`structuring.rs:151`). Das ist Last-write-wins und
-  widerspricht der Idee einer konsolidierten aktuellen Sicht. Entweder das
-  Feld entfällt und die Sicht wird zur Lesezeit aus den Observations
-  gebildet, oder es braucht einen echten Konsolidierungsschritt. Bis dahin:
-  Feld nicht als „aktuelle Überzeugung" interpretieren.
+- `capture_search.transcript` mirrors the **current** transcript version
+  and is re-embedded on every correction.
+- `entities.current_summary` is overwritten by the latest observation
+  (last write wins). That is not a consolidated view, so the interface
+  labels it "most recently observed" rather than as a summary. Either the
+  field goes and the view is built from the observations when read, or it
+  gets a real consolidation step.
 
-Neu:
-- `entity_merge_queue` — offene Verschmelzungsvorschläge für die Review-Queue.
+## Entity identity
 
-## Entitäts-Identität
+Exact string matching on name and type makes names fall apart into
+unconnected fragments ("Lena", "Lena M.", speech recognition noise) at a
+few thousand captures a year. The graph then isn't wrong, it's empty.
 
-Heute: `where entity_type = $1 and lower(name) = lower($2)` — exakter
-String-Vergleich (`structuring.rs:99`). Bei 5.000 Captures im Jahr zerfallen
-Namen dadurch in unverbundene Fragmente („Lena", „Lena M.", ASR-Müll),
-und der Graph bleibt nicht falsch, sondern leer.
+How it works now:
 
-Zielverfahren:
-1. Exakter Treffer → automatisch zuordnen.
-2. Sonst Kandidaten über Namensähnlichkeit (`pg_trgm`) und Embedding-Nähe.
-3. Über Schwellwert → `entity.merge_proposed`, landet in der Review-Queue.
-4. Mensch entscheidet, `entity.merged` oder verworfen. Immer umkehrbar.
-
-Dieselbe Oberfläche bedient Transkript-Korrekturen. Ein Mechanismus, zwei
-Probleme.
+1. The extraction sees what already exists and reuses those names
+   (`docs/entity-resolution.md`, stage 1).
+2. The same name under a different type word resolves to the same entity.
+3. Everything else is found through name similarity (`pg_trgm`) and
+   embedding proximity, and decided by a model that reads both sides.
+4. Every merge is an event and can be undone; a merge that was taken back
+   is never proposed again.

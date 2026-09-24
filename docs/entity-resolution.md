@@ -1,278 +1,213 @@
-# Entitäts-Auflösung: Implementierungsplan
+# Entity resolution
 
-Stand 22. September 2026. Setzt `docs/consolidation.md` um — das sagt
-*warum* und *was der Lauf verändern darf*; dieses Dokument sagt *wie*, in
-welcher Reihenfolge, und woran man erkennt, dass eine Stufe fertig ist.
+How the system tells a duplicate from a relation, and in what order it
+tries. [`consolidation.md`](consolidation.md) says *why* and *what the run
+may change*; this document says *how*.
 
-Ausgelöst durch den Nutzer:
+The problem in one sentence: you capture "coffee" once and "espresso"
+once, and the two nodes stay separate; the same happens with typos, or
+when a colleague is "Paul" in one note and "Paul Hartmann" in the next.
 
-> „Ich erfasse einmal zum Beispiel Kaffee und ich erfasse einmal Espresso,
-> da sind die beiden Knoten momentan getrennt … Das habe ich beispielsweise
-> auch bei Tippfehlern oder wenn Namen anders geschrieben werden, einmal
-> nenne ich den Kollegen Paul, einmal nenne ich ihn Paul Hartmann."
+## No threshold separates the cases
 
----
+Trigram similarity (`pg_trgm`) for a handful of typical pairs:
 
-## Der Befund, an den echten Daten
-
-78 Entitäten, 32 Typen. `pg_trgm` über alle Paare, Ähnlichkeit > 0,3:
-
-| Paar | Ähnlichkeit | Was es ist |
+| Pair | Similarity | What it is |
 | --- | --- | --- |
-| Sauna (Ort) ↔ Sauna (Aktivität) | 1,00 | Dublette |
-| Northwind (Organisation) ↔ (Kunde) | 1,00 | Dublette |
-| Kardamom-Espresso (Idee) ↔ (Getränk) | 1,00 | Dublette |
-| Hotkey-Test (Thema) ↔ (Test) | 1,00 | Dublette |
-| Espresso mit Kardamom ↔ Kardamom-Espresso | 0,82 | Dublette |
-| Hippocampus ↔ Hippocampus Projekt | 0,60 | Dublette |
-| **Kardamom-Espresso ↔ Espresso** | **0,50** | **Relation** (Gattung) |
-| **Kardamom-Espresso ↔ Kardamom** | **0,50** | **Relation** (Zutat) |
-| Aufguss ↔ Finnischer Aufguss | 0,42 | Dublette |
-| **Northwind Abrechnungsprojekt ↔ Northwind** | **0,41** | **Relation** |
-| **Hafenportal ↔ HPortal** | **0,38** | **nichts** |
-| **Cardamom Buns ↔ Kardamom** | **0,35** | **Relation** (Zutat) |
+| Sauna (place) ↔ Sauna (activity) | 1.00 | duplicate |
+| Hippocampus-Projekt ↔ Hippocampus Projekt | 1.00 | duplicate |
+| Espresso mit Kardamom ↔ Kardamom-Espresso | 0.82 | duplicate |
+| Hippocampus ↔ Hippocampus Projekt | 0.60 | duplicate |
+| **Kardamom-Espresso ↔ Espresso** | **0.50** | **relation** (a kind of) |
+| **Kardamom-Espresso ↔ Kardamom** | **0.50** | **relation** (ingredient) |
+| **Hafenportal ↔ HPortal** | **0.43** | **nothing** (two projects) |
+| Aufguss ↔ Finnischer Aufguss | 0.42 | duplicate |
+| **Cardamom Buns ↔ Kardamom** | **0.35** | **relation** (ingredient) |
+| **Northwind Abrechnungsprojekt ↔ Northwind** | **0.34** | **relation** (project for a customer) |
 
-**Daraus folgt die zentrale Entwurfsentscheidung.** Es gibt keine
-Schwelle, die diese drei Gruppen trennt: `Kardamom-Espresso ↔ Espresso`
-(0,50) darf *nicht* verschmelzen und liegt **über** `Aufguss ↔
-Finnischer Aufguss` (0,42), das verschmelzen *muss*. Und `Hafenportal ↔
-HPortal` (0,38) liegt knapp darunter und ist gar nichts.
+**This is the central design decision.** No threshold separates these
+groups: `Kardamom-Espresso ↔ Espresso` (0.50) must *not* be merged and sits
+**above** `Aufguss ↔ Finnischer Aufguss` (0.42), which must be. And
+`Hafenportal ↔ HPortal`, two unrelated projects, sits above both.
 
-Das ist formgleich mit dem Echo-Problem, das dieses Projekt schon einmal
-hatte: *cardamom buns ↔ Sauna* stand bei Kosinus 0,871 über *finnischer
-Aufguss ↔ Sauna* bei 0,849. Die Lösung war nicht eine bessere Schwelle,
-sondern ein Modell, **das beide Texte liest** (#25). Hier gilt dasselbe:
+It has the same shape as the echo problem this project already had: with
+cosine similarity, a note about cardamom buns ranked above a note about a
+sauna infusion when the query was about the sauna. The fix then was not a
+better threshold but a model **that reads both texts** (ADR 0010). The
+same applies here:
 
-> **Ähnlichkeit erzeugt Kandidaten. Entscheiden muss ein Leser.**
+> **Similarity produces candidates. A reader has to decide.**
 
-### Vier Urteile, nicht zwei
+### Four verdicts, not two
 
-Entschieden am 22.09.2026. Das Modell bekommt beide Entitäten samt ihren
-Beobachtungen und antwortet mit einem von vier Urteilen:
+The model gets both entities with their observations and answers with one
+of four verdicts:
 
-| Urteil | Folge | Beispiel aus den Daten |
+| Verdict | Consequence | Example |
 | --- | --- | --- |
-| `same` | Verschmelzung, Alias bleibt | Aufguss ↔ Finnischer Aufguss |
-| `narrower` | `is_a`-Kante, beide bleiben | Kardamom-Espresso → Espresso |
-| `related` | generische Kante, beide bleiben | Northwind Abrechnungsprojekt → Northwind |
-| `different` | **festhalten**, nie wieder fragen | Hafenportal ↔ HPortal |
+| `same` | merge, the other name stays as an alias | Aufguss ↔ Finnischer Aufguss |
+| `narrower` | an `is_a` edge, both stay | Kardamom-Espresso → Espresso |
+| `related` | a generic edge, both stay | Northwind Abrechnungsprojekt → Northwind |
+| `different` | **recorded**, never asked again | Hafenportal ↔ HPortal |
 
-`different` wird gespeichert, nicht verworfen: sonst zahlt jeder Lauf
-erneut dafür, dasselbe Nicht-Ergebnis herauszufinden.
+`different` is stored, not discarded; otherwise every run pays again to
+find out the same non-result.
 
-### Warum Kaffee und Espresso *nicht* verschmelzen
+### Why coffee and espresso do *not* merge
 
-Weil man danach nicht mehr wüsste, ob von einem Espresso die Rede war oder
-von Filterkaffee. In einem Gedächtnissystem ist das ein schlimmerer
-Verlust als die Fragmentierung, die es behebt — und praktisch unumkehrbar,
-weil ein falsch verschmolzener Graph *stimmig aussieht*. `consolidation.md`
-hat das über Sauna und Finnischen Aufguss bereits so entschieden; hier
-steht es noch einmal, weil die Formulierung „zusammenfassen" beide Fälle
-umfasst und sie auseinandergehalten werden müssen.
+Because afterwards you would no longer know whether an espresso or filter
+coffee was meant. In a memory system that is a worse loss than the
+fragmentation it fixes, and practically irreversible, because a wrongly
+merged graph *looks coherent*. The same applies to Sauna and Finnischer
+Aufguss: they belong together, which makes them an edge, not one node.
 
----
+## Further decisions
 
-## Weitere Entscheidungen, 22.09.2026
+**Every merge is an event and can be undone.** Undoing only helps if the
+mistake is noticed, so whatever the run changed has to be visible and
+reversible in one move. That is why the run shows a preview first and
+keeps a change log (see `consolidation.md`).
 
-**Der Lauf verschmilzt automatisch, ohne Rückfrage, und alles ist per
-Event umkehrbar.** Bestätigung der Entscheidung aus `consolidation.md`.
-Der Einwand dagegen wurde vorgebracht und verworfen: Umkehrbarkeit hilft
-nur, wenn man den Fehler bemerkt.
+**Naming:** the same verdict that merges also chooses the surviving name,
+usually the fuller form. **Every earlier spelling stays searchable as an
+alias.** Otherwise fragmentation is traded for unfindability: "Paul" would
+no longer find the colleague once the node is called "Paul Hartmann".
 
-Daraus folgt eine Pflicht, die damit einhergeht und in `consolidation.md`
-schon als Anforderung steht — *„man soll schon auch irgendwie erkennen
-können, wie sich mein Graph im Laufe der Zeit entwickelt hat"*: **was der
-Lauf verändert hat, muss sichtbar und mit einem Griff rücknehmbar sein.**
-Ohne das ist „automatisch und umkehrbar" nur die erste Hälfte. Das ist
-Stufe 6 und gehört nicht ans Ende, sondern in denselben Zug wie Stufe 5.
+**Order: prevent first, then repair.** Several duplicate pairs only exist
+because of the freely invented type vocabulary, and "Espresso mit
+Kardamom" appears next to "Kardamom-Espresso" because the extraction
+doesn't know what already exists. What doesn't fall apart in the first
+place doesn't need merging.
 
-**Benennung:** dasselbe Urteil, das verschmilzt, wählt auch den
-überlebenden Namen — meist die vollständigere Form. **Jede frühere
-Schreibweise bleibt als Alias durchsuchbar.** Ohne das tauscht man
-Fragmentierung gegen Unauffindbarkeit: „Paul" fände den Kollegen nicht
-mehr, sobald der Knoten „Paul Hartmann" heißt.
+## Stage 1: resolving at write time
 
-**Reihenfolge: erst vermeiden, dann reparieren.** Vier der Paare oben
-existieren ausschließlich wegen des frei erfundenen Typ-Vokabulars, und
-„Espresso mit Kardamom" entstand neben „Kardamom-Espresso", weil die
-Extraktion nicht weiß, was es schon gibt. Was gar nicht erst zerfällt,
-muss nicht zusammengeführt werden.
+*Prevents new fragmentation. Takes effect from the next note.*
 
----
+Before this stage, `structuring.rs` looked up `entity_type = $1 and
+lower(name) = lower($2)` before creating anything: exact name **and**
+exact type. The extraction prompt contained nothing about the existing
+graph, so the model invented names and types afresh for each note.
 
-## Stufe 1 — Auflösen beim Schreiben
+1. **The type vocabulary goes into the prompt.** The existing entries from
+   `entity_type_registry` are sent along, with the instruction to use one
+   of them if it fits. This scales: the type list stays small even with
+   thousands of entities.
+2. **Known neighbours go into the prompt.** Candidates via
+   `word_similarity(entity.name, transcript)`, which is exactly the
+   `pg_trgm` operator for "does this name appear somewhere in this text,
+   even misspelled", plus the most recently touched entities, because one
+   sitting tends to be about the same things. Capped at about forty
+   entries (name, type, short summary).
+3. **Fuzzy resolution when creating.** The same name under a *different*
+   type resolves to the same entity, and so does anything above a high
+   trigram threshold. Below it, a new entity is created and the later
+   stages take care of it.
+4. **Entity embeddings are actually written.** `entities.embedding` had
+   been declared with an HNSW index since migration 0001 but was never
+   filled. The later stages need it, and the candidates in step 2 get
+   better with it.
 
-*Verhindert neue Fragmentierung. Wirkt ab der nächsten Notiz.*
+*Done when:* two notes about the same thing in different wording land on
+one entity, and a new note doesn't invent a type that already exists.
 
-Heute: `structuring.rs` sucht vor dem Anlegen nach `entity_type = $1 and
-lower(name) = lower($2)` — exakter Name **und** exakter Typ. Der
-Extraktions-Prompt enthält nichts über den bestehenden Graphen, also
-erfindet das Modell Namen und Typen pro Notiz neu.
+### What it showed
 
-1. **Typ-Vokabular in den Prompt.** Die bestehenden Einträge aus
-   `entity_type_registry` werden mitgeschickt, mit der Anweisung, einen
-   davon zu verwenden, wenn einer passt. Skaliert: die Typenliste bleibt
-   klein (heute 32, Ziel ~8–12), auch bei 5.000 Entitäten.
-2. **Bekannte Nachbarn in den Prompt.** Kandidaten über
-   `word_similarity(entity.name, transcript)` — genau der pg_trgm-Operator
-   für „kommt dieser Name irgendwo in diesem Text vor, auch unsauber
-   geschrieben" — plus die zuletzt berührten Entitäten, weil man in einer
-   Sitzung über dieselben Dinge spricht. Gedeckelt (~40 Einträge: Name,
-   Typ, kurze Zusammenfassung).
-3. **Unscharfes Auflösen beim Anlegen.** Der exakte Vergleich wird
-   erweitert: gleicher Name bei *abweichendem* Typ löst auf dieselbe
-   Entität auf (behebt alle vier 1,00-Paare), und oberhalb einer hohen
-   Trigramm-Schwelle ebenfalls. Unterhalb davon wird angelegt — und Stufe
-   3 bis 5 kümmern sich darum.
-4. **Entitäts-Embeddings endlich schreiben.** `entities.embedding` ist
-   seit Migration 0001 deklariert und hat einen HNSW-Index, wird aber
-   **nirgends gefüllt** — 0 von 78. Stufe 3 braucht die Spalte, und
-   Kandidaten in Schritt 2 werden damit besser.
+Test notes worded so that the old exact comparison would certainly have
+created a new node ("Paul Hartmann" for an existing "Paul", "Kardamom
+Espresso" without the hyphen, "Hippocampus-Projekt" with one) all resolved
+to the existing entities. No new nodes.
 
-*Fertig, wenn:* zwei Notizen über denselben Gegenstand mit
-unterschiedlicher Formulierung auf einer Entität landen, und eine neue
-Notiz keinen neuen Typ erfindet, für den es schon einen gibt.
+The notable part is *which* mechanism did it: none of the fuzzy fallbacks
+in `resolve_existing` fired. The model itself returned the existing names
+because it saw them in the prompt. Resolution happens at the source, not
+in the repair, which is also the cheaper place.
 
-### Gebaut und gemessen, 22.09.2026
+The fallback is still calibrated correctly: pure spelling differences
+reach a trigram similarity of 1.00 (`Hippocampus-Projekt` ↔ `Hippocampus
+Projekt`) and resolve. Reordered words like `Espresso mit Kardamom` ↔
+`Kardamom Espresso` stay below at 0.82 and go to the verdict in the later
+stages, which is right: a reordered phrase is a decision, not a spelling
+variant.
 
-Drei Notizen gegen den bestehenden Graphen (78 Entitäten), jeweils in
-einer Formulierung, die vorher garantiert einen neuen Knoten erzeugt
-hätte, weil der alte Vergleich exakt auf Name *und* Typ ging:
+Stage 1 deliberately does **not** repair the existing archive. That is
+what the following stages are for.
 
-| Gesagt | Vorher | Jetzt aufgelöst auf |
-| --- | --- | --- |
-| „Paul **Hartmann** hat mir geschrieben" | neuer Knoten | **Paul** (Person) |
-| „ein **Kardamom Espresso**" (ohne Bindestrich) | neuer Knoten | **Kardamom-Espresso** (Getränk) |
-| „am **Hippocampus-Projekt**" | neuer Knoten | **Hippocampus Projekt** (Projekt) |
-| „das **Abrechnungsprojekt** bei Northwind" | neuer Knoten | **Abrechnungs Projekt** (Projekt) |
-| „**Northwind**" | — | **Northwind** (Kunde) |
+## Stages 2 to 6: the consolidation run
 
-**Ergebnis: 78 Entitäten vorher, 78 danach. Kein einziger neuer Knoten.**
+Rather than a fixed list of pairs or a hand-written type mapping, a run
+looks at the entities periodically and merges them on its own, guided by a
+careful system prompt. A fixed list describes a life only until that life
+changes; the run derives the vocabulary itself and may coin new types and
+new relation words.
 
-Bemerkenswert daran ist, *welcher* Mechanismus gegriffen hat: keiner der
-unscharfen Fallbacks in `resolve_existing` hat geloggt. Das Modell selbst
-hat die bestehenden Namen zurückgegeben, weil es sie im Prompt sah. Die
-Auflösung passiert also an der Quelle, nicht in der Reparatur — was auch
-der billigere Ort ist.
-
-Der Fallback ist trotzdem richtig kalibriert, gemessen an denselben Daten:
-reine Schreibweisen-Unterschiede erreichen Trigramm-Ähnlichkeit 1,00
-(`Hippocampus-Projekt` ↔ `Hippocampus Projekt`, `Logging Probe` ↔
-`Logging-Probe`) und greifen. Wortumstellungen wie `Espresso mit Kardamom`
-↔ `Kardamom Espresso` bleiben bei 0,82 darunter und gehen damit ans Urteil
-in Stufe 4 — richtig so, denn eine umgestellte Wortfolge ist eine
-Entscheidung, keine Rechtschreibvariante.
-
-**Was Stufe 1 ausdrücklich nicht tut:** den Bestand reparieren. Die vier
-Paare mit Ähnlichkeit 1,00 (Sauna, Northwind, Kardamom-Espresso,
-Hotkey-Test) stehen weiterhin doppelt in der Datenbank. Dafür sind die
-Stufen 3 bis 5 da.
-
-## Stufe 2–6 — gebaut am 22.09.2026
-
-Der Nutzer hat den Zuschnitt korrigiert, und die Korrektur war besser als
-der Plan. Wörtlich:
-
-> „Ich möchte da keine fixen Paare haben, die da vorgegeben sind, sondern
-> ich möchte einen Lauf, einen Job, der sich zyklisch die Themen einmal
-> anguckt, die Knoten, und die eigenständig zusammenlegt — schön mit einem
-> guten System-Prompt, damit das kein Chaos wird … Das System soll
-> eigenständig leben und arbeiten … Ich habe unveränderliche
-> Startprimitiven, Changelog auf die Repräsentation meines Wissens."
-
-Die von mir entworfene 32→13-Typabbildung wurde damit verworfen. Zu
-Recht: eine einmal festgelegte Liste beschreibt ein Leben ab dem Moment
-nicht mehr, in dem sich dieses Leben ändert. Der Lauf leitet das
-Vokabular stattdessen selbst her und darf neue Typen und neue
-Beziehungswörter prägen.
-
-### Was gebaut ist
+### What exists
 
 | | |
 | --- | --- |
-| `entity_alias` | jeder Name, den eine Entität je trug, bleibt durchsuchbar |
-| `entities.merged_into` | verschmelzen löscht nie, es zeigt |
-| `entities.last_consolidated_at` | die Markierung, nach der gefragt wurde: `null` = nie angesehen |
-| `entity_merge_block` | ein zurückgenommener Merge wird nie wieder vorgeschlagen |
-| `consolidation.rs` | exakter Durchgang, dann Modell-Durchgang, dann Markierung |
-| `GET /consolidation` | das Änderungsprotokoll |
-| `GET /consolidation/preview` | derselbe Lauf, der nichts verändert |
-| `POST /entities/{id}/merge` | von Hand, im Graphen |
-| `POST /entities/{id}/unmerge` | zurücknehmen |
+| `entity_alias` | every name an entity ever had stays searchable |
+| `entities.merged_into` | merging never deletes, it points |
+| `entities.last_consolidated_at` | `null` means never looked at |
+| `entity_merge_block` | a merge that was taken back is never proposed again |
+| `consolidation.rs` | an exact pass, then a model pass, then the marker |
+| `GET /consolidation` | the change log |
+| `GET /consolidation/preview` | the same run, changing nothing |
+| `POST /consolidation/apply` | apply the preview, minus what was unticked |
+| `POST /consolidation/run` | an immediate pass without preview, for scripts |
+| `GET /entities/{id}/fold-candidates` | likely duplicates, or a search by name and alias |
+| `POST /entities/{id}/merge` | by hand |
+| `POST /entities/{id}/unmerge` | take it back |
+| `DELETE /relations/{id}` | take an edge back |
 
-Die Arbeitsmenge ist kein Zeitfenster, sondern der betroffene Teilgraph,
-wie `consolidation.md` es verlangt: die fälligen Entitäten
-(`last_consolidated_at` zuerst `null`, dann am längsten her) plus deren
-Nachbarschaft über Namensähnlichkeit *und* Embedding-Nähe. Beides, weil
-sie unterschiedlich versagen — Trigramme übersehen „Sauna" neben
-„Aufguss", Embeddings übersehen einen Tippfehler in einem Eigennamen.
+The working set is not a time window but the affected part of the graph,
+as `consolidation.md` requires: the entities that are due
+(`last_consolidated_at` null first, then oldest) plus their neighbourhood
+by name similarity *and* embedding proximity. Both, because they fail
+differently: trigrams miss "Sauna" next to "Aufguss", embeddings miss a
+typo in a proper noun.
 
-### Gemessen am 22.09.2026
+### The first dry run found a mistake, which is what it was for
 
-**Der erste Trockenlauf hat einen Fehler gefunden, und genau dafür war er
-da.** Das Modell wollte `Northwind Abrechnungsprojekt` in `Northwind`
-verschmelzen, mit der Begründung „beschreiben dasselbe Projekt beim
-Kunden" — ein Argument für eine Kante und gegen eine Verschmelzung, im
-selben Satz. Der Prompt verbietet das wörtlich und es passierte trotzdem.
+The model wanted to merge a customer's project into the customer itself,
+reasoning that both "describe the same project at the customer", which is
+an argument for an edge and against a merge in the same sentence. The
+prompt forbids exactly that, and it happened anyway.
 
-Daraus folgt eine Regel, die in Code steht und nicht nur im Prompt
-(`crosses_types`): **zwei verschieden benannte Dinge verschiedenen Typs
-werden nicht verschmolzen.** Die beiden legitimen Formen überleben —
-gleicher Name/anderer Typ (`Sauna` als `Ort` und `Aktivität`) und anderer
-Name/gleicher Typ (`Hippocampus` und `Hippocampus Projekt`).
+That led to a rule that lives in code and not just in the prompt
+(`crosses_types`): **two differently named things of different types are
+never merged automatically.** The two legitimate forms survive: same name,
+different type (`Sauna` as `Ort` and `Aktivität`), and different name,
+same type (`Hippocampus` and `Hippocampus Projekt`). The rejected merge
+became the right answer instead: an edge from the project to the customer.
 
-Danach, auf demselben Bestand:
+The real gain is the edges across notes, because they used to be
+*impossible*: `structuring.rs` can only connect what was said in one
+sentence. For that, `relations.source_event_id` became nullable
+(migration 0008). An edge read out of several notes has no single source,
+and inventing one would be a lie about provenance in exactly the table
+where provenance is the point. The interface shows `[across notes]` there
+instead of `[why]`.
 
-| | |
-| --- | --- |
-| Durch exakte Namensgleichheit verschmolzen | 4 |
-| Durch Urteil verschmolzen | 1 (`Hippocampus Projekt` → `Hippocampus`) |
-| Falsche Verschmelzung abgelehnt | 1 |
-| **Kanten über Capture-Grenzen hinweg** | **11** |
+### By hand
 
-Die Kanten sind der eigentliche Gewinn, weil sie vorher *unmöglich* waren
-— `structuring.rs` kann nur verbinden, was in einem Satz vorkam, weshalb
-ADR 0006 den Graphen als „eine Menge unverbundener Sterne" vorhersagte:
+In the graph: select a node, choose "Fold into…", pick the target from a
+list (the likely duplicates are suggested without typing, and typing
+searches names and aliases), check both sides, confirm. The target is
+chosen in the panel rather than by clicking in the graph, because a
+duplicate is almost never in the same orbit: two names for the same thing
+were never said together, so they aren't neighbours.
 
-- `Finnischer Aufguss —gehört zu→ Sauna` — das Paar, mit dem der Nutzer
-  dieses Thema eröffnet hat. Verbunden, nicht verschmolzen.
-- `Northwind Abrechnungsprojekt —gehört zu→ Northwind` — aus dem
-  abgelehnten Merge wurde die richtige Antwort.
-- `Test-Instanz —gehört zu→ Northwind Abrechnungsprojekt`
-- `Konzept —wird gefordert von→ Ole`
+The automatic run's safeguards deliberately do **not** apply to a person:
+`crosses_types` also rejects some correct merges, and whoever has both
+entities in front of them has better information. An existing block is
+lifted by a manual merge.
 
-Dafür musste `relations.source_event_id` nullable werden (Migration
-0008). Eine Kante, die aus mehreren Notizen gelesen wurde, hat keine
-einzelne Quelle, und eine zu erfinden wäre eine Lüge über Herkunft in
-genau der Tabelle, in der Herkunft der Punkt ist. Die Oberfläche zeigt
-dort `[across notes]` statt `[why]`.
+The candidate list sorts by name, then type, with embedding proximity only
+breaking ties: the embedding model puts almost any pair of short names at
+around 0.9 cosine, so it can't be the primary order.
 
-### Von Hand, im Graphen
+## Still open
 
-Auf Wunsch des Nutzers. Im Relations-Graphen: Knoten fokussieren,
-`[ merge into… ]`, den Zielknoten anklicken, bestätigen. Zwei Klicks und
-eine Rückfrage statt eines Ziehens — auf einer Fläche, auf der Ziehen
-schon „verschieben" heißt, wäre ein Zieh-Merge einen Ausrutscher vom
-falschen Paar entfernt.
-
-Für den Menschen gelten die Sicherungen des automatischen Laufs
-ausdrücklich **nicht**: `crosses_types` lehnt auch manche richtigen
-Merges ab, und wer beide Entitäten vor sich hat, hat die bessere
-Information. Ein bestehender Block wird dabei aufgehoben.
-
-Belegt: `Abrechnungs Projekt` von Hand in `Northwind Abrechnungsprojekt`
-gefaltet — Beobachtungen übernommen, der alte Name bleibt Alias, nichts
-gelöscht.
-
-### Offen
-
-- **Die NAS ist nicht vermessen.** Alles oben ist gegen die lokale
-  Entwicklungsdatenbank gelaufen (`localhost:5433`), die echte Notizen
-  enthält, aber einen anderen Stand als das Zielsystem. Vor dem
-  Scharfschalten dort: `GET /consolidation/preview`.
-- **Stufe 7**, rollierende Zusammenfassung pro Entität. Erst nötig, wenn
-  eine Entität nicht mehr samt ihren Beobachtungen in einen Prompt passt.
-- **Re-Derivation** des Bestands mit dem neuen Extraktions-Prompt (Phase 2
-  der Roadmap) — entschieden, aber noch nicht gebaut.
-
-## Stufe 7 — rollierende Zusammenfassung und Nachbarschaftslauf
+- **Stage 7**, a rolling summary per entity. Only needed once an entity no
+  longer fits into a prompt with its observations.
+- **Re-derivation** of the archive with the new extraction prompt (phase 2
+  of the roadmap). Decided, not built yet.

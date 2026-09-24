@@ -68,7 +68,7 @@ export function EntityDetailScreen({
           /* Not called a summary on purpose: `current_summary` is
              overwritten by whichever observation came last, so calling it
              a summary would promise a consolidation that has not happened.
-             See docs/issues.md. It is labelled for what it is. */
+             See docs/memory-model.md. It is labelled for what it is. */
           <p className="entity-latest">
             <span className="derived-dot" aria-hidden="true" />
             <span>

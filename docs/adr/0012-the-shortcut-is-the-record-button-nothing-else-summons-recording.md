@@ -6,8 +6,8 @@ Accepted (2026-09-22)
 ## Context
 Until now Hippocampus was a normal window: quitting it killed the global
 shortcut along with it, and a Mac restart left the shortcut dead until
-someone remembered to relaunch the app by hand. The user asked for the
-obvious fix — a menu bar icon, a window that hides rather than dies when
+someone remembered to relaunch the app by hand. The obvious fix
+is a menu bar icon, a window that hides rather than dies when
 closed, autostart, and no second process fighting the first one for the
 same shortcut, outbox directory and backend connection.
 
@@ -36,8 +36,8 @@ window is visible now."
 **No Dock icon.** `ActivationPolicy::Accessory`, set once in `setup()`.
 The menu bar is the one place this app lives when its window is closed;
 a Dock icon next to it would be a second, redundant way to ask for the
-same window, and the user asked for the classic menu-bar-app shape
-specifically, not "also keep the Dock icon."
+same window. The classic menu-bar-app shape is the point, not "also
+keep the Dock icon."
 
 **Closing the window hides it; only the tray's "Quit" ends the process.**
 `WindowEvent::CloseRequested` calls `api.prevent_close()` and hides the

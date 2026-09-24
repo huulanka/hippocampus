@@ -1,42 +1,43 @@
-# ADR 0004: Audio ist das Original, das Transkript ist Interpretation
+# ADR 0004: The audio is the original, the transcript an interpretation
 
 ## Status
 Accepted (2026-09-20)
 
 ## Context
-Bisher gilt das Transkript als das unveränderliche Original: `POST /captures`
-nimmt `transcript_text` entgegen und legt es als `capture.recorded` ab,
-Audio bleibt laut `contracts/src/lib.rs` ausdrücklich auf dem Gerät
-(„Audio itself is never uploaded to the backend").
+Until now the transcript counted as the immutable original: `POST /captures`
+took `transcript_text` and stored it as `capture.recorded`, and the audio
+explicitly stayed on the device ("Audio itself is never uploaded to the
+backend", `contracts/src/lib.rs`).
 
-Das widerspricht dem Kernprinzip des Projekts. Ein Transkript ist die
-Ausgabe eines ASR-Modells — es ist bereits der erste KI-abgeleitete Artefakt
-der Kette, mit allen Fehlern, die solche Modelle machen. Gerade bei
-deutschen Eigennamen, also genau dem, was in einem persönlichen
-Wissenssystem zählt, irrt sich ASR am häufigsten („Kuh Portal" statt
-„HPortal"). Wird nur das Transkript behalten, ist dieser Fehler dauerhaft
-und unumkehrbar: Es gibt keine Instanz mehr, gegen die man ihn prüfen könnte.
+That contradicts the core principle of the project. A transcript is the
+output of a speech model; it is already the first AI-derived artefact in
+the chain, with every mistake such models make. Speech recognition gets
+proper names wrong most often, and proper names are exactly what matters
+in a personal knowledge system ("Hafen Portal" instead of "HPortal"). If
+only the transcript is kept, that mistake is permanent: nothing is left to
+check it against.
 
-Speicherkosten sind kein Gegenargument. Bei angenommenen 15 Captures pro Tag
-à 30 Sekunden ergeben sich mit Opus-Kompression (~24 kbit/s) etwa 1,5 GB pro
-Jahr — auf der vorhandenen NAS irrelevant.
+Storage is no argument against it. At an assumed 15 captures a day of 30
+seconds each, Opus compression (about 24 kbit/s) comes to roughly 1.5 GB a
+year, which is irrelevant on the NAS.
 
 ## Decision
-- Audio wird dauerhaft aufbewahrt, auf der NAS, als Standardformat (Opus in
-  Ogg), unter einem inhaltsadressierten Pfad.
-- `capture.recorded` referenziert das Audio und enthält **keinen** Text mehr.
-- Das Transkript entsteht als eigenes Event `transcript.derived` mit
-  Modellangabe und ist damit ausdrücklich Interpretation.
-- Captures ohne Audio (getippt, iOS-Kurzbefehl mit Apple-Diktat) tragen
-  `origin: "text"`; dort ist der Text das Original und unveränderlich.
+- Audio is kept permanently on the NAS, in a standard format (Opus in Ogg),
+  under a content-addressed path.
+- `capture.recorded` references the audio and contains **no** text.
+- The transcript is its own event, `transcript.derived`, with the model
+  named, which makes it explicitly an interpretation.
+- Captures without audio (typed, or an iPhone Shortcut with Apple
+  dictation) carry `origin: "text"`; there the text is the original and
+  immutable.
 
 ## Consequences
-- `CreateCaptureRequest` ändert sich: Audio wird hochgeladen, der Kommentar
-  in `contracts/src/lib.rs` wird hinfällig.
-- Bessere ASR-Modelle können später auf den gesamten Bestand angewandt
-  werden — Neu-Transkription wird zum selben Vorgang wie Neu-Strukturierung.
-  Das ist der zweite und stärkere Grund, warum Event Sourcing hier trägt.
-- Größere Uploads und ein Blob-Speicherpfad, den es bisher nicht gibt.
-- Audio ist die sensibelste Datenform im System: Stimme, Hintergrundgeräusche,
-  mitgehörte Dritte. Es verlässt die eigene Hardware niemals — nur Text geht
-  an OpenRouter.
+- `CreateCaptureRequest` changes: audio is uploaded, and the comment in
+  `contracts/src/lib.rs` no longer applies.
+- Better speech models can later be run over the whole archive;
+  re-transcription becomes the same operation as re-structuring. That is
+  the second and stronger reason event sourcing pays off here.
+- Bigger uploads, and a blob storage path that did not exist before.
+- Audio is the most sensitive form of data in the system: a voice,
+  background noise, other people overheard. It never leaves your own
+  hardware; only text goes to OpenRouter.

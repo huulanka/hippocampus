@@ -1,49 +1,49 @@
-# Betrieb
+# Operations
 
-## Backup und Restore
+## Backup and restore
 
-Ohne bewiesenen Restore ist „permanentes Gedächtnis" eine leere Zusage.
-Das Verfahren unten ist einmal vollständig durchgespielt worden; was
-dabei herauskam, steht weiter unten.
+Without a restore that has actually worked, "permanent memory" is an empty
+promise. The procedure below has been run through once from start to
+finish; what that showed is further down.
 
-Zu sichern sind **zwei** Dinge, und sie gehören zusammen:
+There are **two** things to back up, and they belong together:
 
-| Was | Wo | Warum |
+| What | Where | Why |
 | --- | --- | --- |
-| Postgres | `data/postgres` (Volume) | Events, Projektionen, Embeddings |
-| Audio | `data/audio` | Das Original (ADR 0004). Steht nicht in der Datenbank. |
+| Postgres | `data/postgres` (volume) | Events, projections, embeddings |
+| Audio | `data/audio` | The original (ADR 0004). Not in the database. |
 
-Das Embedding-Modell unter `data/models` ist **kein** Backup wert — es
-ist ein Download, kein Zustand.
+The embedding model under `data/models` is **not** worth backing up. It is
+a download, not state.
 
-### Reihenfolge
+### Order
 
-**Erst Audio kopieren, dann die Datenbank sichern.** Beides ist
-append-only, aber die Datenbank verweist auf Audiodateien, nicht
-umgekehrt. In dieser Reihenfolge kann höchstens eine Audiodatei ohne
-zugehörige Zeile im Archiv landen, und die ist harmlos. Andersherum
-entstünde eine Capture, deren Original fehlt — genau der Verlust, den
-dieses System ausschließen soll.
+**Copy the audio first, then back up the database.** Both are append-only,
+but the database points at audio files, not the other way round. In this
+order, the worst case is an audio file in the archive without a matching
+row, which is harmless. The other way round you could get a capture whose
+original is missing, which is exactly the loss this system exists to rule
+out.
 
-### Sichern
+### Backing up
 
 ```sh
-# 1. Audio zuerst. Inhaltsadressiert, also ist ein erneutes Kopieren
-#    derselben Datei immer identisch.
+# 1. Audio first. It is content-addressed, so copying the same file again
+#    always gives the same result.
 tar -cf audio-$(date +%F).tar -C data audio
 
-# 2. Danach die Datenbank, im custom format (komprimiert, selektiv
-#    wiederherstellbar).
+# 2. Then the database, in custom format (compressed, can be restored
+#    selectively).
 docker compose exec -T postgres \
   pg_dump -U hippocampus -Fc -d hippocampus > db-$(date +%F).dump
 ```
 
-Beide Dateien gehören auf Speicher, der die Maschine überlebt.
+Both files belong on storage that outlives the machine.
 
-### Zurückspielen
+### Restoring
 
 ```sh
-# In eine leere Instanz:
+# Into an empty instance:
 docker compose up -d postgres
 docker compose exec -T postgres \
   psql -U hippocampus -d postgres -c "create database hippocampus"
@@ -53,105 +53,97 @@ docker compose exec -T postgres \
 tar -xf audio-2026-09-20.tar -C data
 ```
 
-`--no-owner` ist nötig, wenn die Zielinstanz andere Rollen hat als die
-Quelle. Migrationen müssen danach **nicht** laufen: der Dump enthält das
-Schema und `sqlx migrate` erkennt den Stand an `_sqlx_migrations`.
+`--no-owner` is needed when the target instance has different roles from
+the source. Migrations do **not** need to run afterwards: the dump contains
+the schema, and `sqlx migrate` recognises the state from
+`_sqlx_migrations`.
 
-### Was der Durchlauf gezeigt hat
+### What the run-through showed
 
-Gegen einen echten Bestand (61 Events, 19 Captures, 1 Audiodatei) in
-eine frische Datenbank zurückgespielt:
+Restored from a real archive into a fresh database:
 
-- Zeilenzahlen aller Tabellen identisch — `events`, `capture_content`,
+- Row counts identical for every table: `events`, `capture_content`,
   `transcript_content`, `capture_search`, `entities`, `observations`,
   `relations`
-- `vector`-Extension (0.8.6) kommt mit, Embeddings behalten ihre 384
-  Dimensionen, eine Ähnlichkeitsabfrage liefert dieselben Werte
-- HNSW- und GIN-Indizes werden neu aufgebaut
-  (`capture_search_embedding_idx`, `capture_search_tsv_idx`,
-  `entities_embedding_idx`)
-- die generierte `tsv`-Spalte behält ihre deutsche Konfiguration;
-  `plainto_tsquery('german', …)` findet dieselben Treffer
-- **die Append-only-Regeln überleben**: `update events …` meldet
-  `UPDATE 0`, `delete from events` meldet `DELETE 0`, alle 61 Zeilen
-  stehen danach noch da
-- Audio per `tar` hin und zurück: Prüfsumme über alle Dateien identisch
-- jede `capture_content.audio_path` zeigt nach dem Restore auf eine
-  Datei, die es gibt
+- The `vector` extension comes along, embeddings keep their 384
+  dimensions, and a similarity query returns the same values
+- HNSW and GIN indexes are rebuilt (`capture_search_embedding_idx`,
+  `capture_search_tsv_idx`, `entities_embedding_idx`)
+- The generated `tsv` column keeps its German configuration;
+  `plainto_tsquery('german', …)` finds the same matches
+- **The append-only rules survive**: `update events …` reports `UPDATE 0`,
+  `delete from events` reports `DELETE 0`, and every row is still there
+  afterwards
+- Audio through `tar` and back: the checksum over all files is identical
+- Every `capture_content.audio_path` points at a file that exists after
+  the restore
 
-Der einzige Unterschied zur Quelle: eine `capture_search`-Zeile hat kein
-Embedding — vor dem Backup schon so, nicht durch den Restore entstanden.
+### When to check this again
 
-### Wann das wieder zu prüfen ist
+After every migration that touches an extension, a generated column or a
+rule. Those three things don't survive a `pg_dump` automatically just
+because the rows do.
 
-Nach jeder Migration, die eine Extension, eine generierte Spalte oder
-eine Regel anfasst. Genau diese drei Dinge überstehen einen `pg_dump`
-nicht automatisch nur deshalb, weil Zeilen es tun.
+## Configuration in the container
 
-## Konfiguration im Container
+`docker-compose.yml` passes through the environment variables the backend
+reads. Two of them are not optional once the service is reachable:
 
-`docker-compose.yml` reicht die Umgebungsvariablen durch, die das
-Backend liest. Zwei davon sind nicht optional, sobald der Dienst
-erreichbar ist:
+- `CF_ACCESS_AUD` **and** `CF_ACCESS_TEAM_DOMAIN`: without both, every
+  request is trusted. The backend says so loudly on startup, and it refuses
+  to start at all if only one of them is set.
+- `CORS_ALLOWED_ORIGINS`: defaults to the desktop client's origins. A
+  wildcard is rejected.
 
-- `CF_ACCESS_AUD` **und** `CF_ACCESS_TEAM_DOMAIN` — ohne beide werden
-  alle Anfragen vertraut. Das Backend sagt das beim Start laut, und es
-  startet gar nicht erst, wenn nur eine von beiden gesetzt ist.
-- `CORS_ALLOWED_ORIGINS` — Standard sind die Origins des Desktop-Clients.
-  Ein Wildcard wird abgelehnt.
+`AUDIO_DIR` points at a mounted volume inside the container. Without that
+volume, the archive of originals would end up in the container's own file
+system and be gone after the next `docker compose up --force-recreate`.
 
-`AUDIO_DIR` zeigt im Container auf ein gemountetes Volume. Ohne dieses
-Volume landete das Archiv der Originale im Container-Dateisystem und
-wäre beim nächsten `docker compose up --force-recreate` weg.
+## Deploying to a NAS
 
-## Deployment auf der NAS
+`backend/Dockerfile` builds the image. The build context in
+`docker-compose.yml` is deliberately the repository root, not `backend/`,
+because `backend` is a workspace member and needs the root
+`Cargo.toml`/`Cargo.lock` and the `contracts` crate next to it (see
+[ADR 0007](adr/0007-separate-client-workspace.md) for the related reason
+why the client, the other way round, is a workspace of its own).
 
-`backend/Dockerfile` baut das Image; `docker-compose.yml`s Build-Context
-ist bewusst das Repository-Root und nicht `backend/`, weil `backend` ein
-Workspace-Mitglied ist und die Root-`Cargo.toml`/`Cargo.lock` sowie die
-`contracts`-Crate daneben zum Bauen braucht (siehe
-[ADR 0007](adr/0007-separate-client-workspace.md) für die verwandte
-Begründung, warum der Client umgekehrt ein *eigener* Workspace ist).
+Tested with `docker build --platform linux/amd64 -f backend/Dockerfile .`
+from the repository root, through QEMU emulation on an Apple Silicon Mac,
+against a running Postgres: migrations, the embedding model, the reranker
+and `/health` and `/version` all work. `fastembed` is pinned to
+`ort-download-binaries-rustls-tls` and `hf-hub-rustls-tls` instead of the
+default native-tls features (otherwise the slim Debian image has no
+OpenSSL at all), and the runtime stage needs Debian **Trixie**, not
+Bookworm: the ONNX Runtime binary that `ort` downloads needs glibc and
+libstdc++ symbols that Bookworm's glibc 2.36 doesn't have yet.
 
-Getestet: `docker build --platform linux/amd64 -f backend/Dockerfile .`
-vom Repository-Root aus, per QEMU-Emulation auf einem Apple-Silicon-Mac,
-gegen eine laufende Postgres-Instanz — Migrationen, Embedding-Modell,
-Reranker und `/health`/`/version` funktionieren. `fastembed` ist auf
-`ort-download-binaries-rustls-tls` + `hf-hub-rustls-tls` statt der
-native-tls-Standardfeatures gepinnt (sonst fehlt im schlanken Debian-Image
-OpenSSL komplett), und die Runtime-Stage braucht Debian **Trixie**, nicht
-Bookworm — die von `ort` heruntergeladene ONNX-Runtime-Binary verlangt
-glibc/libstdc++-Symbole, die Bookworms glibc 2.36 noch nicht hat.
+On an x86_64 NAS the image works unchanged. The `--platform` override is
+only needed for testing locally on Apple Silicon; on the NAS itself Docker
+builds natively for the right architecture.
 
-Für die Synology DS220+ (x86_64) reicht das Image unverändert; ein
-`--platform`-Override ist nur für den lokalen Test auf Apple Silicon
-nötig, auf der NAS selbst baut Docker nativ für die richtige Architektur.
+Putting the backend behind Cloudflare Tunnel and Access is described in
+[`docs/install.md`](install.md).
 
-**Noch offen, weil nicht von hier aus planbar:** die Anbindung an den auf
-der NAS bereits laufenden Cloudflare Tunnel (welches Docker-Netzwerk der
-Tunnel-Container nutzt, der Public-Hostname-Eintrag, die Access-Application
-und ein Service Token für die beiden Tauri-Clients) — das passiert live,
-zusammen, beim eigentlichen Deploy.
+## What the backend says about itself
 
-## Was das Backend über sich selbst sagt
+Logs roll daily into `LOG_DIR` (`/data/logs` in the container, so
+`${HIPPOCAMPUS_DATA_DIR}/logs` on the NAS) and also go to stdout, where
+Portainer or `docker logs` shows them. Everything below is at `INFO`, so no
+`RUST_LOG` is needed.
 
-Die Logs rollen täglich nach `LOG_DIR` (im Container `/data/logs`, also
-unter `${HIPPOCAMPUS_DATA_DIR}/logs` auf der NAS) und gehen zusätzlich
-nach stdout, wo Portainer sie zeigt. Alles Folgende steht auf `INFO`, es
-braucht also kein `RUST_LOG`.
+Three kinds of line are the interesting ones day to day.
 
-Drei Zeilentypen sind im Alltag die interessanten.
-
-**Jede Anfrage, mit ihrer Dauer.**
+**Every request, with its duration.**
 
 ```
 INFO http{method=GET path=/captures/{id}}: request finished status=200 ms=124
 ```
 
-Das ist der schnellste Weg zu „ist es das Backend oder die Leitung": die
-Zahl hier ist reine Serverzeit, ohne Tunnel und ohne Netz.
+That's the quickest way to answer "is it the backend or the connection":
+the number is pure server time, without tunnel or network.
 
-**Jeder Aufruf eines gehosteten Modells.**
+**Every call to a hosted model.**
 
 ```
 INFO model call finished purpose="echo-judge" model="mistralai/mistral-small-2603"
@@ -159,39 +151,38 @@ INFO model call finished purpose="echo-judge" model="mistralai/mistral-small-260
      prompt_tokens=612 completion_tokens=88
 ```
 
-`purpose` trennt die beiden Aufrufer — `structuring` und `echo-judge` —,
-weil sie verschiedene Modelle aus verschiedenen Gründen benutzen und ihre
-Laufzeiten nichts miteinander zu tun haben. `provider` ist der wichtigste
-Wert, wenn dasselbe Modell mal schnell und mal langsam ist: OpenRouter
-sucht unter ZDR-Routing aus den passenden Anbietern aus, und *welcher es
-war* ist die erste Frage. `served_by` weicht von `model` ab, wenn eine
-Route zurückgefallen ist. Die Token-Zahlen sind die Kostenbasis.
+`purpose` separates the two callers, `structuring` and `echo-judge`,
+because they use different models for different reasons and their timings
+have nothing to do with each other. `provider` is the most important value
+when the same model is sometimes fast and sometimes slow: under
+zero-retention routing OpenRouter picks among the matching providers, and
+*which one it was* is the first question. `served_by` differs from `model`
+when a route fell back. The token counts are the cost basis.
 
-Scheitert ein Aufruf, steht an derselben Stelle `model call failed` mit
-Dauer und Fehler — ein stiller Fehlschlag ist damit ausgeschlossen.
+If a call fails, the same place logs `model call failed` with its duration
+and the error, so a silent failure is ruled out.
 
-**Jedes fertige Echo-Urteil.**
+**Every finished echo judgement.**
 
 ```
 INFO echo judged and stored capture_event_id=… judged_by=mistralai/mistral-small-2603
      candidates=5 ms=12310 best=Some(1.0) runner_up=Some(0.0) shown=1
 ```
 
-`best` und `runner_up` zusammen sind der eigentliche Qualitätsindikator:
-liegen sie weit auseinander, trennt der Judge sauber; liegen sie dicht
-beieinander und um die Schwelle herum, rät er. Genau das muss die noch
-unkalibrierte Schwelle von 0,5 über die Zeit beantworten. `shown` ist,
-wie viele davon der Nutzer tatsächlich zu sehen bekommt.
+`best` and `runner_up` together are the real quality signal: far apart,
+the judge separates cleanly; close together and near the threshold, it's
+guessing. That is exactly what the still uncalibrated threshold of 0.5 has
+to answer over time. `shown` is how many of them actually get shown.
 
-Ein paar Griffe, die sich bewährt haben:
+A few commands that have proven useful:
 
 ```sh
-# Wie lange dauern Urteile, und wer hat sie gefällt?
+# How long do judgements take, and who made them?
 grep "echo judged" backend.log
 
-# Nur die langsamen Anfragen
+# Only the slow requests
 grep "request finished" backend.log | awk -F'ms=' '$2 > 1000'
 
-# Was kosten die Modellaufrufe an einem Tag?
+# What do the model calls cost in a day?
 grep "model call finished" backend.log | grep -o 'prompt_tokens=[0-9]*'
 ```
