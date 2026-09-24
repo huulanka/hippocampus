@@ -31,7 +31,7 @@ const CANDIDATES: &[&str] = &[
     "Ich sollte morgen dringend in den Getränkemarkt",
     "Der Rasenmäher muss zum Service",
     "Idee für Hippocampus: ein wöchentlicher Rückblick",
-    "Am Wochenende war ich lange draußen unterwegs",
+    "Am Wochenende war ich lange drauÃen unterwegs",
 ];
 
 const QUERY: &str = "Also Sauna heut war schon geil";

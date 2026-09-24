@@ -118,7 +118,7 @@ jobs:
       # pushes directly would be rejected. RELEASE_TOKEN is a fine-grained
       # PAT scoped to this repo, issued by the repo owner (an admin, and
       # enforce_admins is off), so a push authenticated with it is exempt —
-      # same bypass another-project's CI solves with a dedicated GitHub App;
+      # the same bypass a larger setup would solve with a dedicated GitHub App;
       # a single-owner personal repo doesn't need that much machinery.
       - name: Checkout
         uses: actions/checkout@v7

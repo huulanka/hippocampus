@@ -630,7 +630,7 @@ fn unlock_from_menu(app: AppHandle) {
 /// Both clicks open the menu. A custom panel was tried and taken out
 /// again: on this status item AppKit hands a left click straight to the
 /// menu, so the click never reaches the app to open anything else — and
-/// the user found the native menu the better answer anyway.
+/// the native menu turned out to be the better answer anyway.
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     app.manage(Activity::default());
     let frames = Frames::render()?;

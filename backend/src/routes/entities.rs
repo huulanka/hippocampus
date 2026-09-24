@@ -189,9 +189,9 @@ pub async fn detail(
 
 /// How the view of this knowledge came to look the way it does.
 ///
-/// The user's own framing, and the principle the system is built on:
-/// *"Ich habe unveränderliche Startprimitiven, Changelog auf die
-/// Repräsentation meines Wissens."* The captures never change. This is
+/// The principle the system is built on: the captures are immutable
+/// primitives, and the arrangement on top of them keeps a changelog.
+/// The captures never change. This is
 /// everything that happened to their arrangement, newest first.
 ///
 /// Read straight off the event log rather than from a projection: the

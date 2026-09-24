@@ -1,10 +1,8 @@
 //! Making the graph say one thing once.
 //!
-//! The user, on the 22nd of September 2026:
-//!
-//! > „Ich erfasse einmal zum Beispiel Kaffee und ich erfasse einmal
-//! > Espresso, da sind die beiden Knoten momentan getrennt … einmal nenne
-//! > ich den Kollegen Paul, einmal nenne ich ihn Paul Hartmann."
+//! Notes are structured one at a time, so the same thing drifts apart
+//! under several names: "Espresso" in one note and "Kaffee" in the next,
+//! a colleague as "Paul" here and "Paul Hartmann" there.
 //!
 //! `structuring.rs` now prevents most of that at the source, by showing
 //! the extraction what the graph already holds. This module deals with

@@ -11,9 +11,9 @@ import {
 
 /// How the view of your knowledge came to look the way it does.
 ///
-/// The user's own framing, and the reason this screen exists at all:
-/// *"Ich habe unveränderliche Startprimitiven, Changelog auf die
-/// Repräsentation meines Wissens."* Your notes are never touched. What
+/// The reason this screen exists at all: the notes are immutable
+/// primitives, and their arrangement keeps a changelog. Your notes are
+/// never touched. What
 /// changes is how they are arranged — and an arrangement that rearranges
 /// itself silently is not trustworthy however correct it happens to be.
 ///

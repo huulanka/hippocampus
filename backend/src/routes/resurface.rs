@@ -1,9 +1,8 @@
 //! The one surface that answers a question nobody asked.
 //!
 //! Capture, timeline, search and the entity pages all wait to be used.
-//! That is the gap the user named after the first real week: "wenn ich
-//! Notizen erfasse, muss ich ja trotzdem wieder aktiv suchen, damit ich
-//! überhaupt an mein bestehendes Wissen herankomme".
+//! That is the gap that showed after the first real week: capturing is
+//! effortless, but getting anything back still means going and searching.
 //!
 //! Two things are worth pushing, and only two, because a surface that
 //! shows everything is a surface nobody reads:

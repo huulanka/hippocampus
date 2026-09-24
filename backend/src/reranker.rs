@@ -106,7 +106,7 @@ impl FromStr for Choice {
 /// | "heute cardamom buns gemacht" ↔ "Heut Abend war ich in der Sauna" | -2.15 | **no** |
 /// | "finnischer Aufguss" ↔ "Rasenmäher muss zum Service" | -3.23 | no |
 ///
-/// -2.0 sat in the gap, and the gap is where the user's own complaint
+/// -2.0 sat in the gap, and the gap is where the original complaint
 /// lived: with cosine similarity, *cardamom buns ↔ sauna* (0.871) outranked
 /// *Aufguss ↔ sauna* (0.849). It no longer did.
 ///

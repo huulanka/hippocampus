@@ -473,8 +473,8 @@ pub struct PlannedRelation {
 /// because the notes will still be there and the graph will merely look
 /// tidy and wrong.
 ///
-/// The central rule comes from the user, who drew it himself about Sauna
-/// and Finnischer Aufguss before any of this was built: things that
+/// The central rule, settled with Sauna and Finnischer Aufguss before any
+/// of this was built: things that
 /// belong together are not necessarily the same thing. Merging is for one
 /// thing under two names. Everything else that belongs together is an
 /// edge.

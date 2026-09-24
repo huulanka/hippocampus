@@ -2,7 +2,7 @@
 //!
 //! `docs/product.md` (P11) rules out notifications, and for the reason
 //! that still holds — every notification is a habit that has to be built
-//! on purpose. This one is the exception the user chose: it hangs on an
+//! on purpose. This one is the deliberate exception: it hangs on an
 //! appointment they set themselves (a weekday and a time in Settings), it
 //! comes once a week and never more, and it can be switched off.
 //!
