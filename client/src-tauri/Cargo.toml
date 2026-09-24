@@ -26,31 +26,43 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-log = "2"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 contracts = { version = "1.15.1", path = "../../contracts" }
 anyhow = "1"
-cpal = "0.18"
 hound = "3"
-rubato = "0.16"
 reqwest = { version = "0.13", default-features = false, features = ["json", "multipart", "rustls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync"] }
-# ONNX rather than the whisper-cpp backend: that one builds whisper.cpp
-# from source and so would make cmake a hard build dependency for the whole
-# workspace, CI included. `ort` ships prebuilt binaries.
-transcribe-rs = { version = "0.3", features = ["onnx"] }
 iana-time-zone = "0.1"
 # The outbox names its entries and stamps them. Both are on disk in files
 # the user can read, so they are spelled out here rather than reached
 # through `contracts`.
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+tauri-plugin-notification = "2"
+
+# Everything a Mac has and a phone does not: a system-wide shortcut, a
+# login item, a second launch to catch, and Parakeet through ONNX, whose
+# prebuilt `ort` binaries do not exist for iOS. The phone records and
+# transcribes in Swift instead (docs/iphone.md, I4).
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-single-instance = "2.4.5"
-tauri-plugin-notification = "2"
+cpal = "0.18"
+rubato = "0.16"
+# ONNX rather than the whisper-cpp backend: that one builds whisper.cpp
+# from source and so would make cmake a hard build dependency for the whole
+# workspace, CI included. `ort` ships prebuilt binaries.
+transcribe-rs = { version = "0.3", features = ["onnx"] }
+
+# `keyring`'s v1 API has no store on iOS; the phone talks to the
+# data-protection keychain through the same store crate directly.
+[target.'cfg(target_os = "ios")'.dependencies]
+keyring-core = "1"
+apple-native-keyring-store = { version = "1", features = ["protected"] }
 
 [dev-dependencies]
 # `macros` only here: the gated outbox round-trip test needs

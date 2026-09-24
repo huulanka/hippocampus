@@ -4,6 +4,14 @@
 //! brings the capture field up from wherever the user is, and Escape sends
 //! it away again. Everything else lives in the webview.
 
+// The menu bar, the calendar and Touch ID are Mac-only callers of a good
+// part of this crate; on a phone that code is present but unreached.
+#![cfg_attr(mobile, allow(dead_code))]
+
+// On a phone, `asr`, `recorder` and `tray` are stand-ins with the same
+// surface: speech and the menu bar exist only on the Mac for now
+// (docs/iphone.md).
+#[cfg_attr(mobile, path = "mobile/asr.rs")]
 mod asr;
 mod backend;
 mod calendar;
@@ -14,14 +22,18 @@ mod keychain;
 mod lock;
 pub mod microphone;
 mod outbox;
+#[cfg_attr(mobile, path = "mobile/recorder.rs")]
 mod recorder;
 mod review;
 mod settings;
 mod sync;
+#[cfg_attr(mobile, path = "mobile/tray.rs")]
 mod tray;
 
 use tauri::{Emitter, Manager};
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::ShortcutState;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -39,6 +51,7 @@ pub fn microphone_permission() -> microphone::Permission {
 /// which starts recording if nothing is already in flight, and stops it
 /// if a recording is — so this must only ever be emitted for an actual
 /// press of the capture shortcut, never for "the app should be visible."
+#[cfg(desktop)]
 const FOCUS_EVENT: &str = "hippocampus://focus-capture";
 
 /// Brings the main window forward without touching recording. What the
@@ -47,6 +60,7 @@ const FOCUS_EVENT: &str = "hippocampus://focus-capture";
 /// view, and nothing more. Failures are logged rather than propagated —
 /// a click that does nothing is a bad moment, but one that panics takes
 /// the whole app with it.
+#[cfg(desktop)]
 pub(crate) fn reveal_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         log::warn!("asked to show the window, but it is gone");
@@ -66,6 +80,7 @@ pub(crate) fn reveal_window(app: &tauri::AppHandle) {
 /// (or stops) a recording. Only the global shortcut handler below may
 /// call this — anything else that wants the window back wants
 /// [`reveal_window`], not this.
+#[cfg(desktop)]
 fn summon_capture(app: &tauri::AppHandle) {
     reveal_window(app);
     if let Err(err) = app.emit(FOCUS_EVENT, ()) {
@@ -107,9 +122,13 @@ fn watch_for_idleness(app: tauri::AppHandle) {
     });
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    tauri::Builder::default()
+/// What only a Mac has: a second launch to catch, a login item and a
+/// system-wide shortcut. On a phone the app is started by the system and
+/// by the Action Button (docs/iphone.md, I5), and none of the three
+/// exists.
+#[cfg(desktop)]
+fn desktop_plugins(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
+    builder
         // Registered before anything else, per the plugin's own
         // requirement: a second launch (double-clicking the app again,
         // or opening it from Spotlight while it is already running in
@@ -120,23 +139,6 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             reveal_window(app);
         }))
-        // Registered first so nothing logged during setup is lost. Writes
-        // to stdout (visible under `tauri dev`) and to a rolling file
-        // under the OS log dir, which is what the Settings screen's "Open
-        // Logs" button points at — the same fix as the backend's, for the
-        // same reason: this stops being a terminal session once it leaves
-        // this machine.
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
-                .targets([
-                    Target::new(TargetKind::Stdout),
-                    Target::new(TargetKind::LogDir { file_name: None }),
-                ])
-                .build(),
-        )
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -157,6 +159,32 @@ pub fn run() {
                 })
                 .build(),
         )
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = desktop_plugins(builder);
+
+    builder
+        // Registered first so nothing logged during setup is lost. Writes
+        // to stdout (visible under `tauri dev`) and to a rolling file
+        // under the OS log dir, which is what the Settings screen's "Open
+        // Logs" button points at — the same fix as the backend's, for the
+        // same reason: this stops being a terminal session once it leaves
+        // this machine.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                ])
+                .build(),
+        )
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         // The idle clock runs only while the window is not the front
         // one. A note you are reading should not vanish mid-sentence
         // because you stopped typing for five minutes; a laptop you
@@ -174,6 +202,7 @@ pub fn run() {
             // that the app is still there, one click away, after the
             // window that happened to be open is gone. Quitting is now a
             // deliberate act, only offered from the tray menu.
+            #[cfg(desktop)]
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 if let Err(err) = window.hide() {
@@ -198,6 +227,7 @@ pub fn run() {
             backend::api_audio,
             backend::check_backend,
             settings::get_settings,
+            #[cfg(desktop)]
             settings::set_capture_shortcut,
             settings::set_backend_url,
             settings::set_cf_access_credentials,
@@ -212,7 +242,9 @@ pub fn run() {
             foresight::request_calendar_access,
             foresight::list_calendars,
             foresight::open_calendar_privacy,
+            #[cfg(desktop)]
             settings::autostart_enabled,
+            #[cfg(desktop)]
             settings::set_autostart_enabled,
             lock::lock_status,
             lock::unlock,
@@ -226,13 +258,15 @@ pub fn run() {
             // the handler reads them back out of managed state, so a
             // shortcut changed at runtime takes effect without a restart.
             let path = settings::settings_path(app.handle())?;
-            let state = SettingsState::load(path);
-            let shortcut = state.capture_shortcut();
-            app.manage(state);
+            app.manage(SettingsState::load(path));
 
             // A missing shortcut registration must not stop the app from
             // starting — the window still works, just without the hotkey.
-            if let Err(err) = app.global_shortcut().register(shortcut) {
+            #[cfg(desktop)]
+            if let Err(err) = app
+                .global_shortcut()
+                .register(app.state::<SettingsState>().capture_shortcut())
+            {
                 log::warn!("could not register the capture shortcut: {err}");
             }
 
@@ -265,6 +299,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
+            #[cfg(desktop)]
             tray::build(app.handle())?;
             Ok(())
         })

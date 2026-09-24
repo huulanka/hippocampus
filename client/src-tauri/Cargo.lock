@@ -641,6 +641,7 @@ name = "client"
 version = "1.15.1"
 dependencies = [
  "anyhow",
+ "apple-native-keyring-store",
  "block2",
  "chrono",
  "contracts",
@@ -648,6 +649,7 @@ dependencies = [
  "hound",
  "iana-time-zone",
  "keyring",
+ "keyring-core",
  "log",
  "objc2",
  "objc2-app-kit",

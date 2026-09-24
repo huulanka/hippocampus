@@ -28,7 +28,10 @@ fn local_timezone() -> String {
 }
 
 /// Identifies where a capture came from, recorded as the event's source.
+#[cfg(desktop)]
 const DEVICE: &str = "mac-desktop";
+#[cfg(mobile)]
+const DEVICE: &str = "iphone";
 
 pub struct CaptureState {
     recording: Mutex<Option<Recording>>,
