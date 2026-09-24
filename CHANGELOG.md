@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/huulanka/hippocampus/compare/v1.16.0...v1.17.0) (2026-09-24)
+
+
+### Features
+
+* the iPhone hears you, with Parakeet on the Neural Engine, and the Action Button records ([#11](https://github.com/huulanka/hippocampus/issues/11)) ([8eac290](https://github.com/huulanka/hippocampus/commit/8eac290ecdf871985a5c6c052914c1ee0a8849dd))
+
 # [1.16.0](https://github.com/huulanka/hippocampus/compare/v1.15.1...v1.16.0) (2026-09-24)
 
 
