@@ -216,7 +216,7 @@ mod tests {
     /// have fetched for it. 2048 bits is the smallest size Cloudflare
     /// actually uses and keeps the tests quick.
     fn signer(kid: &str) -> Signer {
-        let private = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 2048).unwrap();
+        let private = rsa::RsaPrivateKey::new(&mut rsa::rand_core::OsRng, 2048).unwrap();
         let public = private.to_public_key();
 
         let der = private.to_pkcs1_der().unwrap();
