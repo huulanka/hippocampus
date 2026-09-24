@@ -41,3 +41,4 @@ reasoning behind everything else.
 - **[0012](adr/0012-the-shortcut-is-the-record-button-nothing-else-summons-recording.md)** — The app lives in the menu bar; only the shortcut starts a recording
 - **[0013](adr/0013-the-calendar-stays-on-the-mac.md)** — The calendar stays on the Mac; the backend only matches
 - **[0014](adr/0014-structuring-is-a-job-any-device-may-claim.md)** — Structuring is a job any device may claim (not built: the on-device models were not good enough)
+- **[0015](adr/0015-the-echo-judge-needs-a-provider-that-answers.md)** — The echo judge needs a provider that answers

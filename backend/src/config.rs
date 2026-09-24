@@ -27,10 +27,13 @@ pub struct Config {
     /// Which cross-encoder reranks echo candidates: "jina", "bge" or
     /// "off".
     pub judge: crate::judge::Choice,
-    /// Which hosted model judges echoes when `judge` is `Remote`.
-    pub echo_judge_model: String,
+    /// Which hosted models judge echoes when `judge` is `Remote`, in the
+    /// order they are tried: `ECHO_JUDGE_MODEL`, then
+    /// `ECHO_JUDGE_FALLBACK_MODEL` unless that is `none`.
+    pub echo_judge_models: Vec<String>,
     /// How long a failed echo judgement blocks a new attempt for the same
-    /// capture. Judging is triggered by every read of a not-yet-judged
+    /// capture, the first time; every further failure doubles it, up to
+    /// an hour. Judging is triggered by every read of a not-yet-judged
     /// capture, and the client polls every 1.2s while it waits — without
     /// this, a single failing provider (a rate limit, say) turns into a
     /// new paid call several times a second for as long as anyone looks.
@@ -124,8 +127,17 @@ impl Config {
                 .map_err(|err| anyhow::anyhow!("ECHO_MIN_RERANK_SCORE must be a number: {err}"))?
                 .unwrap_or_else(|| crate::judge::default_min_score(judge)),
             judge,
-            echo_judge_model: env_non_empty("ECHO_JUDGE_MODEL")
-                .unwrap_or_else(|| crate::judge::DEFAULT_JUDGE_MODEL.to_string()),
+            echo_judge_models: {
+                let primary = env_non_empty("ECHO_JUDGE_MODEL")
+                    .unwrap_or_else(|| crate::judge::DEFAULT_JUDGE_MODEL.to_string());
+                let fallback = env_non_empty("ECHO_JUDGE_FALLBACK_MODEL")
+                    .unwrap_or_else(|| crate::judge::DEFAULT_JUDGE_FALLBACK_MODEL.to_string());
+                let mut models = vec![primary];
+                if !fallback.eq_ignore_ascii_case("none") && !models.contains(&fallback) {
+                    models.push(fallback);
+                }
+                models
+            },
             echo_judge_retry_backoff: std::time::Duration::from_secs(parse_secs(
                 "ECHO_JUDGE_RETRY_BACKOFF_SECS",
                 20,

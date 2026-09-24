@@ -156,9 +156,9 @@ pub async fn judge_and_store(
     // Without a judge the bi-encoder's own similarity is the score. It is
     // the wrong order — that is why a judge exists — but it is an honest
     // record of what produced it, which the marker then names.
-    let scores = match judge {
+    let (scores, judged_by) = match judge {
         Some(judge) if !candidates.is_empty() => {
-            judge
+            let judgement = judge
                 .score(
                     text,
                     candidates
@@ -166,20 +166,20 @@ pub async fn judge_and_store(
                         .map(|c| c.transcript_text.clone())
                         .collect(),
                 )
-                .await?
+                .await?;
+            (judgement.scores, judgement.judged_by)
         }
-        Some(_) => Vec::new(),
-        None => candidates.iter().map(|c| c.similarity).collect(),
+        Some(judge) => (Vec::new(), judge.name()),
+        None => (
+            candidates.iter().map(|c| c.similarity).collect(),
+            "similarity".to_string(),
+        ),
     };
 
     let mut scored: Vec<(f32, &EchoItem)> = scores.iter().copied().zip(candidates.iter()).collect();
     // Descending by score. `total_cmp` rather than `partial_cmp().unwrap()`:
     // a NaN from a model would otherwise panic inside a sort.
     scored.sort_by(|a, b| b.0.total_cmp(&a.0));
-
-    let judged_by = judge
-        .map(|j| j.name())
-        .unwrap_or_else(|| "similarity".into());
 
     // One transaction, so a half-written judgement can never be mistaken
     // for a complete one by the marker that follows it.
@@ -318,11 +318,33 @@ pub async fn forget(pool: &PgPool, capture_event_id: Uuid) -> anyhow::Result<()>
     Ok(())
 }
 
+/// Captures that can be judged and have not been, newest first.
+///
+/// Newest first because an echo matters most while its capture is fresh:
+/// that is when it is looked at. A backlog of old ones still drains, a
+/// few per pass.
+pub async fn unjudged(pool: &PgPool, limit: i64) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        select cs.event_id
+        from capture_search cs
+        left join capture_echo_judged j on j.capture_event_id = cs.event_id
+        where j.capture_event_id is null
+          and cs.embedding is not null
+        order by cs.occurred_at desc
+        limit $1
+        "#,
+        limit,
+    )
+    .fetch_all(pool)
+    .await
+}
+
 /// Judges a capture that is already in `capture_search`.
 ///
 /// The backfill path: a capture recorded before judgements were stored,
 /// or one whose judgement failed, gets one the next time anybody looks at
-/// it. Everything it needs is already in the database, so unlike
+/// it, or when [`crate::pipeline::watch_echoes`] comes by. Everything it needs is already in the database, so unlike
 /// [`judge_and_store`] it takes no embedding or text.
 pub async fn judge_stored_capture(
     pool: &PgPool,

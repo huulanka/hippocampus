@@ -30,22 +30,39 @@
 
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Instant;
 
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::reranker::{self, Reranker};
 
 /// Model asked to judge echoes when no other is configured.
 ///
-/// Chosen for German: these are two-sentence German notes, and the one
-/// case this system is known to have got wrong turned on German nuance.
-/// A European model's training mix weights that far more heavily than the
-/// cheaper alternatives, and at this volume — around 1000 input tokens
-/// once per capture — the price difference between every candidate was
-/// under 25 cents a month, so it was never the deciding variable.
-pub const DEFAULT_JUDGE_MODEL: &str = "mistralai/mistral-small-2603";
+/// Chosen by measurement (`examples/judge_compare.rs`): on invented German
+/// notes built around the ways echo has gone wrong before, it showed 44
+/// of 45 true echoes and 2 of 72 non-echoes, never ranked a non-echo
+/// above a true one, and answered in about half a second. It is also the
+/// structuring model, served by several ZDR endpoints, and had not
+/// returned a single rate limit in production.
+///
+/// It replaced `mistralai/mistral-small-2603`, which was chosen for
+/// German. That model has exactly one provider on OpenRouter, and that
+/// provider throttles the shared route: in production nearly every call
+/// came back 429 "temporarily rate-limited upstream", and in the
+/// measurement 29 of 29 did. See ADR 0015. A judge that almost never answers shows no
+/// echoes at all, which is worse than a slightly weaker one.
+pub const DEFAULT_JUDGE_MODEL: &str = "google/gemini-3.5-flash-lite";
+
+/// Asked when the default model does not answer.
+///
+/// OpenRouter tries the models of one request in order, so a provider
+/// outage costs one failed attempt instead of the whole judgement. This
+/// one is served by three ZDR providers, and in the same measurement it
+/// answered every call. It judges a little worse — 5 of 72 non-echoes
+/// shown, and twice the wrong order — which is acceptable for the rare
+/// case it is there for. Set `ECHO_JUDGE_FALLBACK_MODEL=none` to go
+/// without.
+pub const DEFAULT_JUDGE_FALLBACK_MODEL: &str = "mistralai/mistral-small-3.2-24b-instruct";
 
 /// Minimum score for a remote judge's verdict to be shown.
 ///
@@ -56,26 +73,9 @@ pub const DEFAULT_JUDGE_MODEL: &str = "mistralai/mistral-small-2603";
 /// regardless, so retuning it never costs a judgement.
 pub const DEFAULT_REMOTE_MIN_SCORE: f32 = 0.5;
 
-const SYSTEM_PROMPT: &str = "\
-You judge whether earlier personal notes are genuine echoes of a new one.
-
-An echo is an earlier note that the person would recognise as being about
-the same thing: the same topic, plan, person, place, problem or recurring
-habit. Notes that merely share a language, a tone, or a everyday word are
-NOT echoes. Related by real-world knowledge counts — a note about a sauna
-ritual and a note about a sauna visit are about the same thing even when
-they share no words.
-
-You will get one NEW note and a numbered list of EARLIER notes.
-
-Return JSON only, in exactly this shape:
-{\"scores\": [{\"id\": <number>, \"score\": <0.0-1.0>}, ...]}
-
-Include EVERY earlier note exactly once, by its number. The score is how
-strongly it echoes the new note: 1.0 unmistakably the same subject, 0.5
-genuinely related, 0.0 unrelated. Be strict — showing an unrelated note
-teaches the person to ignore echoes entirely, which is worse than showing
-none. Output no prose, no explanation, no other keys.";
+/// Kept in its own file so `examples/judge_compare.rs` measures exactly
+/// the prompt that runs in production.
+const SYSTEM_PROMPT: &str = include_str!("judge_prompt.txt");
 
 /// Which judge to use, or none at all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,7 +139,7 @@ impl Judge {
         choice: Choice,
         cache_dir: PathBuf,
         api_key: Option<String>,
-        model: String,
+        models: Vec<String>,
         zdr: bool,
     ) -> anyhow::Result<Option<Self>> {
         match choice {
@@ -154,33 +154,55 @@ impl Judge {
                          set the key, or choose bge (local) or off explicitly"
                     )
                 })?;
-                Ok(Some(Judge::Remote(RemoteJudge::new(api_key, model, zdr))))
+                Ok(Some(Judge::Remote(RemoteJudge::new(api_key, models, zdr))))
             }
         }
     }
 
     /// Scores every document against the query, one score per document,
     /// **in the order they were given**.
-    pub async fn score(&self, query: &str, documents: Vec<String>) -> anyhow::Result<Vec<f32>> {
+    pub async fn score(&self, query: &str, documents: Vec<String>) -> anyhow::Result<Judgement> {
         match self {
-            Judge::Local(reranker) => reranker.score(query, documents).await,
+            Judge::Local(reranker) => Ok(Judgement {
+                scores: reranker.score(query, documents).await?,
+                judged_by: reranker.choice().to_string(),
+            }),
             Judge::Remote(remote) => remote.score(query, documents).await,
         }
     }
 
-    /// What to record as provenance on the stored echo.
+    /// The judge this is, as provenance: the local reranker, or the model
+    /// asked first. What actually judged a given capture is in its
+    /// [`Judgement`], and with a fallback configured the two can differ.
     pub fn name(&self) -> String {
         match self {
             Judge::Local(reranker) => reranker.choice().to_string(),
-            Judge::Remote(remote) => remote.model.clone(),
+            Judge::Remote(remote) => remote.models[0].clone(),
         }
     }
+
+    /// Everything this judge would try, for the startup log.
+    pub fn describe(&self) -> String {
+        match self {
+            Judge::Local(_) => self.name(),
+            Judge::Remote(remote) => remote.models.join(", then "),
+        }
+    }
+}
+
+/// A judge's scores, and who gave them.
+pub struct Judgement {
+    pub scores: Vec<f32>,
+    /// Provenance for the stored echo: the model that answered, not the
+    /// one asked first.
+    pub judged_by: String,
 }
 
 pub struct RemoteJudge {
     http: reqwest::Client,
     api_key: String,
-    model: String,
+    /// In the order OpenRouter should try them; never empty.
+    models: Vec<String>,
     zdr: bool,
 }
 
@@ -197,18 +219,23 @@ struct Verdicts {
 }
 
 impl RemoteJudge {
-    pub fn new(api_key: String, model: String, zdr: bool) -> Self {
+    pub fn new(api_key: String, models: Vec<String>, zdr: bool) -> Self {
+        assert!(!models.is_empty(), "a remote judge needs a model");
         Self {
             http: reqwest::Client::new(),
             api_key,
-            model,
+            models,
             zdr,
         }
     }
 
-    async fn score(&self, query: &str, documents: Vec<String>) -> anyhow::Result<Vec<f32>> {
+    async fn score(&self, query: &str, documents: Vec<String>) -> anyhow::Result<Judgement> {
+        let primary = &self.models[0];
         if documents.is_empty() {
-            return Ok(Vec::new());
+            return Ok(Judgement {
+                scores: Vec::new(),
+                judged_by: primary.clone(),
+            });
         }
 
         let listing = documents
@@ -219,7 +246,10 @@ impl RemoteJudge {
             .join("\n");
 
         let body = json!({
-            "model": self.model,
+            // `models`, not `model`: OpenRouter tries them in order, which
+            // is what turns one provider's rate limit into a fallback
+            // instead of a missing echo.
+            "models": self.models,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": format!("NEW note:\n{query}\n\nEARLIER notes:\n{listing}")},
@@ -231,47 +261,18 @@ impl RemoteJudge {
             "provider": {"zdr": self.zdr},
         });
 
-        let started = Instant::now();
-        let response = self
-            .http
-            .post("https://openrouter.ai/api/v1/chat/completions")
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .await
-            .and_then(|r| r.error_for_status());
-
-        let response = match response {
-            Ok(response) => response.json::<Value>().await,
-            Err(err) => {
-                crate::telemetry::model_call_failed(
-                    "echo-judge",
-                    &self.model,
-                    started.elapsed(),
-                    &err,
-                );
-                return Err(err.into());
-            }
-        };
-        let response = match response {
-            Ok(response) => response,
-            Err(err) => {
-                crate::telemetry::model_call_failed(
-                    "echo-judge",
-                    &self.model,
-                    started.elapsed(),
-                    &err,
-                );
-                return Err(err.into());
-            }
-        };
-        crate::telemetry::model_call("echo-judge", &self.model, &response, started.elapsed());
+        let response =
+            crate::openrouter::chat(&self.http, &self.api_key, "echo-judge", primary, &body)
+                .await?;
 
         let content = response["choices"][0]["message"]["content"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("the judge answered with no message content"))?;
 
-        parse_scores(content, documents.len())
+        Ok(Judgement {
+            scores: parse_scores(content, documents.len())?,
+            judged_by: response["model"].as_str().unwrap_or(primary).to_string(),
+        })
     }
 }
 

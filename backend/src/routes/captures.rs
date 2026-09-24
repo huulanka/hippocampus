@@ -433,66 +433,117 @@ async fn index_capture(
 #[derive(Clone, Copy)]
 pub enum JudgeSlot {
     InFlight,
-    FailedAt(std::time::Instant),
+    FailedAt {
+        at: std::time::Instant,
+        failures: u32,
+    },
 }
 
-/// Judges a capture's echo behind whatever response is being sent, unless
-/// a judgement for it is already running or a previous failure is still
-/// within its backoff window.
+/// The longest a failed judgement waits before the next attempt.
 ///
-/// A failure is logged and otherwise ignored: the marker is only written
-/// on success, so the next read of this capture starts a fresh attempt —
-/// once the backoff has passed. That is the retry, and it costs nothing
-/// when nobody looks. The backoff is what keeps it from costing something
-/// on every read while a provider is failing fast (a rate limit, say):
-/// without it, the client's 1.2s poll would turn one failing call into
-/// several paid calls a second for as long as anyone is watching.
-fn spawn_judging(state: &AppState, capture_event_id: Uuid) {
-    {
-        let Ok(mut slots) = state.judging.lock() else {
-            return;
-        };
-        match slots.get(&capture_event_id) {
-            Some(JudgeSlot::InFlight) => return,
-            Some(JudgeSlot::FailedAt(at)) if at.elapsed() < state.echo_judge_retry_backoff => {
-                return;
-            }
-            Some(JudgeSlot::FailedAt(_)) | None => {}
-        }
-        slots.insert(capture_event_id, JudgeSlot::InFlight);
-    }
+/// The wait doubles with every failure, from `ECHO_JUDGE_RETRY_BACKOFF_SECS`
+/// up to this. An hour is long enough that a provider that is down for
+/// the day costs a couple of dozen calls, and short enough that an echo
+/// still turns up the same day it comes back.
+const MAX_JUDGE_BACKOFF: std::time::Duration = std::time::Duration::from_secs(3600);
 
-    let pool = state.pool.clone();
-    let judge = state.judge.clone();
-    let slots = state.judging.clone();
+/// How long to wait after `failures` failed judgements in a row.
+fn judge_backoff(base: std::time::Duration, failures: u32) -> std::time::Duration {
+    let doublings = failures.saturating_sub(1).min(16);
+    base.saturating_mul(1 << doublings).min(MAX_JUDGE_BACKOFF)
+}
+
+/// Marks a capture as being judged, unless a judgement is already running
+/// or the last failure is still within its backoff. Returns how many
+/// times it has failed so far.
+fn claim_judging(state: &AppState, capture_event_id: Uuid) -> Option<u32> {
+    let mut slots = state.judging.lock().ok()?;
+    let failures = match slots.get(&capture_event_id) {
+        Some(JudgeSlot::InFlight) => return None,
+        Some(JudgeSlot::FailedAt { at, failures })
+            if at.elapsed() < judge_backoff(state.echo_judge_retry_backoff, *failures) =>
+        {
+            return None;
+        }
+        Some(JudgeSlot::FailedAt { failures, .. }) => *failures,
+        None => 0,
+    };
+    slots.insert(capture_event_id, JudgeSlot::InFlight);
+    Some(failures)
+}
+
+/// Judges a capture that [`claim_judging`] handed out, and records how it
+/// went. True when the echo is now stored.
+///
+/// A failure is logged and otherwise only remembered here: the marker is
+/// written on success alone, so whoever looks next — a read of this
+/// capture, or [`crate::pipeline::watch_echoes`] — starts a fresh attempt
+/// once the backoff has passed.
+async fn judge_claimed(state: &AppState, capture_event_id: Uuid, failures: u32) -> bool {
     let thresholds = echo::Thresholds {
         min_similarity: state.echo_min_similarity,
         min_score: state.echo_min_rerank,
     };
+    let result = echo::judge_stored_capture(
+        &state.pool,
+        state.judge.as_deref(),
+        capture_event_id,
+        thresholds,
+    )
+    .await;
 
-    tokio::spawn(async move {
-        let result =
-            echo::judge_stored_capture(&pool, judge.as_deref(), capture_event_id, thresholds).await;
-        let Ok(mut slots) = slots.lock() else {
-            return;
-        };
-        match result {
-            Ok(()) => {
-                slots.remove(&capture_event_id);
-            }
-            Err(err) => {
-                tracing::warn!(
-                    ?err,
-                    %capture_event_id,
-                    "echo judging failed; it will be retried after a backoff"
-                );
-                slots.insert(
-                    capture_event_id,
-                    JudgeSlot::FailedAt(std::time::Instant::now()),
-                );
-            }
+    let Ok(mut slots) = state.judging.lock() else {
+        return result.is_ok();
+    };
+    match result {
+        Ok(()) => {
+            slots.remove(&capture_event_id);
+            true
         }
+        Err(err) => {
+            let failures = failures + 1;
+            tracing::warn!(
+                ?err,
+                %capture_event_id,
+                failures,
+                retry_in_secs = judge_backoff(state.echo_judge_retry_backoff, failures).as_secs(),
+                "echo judging failed; it will be retried after a backoff"
+            );
+            slots.insert(
+                capture_event_id,
+                JudgeSlot::FailedAt {
+                    at: std::time::Instant::now(),
+                    failures,
+                },
+            );
+            false
+        }
+    }
+}
+
+/// Judges a capture's echo behind whatever response is being sent, unless
+/// it is already being judged or still cooling down from a failure.
+///
+/// The backoff is what keeps a failing provider (a rate limit, say) from
+/// being asked again on every read: without it, the client's 1.2s poll
+/// would turn one failing call into several paid calls a second for as
+/// long as anyone is watching.
+fn spawn_judging(state: &AppState, capture_event_id: Uuid) {
+    let Some(failures) = claim_judging(state, capture_event_id) else {
+        return;
+    };
+    let state = state.clone();
+    tokio::spawn(async move {
+        judge_claimed(&state, capture_event_id, failures).await;
     });
+}
+
+/// Judges a capture now, in the caller's own task. `None` when it was
+/// not due — already running, or still backing off — otherwise whether
+/// it succeeded.
+pub(crate) async fn judge_if_due(state: &AppState, capture_event_id: Uuid) -> Option<bool> {
+    let failures = claim_judging(state, capture_event_id)?;
+    Some(judge_claimed(state, capture_event_id, failures).await)
 }
 
 /// The stored echo for a capture, starting a judgement if there is none.
@@ -1374,5 +1425,41 @@ mod written_time {
     fn an_unset_clock_is_refused() {
         let epoch = chrono::DateTime::from_timestamp(0, 0).unwrap();
         assert!(written_at(Some(epoch)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod judge_backoff {
+    use std::time::Duration;
+
+    use super::{MAX_JUDGE_BACKOFF, judge_backoff};
+
+    #[test]
+    fn the_first_failure_waits_the_base() {
+        assert_eq!(
+            judge_backoff(Duration::from_secs(20), 1),
+            Duration::from_secs(20)
+        );
+    }
+
+    #[test]
+    fn every_further_failure_doubles_the_wait() {
+        assert_eq!(
+            judge_backoff(Duration::from_secs(20), 2),
+            Duration::from_secs(40)
+        );
+        assert_eq!(
+            judge_backoff(Duration::from_secs(20), 4),
+            Duration::from_secs(160)
+        );
+    }
+
+    #[test]
+    fn the_wait_stops_growing_at_an_hour() {
+        assert_eq!(judge_backoff(Duration::from_secs(20), 9), MAX_JUDGE_BACKOFF);
+        assert_eq!(
+            judge_backoff(Duration::from_secs(20), u32::MAX),
+            MAX_JUDGE_BACKOFF
+        );
     }
 }

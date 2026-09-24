@@ -95,6 +95,9 @@ is fast, private, and scales with an index. Only the judgement leaves,
 over the same OpenRouter path and the same Zero Data Retention routing the
 structuring step has always used.
 
+*The model choice below was replaced by ADR 0015: that model's only
+provider rate-limited nearly every call.*
+
 The model is `mistralai/mistral-small-2603`, configurable via
 `ECHO_JUDGE_MODEL`, and recorded on every stored judgement as provenance.
 Of the 440 models in OpenRouter's catalogue, 312 have ZDR endpoints; after
