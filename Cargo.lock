@@ -166,7 +166,6 @@ dependencies = [
  "hf-hub",
  "jsonwebtoken",
  "pgvector",
- "rand 0.10.3",
  "reqwest",
  "rsa",
  "serde",

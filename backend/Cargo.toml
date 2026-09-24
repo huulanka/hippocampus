@@ -50,5 +50,4 @@ uuid = { version = "1.26.1", features = ["v4", "serde"] }
 # Throwaway RSA key pairs, so access verification is tested against real
 # signatures instead of a key fixture committed to the repository.
 base64 = "0.23"
-rand = "0.10"
-rsa = "0.9"
+rsa = { version = "0.9", features = ["getrandom"] }
