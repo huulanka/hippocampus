@@ -21,7 +21,7 @@ Tauri v2 client (Rust)  --HTTPS-->  Axum backend (Rust)  -->  Postgres + pgvecto
 
 The reasoning behind each piece of the stack is in [`adr/`](adr/); what
 the system is for, and in what order it gets built, is in
-[`product.md`](product.md) and [`roadmap.md`](roadmap.md) (both in German).
+[`product.md`](product.md) and [`roadmap.md`](roadmap.md).
 
 ## A capture cannot be lost
 

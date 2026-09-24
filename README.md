@@ -170,7 +170,7 @@ the power for it. The details are in [How it works](docs/how-it-works.md#echo).
 Hippocampus is built by one person and used by that person every day. It
 works and it releases often, but it is young: the app is Mac-only, the
 build is not notarised, and what comes next is in the
-[roadmap](docs/roadmap.md) (German). Issues and ideas are welcome.
+[roadmap](docs/roadmap.md). Issues and ideas are welcome.
 
 ## Documentation
 

@@ -90,7 +90,7 @@ no graph. Only text is ever sent, never audio, and requests are routed to
 providers with zero data retention.
 
 Backups, restoring them, and what a deployment on a NAS needs are in
-[`operations.md`](operations.md) (German).
+[`operations.md`](operations.md).
 
 ## Pointing the app at your backend
 
