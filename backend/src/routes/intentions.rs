@@ -304,7 +304,7 @@ pub async fn reopen(
 }
 
 /// Everything the graph knows by name, for matching against a meeting.
-async fn candidates(pool: &PgPool) -> Result<Vec<brief::Candidate>, AppError> {
+pub(crate) async fn candidates(pool: &PgPool) -> Result<Vec<brief::Candidate>, AppError> {
     let rows = sqlx::query!(
         r#"
         select e.id, e.name, e.entity_type,

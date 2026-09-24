@@ -150,6 +150,7 @@ pub async fn detail(
     .await?;
 
     let intentions = super::intentions::for_entity(&state.pool, id).await?;
+    let gist = crate::gist::for_entity(&state.pool, id).await?;
 
     Ok(Json(EntityDetail {
         id: entity.id,
@@ -184,6 +185,7 @@ pub async fn detail(
             })
             .collect(),
         intentions,
+        gist,
     }))
 }
 

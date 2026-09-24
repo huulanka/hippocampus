@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select distinct other as \"other!\" from (\n            select previous_event_id as other from capture_continuations\n            where continues and capture_event_id = any($1)\n            union\n            select capture_event_id from capture_continuations\n            where continues and previous_event_id = any($1)\n        ) n\n        where not (other = any($1))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "other!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "25348e4e12b018b17b60dbe3258d88e353394d4ad11a5a3486aa62cf7e0fea20"
+}

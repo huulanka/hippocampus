@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select entity_id, sentences from entity_gists where entity_id = any($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "entity_gists",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "sentences",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "entity_gists",
+            "name": "sentences"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "13828232f1835ba202c385f28ac4a1ae7999eec34f3b8c58f0c8eb1326ae29ff"
+}

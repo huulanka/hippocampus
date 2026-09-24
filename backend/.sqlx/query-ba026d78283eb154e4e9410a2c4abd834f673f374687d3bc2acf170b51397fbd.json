@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from entity_gists g\n        where exists (\n            select 1\n            from jsonb_array_elements(g.sentences) s,\n                 jsonb_array_elements_text(s -> 'sources') src\n            where src = $1::text\n        )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba026d78283eb154e4e9410a2c4abd834f673f374687d3bc2acf170b51397fbd"
+}

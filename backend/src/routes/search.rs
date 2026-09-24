@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use axum::Json;
 use axum::extract::{Query, State};
+use chrono::{DateTime, Utc};
 use contracts::{EntitySummary, SearchQuery, SearchResult};
 use uuid::Uuid;
 
@@ -33,8 +34,51 @@ pub async fn search(
     State(state): State<AppState>,
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<Vec<SearchResult>>, AppError> {
-    let query_embedding: pgvector::Vector = state.embedder.embed_query(&params.query).await?.into();
-    let limit = i64::from(params.limit.clamp(1, 200));
+    let hits = hybrid(
+        &state,
+        &params.query,
+        params.from,
+        params.to,
+        params.entity_type.as_deref(),
+        i64::from(params.limit.clamp(1, 200)),
+    )
+    .await?;
+
+    let event_ids: Vec<Uuid> = hits.iter().map(|h| h.event_id).collect();
+    let mut entities = related_entities(&state.pool, &event_ids).await?;
+
+    Ok(Json(
+        hits.into_iter()
+            .map(|h| SearchResult {
+                related_entities: entities.remove(&h.event_id).unwrap_or_default(),
+                capture_event_id: h.event_id,
+                transcript_text: h.transcript,
+                occurred_at: h.occurred_at,
+                score: h.score,
+            })
+            .collect(),
+    ))
+}
+
+/// One capture found by [`hybrid`].
+pub(crate) struct Hit {
+    pub event_id: Uuid,
+    pub transcript: String,
+    pub occurred_at: DateTime<Utc>,
+    pub score: f32,
+}
+
+/// The fused full-text and semantic ranking behind both the search field
+/// and the answer to a question.
+pub(crate) async fn hybrid(
+    state: &AppState,
+    query: &str,
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
+    entity_type: Option<&str>,
+    limit: i64,
+) -> anyhow::Result<Vec<Hit>> {
+    let query_embedding: pgvector::Vector = state.embedder.embed_query(query).await?.into();
 
     let rows = sqlx::query!(
         r#"
@@ -86,10 +130,10 @@ pub async fn search(
         limit $8
         "#,
         query_embedding as _,
-        params.query,
-        params.from,
-        params.to,
-        params.entity_type,
+        query,
+        from,
+        to,
+        entity_type,
         CANDIDATE_DEPTH,
         RRF_K,
         limit,
@@ -97,20 +141,15 @@ pub async fn search(
     .fetch_all(&state.pool)
     .await?;
 
-    let event_ids: Vec<Uuid> = rows.iter().map(|r| r.event_id).collect();
-    let mut entities = related_entities(&state.pool, &event_ids).await?;
-
-    Ok(Json(
-        rows.into_iter()
-            .map(|r| SearchResult {
-                related_entities: entities.remove(&r.event_id).unwrap_or_default(),
-                capture_event_id: r.event_id,
-                transcript_text: r.transcript,
-                occurred_at: r.occurred_at,
-                score: r.score,
-            })
-            .collect(),
-    ))
+    Ok(rows
+        .into_iter()
+        .map(|r| Hit {
+            event_id: r.event_id,
+            transcript: r.transcript,
+            occurred_at: r.occurred_at,
+            score: r.score,
+        })
+        .collect())
 }
 
 /// Entities that were extracted from each of the given captures. Fetched in

@@ -210,6 +210,136 @@ pub struct CaptureDetail {
     /// Everything this capture caused, in order — the capture event itself,
     /// its transcripts, and the entity/relation events derived from it.
     pub events: Vec<EventRecord>,
+    /// Meetings this note was read as belonging to. Only those a model
+    /// judged it part of; a note spoken during a meeting about something
+    /// else entirely has none.
+    #[serde(default)]
+    pub occasions: Vec<CaptureOccasion>,
+    /// The other notes of the episode this one is part of, oldest first:
+    /// notes spoken shortly before or after it that carry on from each
+    /// other. Empty for a note that stands alone, which most do.
+    #[serde(default)]
+    pub episode: Vec<EpisodeNote>,
+}
+
+/// A meeting a note was spoken around, as far as the graph knows it.
+///
+/// No title and no time: the calendar stays on the Mac (ADR 0016). What is
+/// kept is who and what the meeting was with, and where the note stood.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureOccasion {
+    /// "before", "during" or "after".
+    pub phase: String,
+    /// Minutes between the note and the meeting's nearer edge; 0 during.
+    pub minutes: i32,
+    /// Merges followed.
+    pub entities: Vec<EntityRef>,
+    pub model: Option<String>,
+}
+
+/// An entity by name, for a line that only needs to link to it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityRef {
+    pub id: Uuid,
+    pub name: String,
+    pub entity_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EpisodeNote {
+    pub capture_event_id: Uuid,
+    pub transcript_text: String,
+    pub occurred_at: DateTime<Utc>,
+}
+
+/// A note this Mac has not yet looked up in its calendar — one row of
+/// `GET /occasions/pending`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingOccasion {
+    pub capture_event_id: Uuid,
+    pub occurred_at: DateTime<Utc>,
+}
+
+/// Body of `POST /occasions`: what one Mac found in its calendar around
+/// some notes.
+///
+/// Carries meeting titles and attendee names, like `BriefRequest`, and
+/// like it they are matched against the graph and then dropped. Only
+/// what matched is kept (ADR 0016).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OfferOccasionsRequest {
+    /// Stable per installation, so each Mac is asked about each note once.
+    pub checker: Uuid,
+    pub captures: Vec<CaptureMeetings>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaptureMeetings {
+    pub capture_event_id: Uuid,
+    /// Empty when the calendar had nothing near the note. Sent anyway: it
+    /// is what marks the note as looked up.
+    #[serde(default)]
+    pub meetings: Vec<NearbyMeeting>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NearbyMeeting {
+    pub title: String,
+    #[serde(default)]
+    pub people: Vec<String>,
+    /// "before", "during" or "after", from the note's point of view: a
+    /// note spoken before the meeting is preparation for it.
+    pub phase: String,
+    pub minutes: u32,
+}
+
+/// What `POST /occasions` did with it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OccasionsOffered {
+    pub checked: usize,
+    /// Meetings that matched something known and are waiting to be read
+    /// against their note.
+    pub kept: usize,
+}
+
+/// Body of `POST /ask`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskRequest {
+    pub question: String,
+    /// Where the question is asked, so "last week" means the right week.
+    #[serde(default)]
+    pub timezone: Option<String>,
+}
+
+/// The answer to a question, from the notes and nothing else.
+///
+/// Every sentence names the notes it rests on and was checked against
+/// them by a second reading; a sentence that failed either is not here.
+/// No sentences at all is a real answer — "the notes do not say" — and
+/// then `notes` holds the nearest ones, so there is still something to
+/// read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Answer {
+    pub sentences: Vec<StorySentence>,
+    /// The notes cited, in order of first citation; or, with no
+    /// sentences, the closest notes found.
+    pub notes: Vec<AnswerNote>,
+    /// How many notes the answer was written from.
+    pub considered: usize,
+    /// Sentences the second reading found the notes did not carry.
+    pub dropped: usize,
+    pub model: Option<String>,
+    /// False on a backend with no model configured: then only the notes
+    /// come back.
+    pub can_answer: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnswerNote {
+    pub capture_event_id: Uuid,
+    pub transcript_text: String,
+    pub occurred_at: DateTime<Utc>,
+    pub cited: bool,
 }
 
 /// Body of `POST /captures/{id}/transcript` — a human fixing what the
@@ -320,6 +450,23 @@ pub struct EntityDetail {
     /// done, and nowhere after.
     #[serde(default)]
     pub intentions: Vec<Intention>,
+    /// What is known about it, in a few sentences with their sources.
+    /// Only for an entity observed often enough to have a gist at all.
+    #[serde(default)]
+    pub gist: Option<EntityGist>,
+}
+
+/// An entity in a few sentences, each naming the notes it rests on.
+///
+/// Written by a model from the entity's observations and kept until it is
+/// observed again. Where later notes contradict earlier ones, it says what
+/// changed and when, rather than picking one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityGist {
+    pub sentences: Vec<StorySentence>,
+    pub model: String,
+    pub written_at: DateTime<Utc>,
+    pub observations_seen: i32,
 }
 
 /// A capture that said something about an entity, with the observation

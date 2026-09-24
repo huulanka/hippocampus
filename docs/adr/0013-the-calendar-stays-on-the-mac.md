@@ -1,7 +1,8 @@
 # ADR 0013: The calendar stays on the Mac; the backend only matches
 
 ## Status
-Accepted (2026-09-23)
+Accepted (2026-09-23). Amended by ADR 0016: notes now keep the entities a
+nearby meeting matched, never the meeting itself.
 
 ## Context
 "Zukunft erinnern" (docs/prospective-memory.md) brings an intention back

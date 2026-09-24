@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select sentences, model, written_at, observations_seen from entity_gists where entity_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sentences",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "entity_gists",
+            "name": "sentences"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entity_gists",
+            "name": "model"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "written_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "entity_gists",
+            "name": "written_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "observations_seen",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "entity_gists",
+            "name": "observations_seen"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "aebb734c5ad49fb6b12ba49ebf4700ba42a68cb4dbd35938dd511e4232d3af49"
+}

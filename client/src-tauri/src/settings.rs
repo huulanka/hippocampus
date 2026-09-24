@@ -100,11 +100,25 @@ pub struct Stored {
     /// Whether a meeting with something to bring up also gets a banner.
     #[serde(default)]
     pub foresight_banner: Option<bool>,
+    /// How far before and after a meeting a note counts as being near it
+    /// ([`crate::occasions`]).
+    #[serde(default)]
+    pub occasion_window_minutes: Option<u32>,
+    /// This installation, as the backend knows it when it asks which notes
+    /// have been looked up in *this* Mac's calendar. Made up on first use
+    /// and never shown; it names nothing about the Mac.
+    #[serde(default)]
+    pub installation_id: Option<uuid::Uuid>,
 }
 
 /// The lead times Settings offers. Anything else in the file is read as
 /// the default rather than trusted.
 pub const FORESIGHT_LEADS: [u32; 4] = [5, 10, 15, 30];
+
+/// How far around a meeting a note counts as near it. An hour catches the
+/// preparation over lunch and the follow-up after the next coffee; half an
+/// hour is for days packed back to back.
+pub const OCCASION_WINDOWS: [u32; 2] = [30, 60];
 
 /// How meetings are brought up. The webview sees all of it.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -112,6 +126,9 @@ pub struct ForesightSettings {
     pub calendar_ids: Vec<String>,
     pub lead_minutes: u32,
     pub banner: bool,
+    /// Minutes before and after a meeting within which a note is offered
+    /// as belonging to it.
+    pub window_minutes: u32,
 }
 
 impl Default for ForesightSettings {
@@ -124,6 +141,7 @@ impl Default for ForesightSettings {
             calendar_ids: Vec::new(),
             lead_minutes: 10,
             banner: true,
+            window_minutes: 60,
         }
     }
 }
@@ -160,6 +178,10 @@ impl Stored {
                 .filter(|m| FORESIGHT_LEADS.contains(m))
                 .unwrap_or(default.lead_minutes),
             banner: self.foresight_banner.unwrap_or(default.banner),
+            window_minutes: self
+                .occasion_window_minutes
+                .filter(|m| OCCASION_WINDOWS.contains(m))
+                .unwrap_or(default.window_minutes),
         }
     }
 
@@ -204,6 +226,8 @@ impl Default for Stored {
             watched_calendars: None,
             foresight_lead_minutes: None,
             foresight_banner: None,
+            occasion_window_minutes: None,
+            installation_id: None,
         }
     }
 }
@@ -313,6 +337,30 @@ impl SettingsState {
             *cache = SecretCache::Known(Some(secret));
         }
         log::info!("moved the Cloudflare Access secret out of settings.json into the Keychain");
+    }
+
+    /// This installation's id, made up and written down the first time it
+    /// is asked for.
+    pub fn checker(&self) -> uuid::Uuid {
+        let (id, fresh) = {
+            let Ok(mut current) = self.current.lock() else {
+                return uuid::Uuid::nil();
+            };
+            match current.installation_id {
+                Some(id) => (id, None),
+                None => {
+                    let id = uuid::Uuid::new_v4();
+                    current.installation_id = Some(id);
+                    (id, Some(current.clone()))
+                }
+            }
+        };
+        if let Some(updated) = fresh {
+            if let Err(err) = self.persist(&updated) {
+                log::warn!("could not write settings: {err}");
+            }
+        }
+        id
     }
 
     pub fn snapshot(&self) -> Stored {
@@ -725,10 +773,16 @@ pub fn set_foresight(
     calendar_ids: Vec<String>,
     lead_minutes: u32,
     banner: bool,
+    window_minutes: Option<u32>,
 ) -> Result<SettingsView, String> {
     if !FORESIGHT_LEADS.contains(&lead_minutes) {
         return Err(format!(
             "{lead_minutes} minutes is not one of the offered leads"
+        ));
+    }
+    if let Some(window) = window_minutes.filter(|w| !OCCASION_WINDOWS.contains(w)) {
+        return Err(format!(
+            "{window} minutes is not one of the offered windows"
         ));
     }
     let mut calendar_ids = calendar_ids;
@@ -743,6 +797,9 @@ pub fn set_foresight(
         current.watched_calendars = Some(calendar_ids);
         current.foresight_lead_minutes = Some(lead_minutes);
         current.foresight_banner = Some(banner);
+        if window_minutes.is_some() {
+            current.occasion_window_minutes = window_minutes;
+        }
         current.clone()
     };
     if let Err(err) = state.persist(&updated) {

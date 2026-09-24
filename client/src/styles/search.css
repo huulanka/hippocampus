@@ -92,4 +92,102 @@
   .search-hit-entities .pill:hover {
     border-color: var(--accent);
   }
+
+  /* The field's own action: pushed to the far end, so the input keeps
+     the width and the button reads as belonging to what was typed. */
+  .search-field .input {
+    flex: 1;
+    min-width: 0;
+  }
+  .search-ask {
+    flex: none;
+  }
+
+  /* The answer sits above the matches and looks like a page of the
+     record, not a chat bubble: it is your notes, arranged. */
+  .answer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .answer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .answer-head .label-micro {
+    color: var(--ember);
+  }
+  .answer-toggle {
+    gap: var(--space-2);
+  }
+  /* The model's sentences in the interface face; the notes beneath them
+     keep the serif that means "your own words". */
+  .answer-text {
+    font-family: var(--font-ui);
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
+    color: var(--text);
+    max-width: 62ch;
+  }
+  .answer-reading {
+    animation: answer-breathe 1.6s var(--ease-out) infinite alternate;
+  }
+  @keyframes answer-breathe {
+    from { opacity: 0.45; }
+    to { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .answer-reading {
+      animation: none;
+    }
+  }
+  .answer-notes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .answer-note {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--dur-fast) var(--ease-out);
+  }
+  .answer-note:hover,
+  .answer-note:focus-visible {
+    border-color: var(--line-strong);
+  }
+  .answer-note-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .answer-note-meta .source-mark {
+    margin-left: 0;
+    vertical-align: 0;
+    cursor: inherit;
+  }
+  .answer-note-text {
+    max-width: none;
+    font-size: var(--text-md);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .answer-provenance {
+    margin: 0;
+  }
 }

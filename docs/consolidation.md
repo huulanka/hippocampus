@@ -57,10 +57,11 @@ not their raw notes.
 The field already exists: `entities.current_summary`. It is currently
 overwritten by the latest observation (last write wins), so it is the
 newest note rather than a summary, which is why the interface labels it
-"most recently observed". The consolidation run is what will turn it into
-a real summary, and the label changes with it. This is still open; it
-only becomes necessary once an entity no longer fits into a prompt
-together with its observations.
+"most recently observed". The real summary now exists as
+the gist (`docs/finding-again.md`), written from three observations on.
+The consolidation run does not read it yet; that only becomes necessary
+once an entity no longer fits into a prompt together with its
+observations.
 
 ## What the run may change
 

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        delete from weekly_story w\n        where exists (\n            select 1\n            from jsonb_array_elements(w.sentences) s,\n                 jsonb_array_elements_text(s -> 'sources') src\n            where src = $1::text\n        )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ac7f52d4286ac1af3511002d55c20c2173f305db735b8c79b34603f12a12d466"
+}

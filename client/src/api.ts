@@ -66,6 +66,27 @@ export interface CaptureDetail {
   echo: EchoItem[];
   echo_pending: boolean;
   events: EventRecord[];
+  /// Meetings this note was read as belonging to. Missing from a backend
+  /// older than them.
+  occasions?: CaptureOccasion[];
+  /// The other notes of its episode, oldest first.
+  episode?: EpisodeNote[];
+}
+
+/// A meeting a note was spoken around, as far as the graph knows it: who
+/// and what it was with, never its title (ADR 0016).
+export interface CaptureOccasion {
+  phase: "before" | "during" | "after";
+  /// Minutes between the note and the meeting's nearer edge; 0 during.
+  minutes: number;
+  entities: { id: string; name: string; entity_type: string }[];
+  model: string | null;
+}
+
+export interface EpisodeNote {
+  capture_event_id: string;
+  transcript_text: string;
+  occurred_at: string;
 }
 
 export interface AudioDetail {
@@ -136,6 +157,23 @@ export interface EntityDetail {
   relations: EntityEdge[];
   /// Open ones only. Missing from a backend older than intentions.
   intentions?: Intention[];
+  /// What is known about it, sentence by sentence with sources. Only for
+  /// something observed often enough to have one.
+  gist?: EntityGist | null;
+}
+
+export interface EntityGist {
+  sentences: SourcedSentence[];
+  model: string;
+  written_at: string;
+  observations_seen: number;
+}
+
+/// A sentence a model wrote, and the notes it rests on. Never without
+/// sources: one the model could not trace back is dropped, not shown.
+export interface SourcedSentence {
+  text: string;
+  sources: string[];
 }
 
 /// Something you said you would do, say or ask later, and have not yet.
@@ -805,7 +843,7 @@ export interface ReviewTopic {
 }
 
 export interface WeeklyStory {
-  sentences: { text: string; sources: string[] }[];
+  sentences: SourcedSentence[];
   model: string;
   written_at: string;
   captures_seen: number;
@@ -849,6 +887,40 @@ export function listEntityTypes(): Promise<EntityTypeCount[]> {
 /// stops being obvious from being the one who deployed it.
 export function getBackendVersion(): Promise<string> {
   return request<string>("/version");
+}
+
+/// The answer to a question, from the notes and nothing else. Every
+/// sentence cites its notes and survived a second reading against them;
+/// no sentences at all means the notes do not say.
+export interface Answer {
+  sentences: SourcedSentence[];
+  /// Cited notes in order of first citation — or, with no sentences, the
+  /// nearest notes found.
+  notes: AnswerNote[];
+  considered: number;
+  /// Sentences the second reading took out.
+  dropped: number;
+  model: string | null;
+  /// False when the backend has no model: then only notes come back.
+  can_answer: boolean;
+}
+
+export interface AnswerNote {
+  capture_event_id: string;
+  transcript_text: string;
+  occurred_at: string;
+  cited: boolean;
+}
+
+export function ask(question: string): Promise<Answer> {
+  return request<Answer>("/ask", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      question,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }),
+  });
 }
 
 export function search(query: string, options: SearchOptions = {}): Promise<SearchResult[]> {

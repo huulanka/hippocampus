@@ -5,7 +5,8 @@ how they map onto events and projections.
 
 ## Concepts
 
-Only these six. Everything else is derived or presentation.
+These six, and three readings on top of them (below). Everything else
+is derived or presentation.
 
 | Concept | Definition | Can it change? |
 |---|---|---|
@@ -15,6 +16,17 @@ Only these six. Everything else is derived or presentation.
 | **Observation** | What a single capture says about an entity. Always tied to its source and the model that read it. | Never, only added to |
 | **Relation** | A connection between two entities, with its source and model. | Proposed, then kept or taken back |
 | **Echo** | The earlier captures close in meaning to a new one. | Judged once and remembered (ADR 0010) |
+
+### Readings on top
+
+Each is a model's reading of the concepts above, names the model, and is
+never shown as more than that (`docs/finding-again.md`).
+
+| Reading | Definition | Can it change? |
+|---|---|---|
+| **Occasion** | A meeting a capture was spoken around, kept as the entities it matched, the phase (before, during, after) and the distance in minutes. Never the title (ADR 0016). | Offered by a Mac, then judged once; judged again after a correction |
+| **Continuation** | Whether a capture carries on from one spoken up to half an hour before it. An **episode** is what these connect. | Judged once; judged again after a correction |
+| **Gist** | A few sentences about an entity, each citing the captures it rests on, from three observations on. Where later observations contradict earlier ones, it says what changed and when. | Written again whenever the entity is observed again; removed with a capture it cites |
 
 ### Deliberately not modelled
 
@@ -99,9 +111,8 @@ checkable; the content is gone. See ADR 0005.
   and is re-embedded on every correction.
 - `entities.current_summary` is overwritten by the latest observation
   (last write wins). That is not a consolidated view, so the interface
-  labels it "most recently observed" rather than as a summary. Either the
-  field goes and the view is built from the observations when read, or it
-  gets a real consolidation step.
+  labels it "most recently observed" and shows it only where there is no
+  gist yet. The gist (`entity_gists`) is the consolidated view.
 
 ## Entity identity
 

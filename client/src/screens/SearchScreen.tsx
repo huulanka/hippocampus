@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ask,
   listCaptures,
   listEntityTypes,
   search,
+  type Answer,
   type CaptureListItem,
   type EntityTypeCount,
   type SearchResult,
 } from "../api";
 import { entityColor } from "../entityType";
 import { usePhoneLayout } from "../phone";
+import { numberSources, Sourced } from "../components/Sourced";
 
 /// Finding something again, and — with the field empty — everything.
 ///
@@ -22,6 +25,44 @@ import { usePhoneLayout } from "../phone";
 /// freely, so the long tail is large and mostly one-off — showing every
 /// type would bury the handful that are actually useful as filters.
 const MAX_TYPE_CHIPS = 6;
+
+/// Words a question starts with, in the two languages the notes are in.
+const QUESTION_WORDS = new Set([
+  "wer", "was", "wann", "wo", "wie", "warum", "wieso", "weshalb", "welche", "welcher", "welches",
+  "wem", "wen", "wessen", "woher", "wohin", "hab", "habe", "hatte", "hatten", "gibt", "gab", "ist",
+  "sind", "war", "waren", "kann", "soll", "sollte", "muss", "wollte",
+  "who", "what", "when", "where", "how", "why", "which", "did", "do", "does", "is", "are",
+  "was", "were", "have", "has", "had", "can", "should",
+]);
+
+/// Whether the field holds a question rather than words to look for. A
+/// question gets an answer above the matches; words get only the matches.
+/// Deliberately simple and visible — "Ask" is always one click away for
+/// anything this misses.
+export function looksLikeQuestion(query: string): boolean {
+  const q = query.trim();
+  if (q.endsWith("?")) return q.split(/\s+/).length >= 2;
+  const words = q.toLowerCase().split(/\s+/);
+  return words.length >= 3 && QUESTION_WORDS.has(words[0]);
+}
+
+const QUOTES_ONLY_KEY = "hippocampus.answer.quotesOnly";
+
+function readQuotesOnly(): boolean {
+  try {
+    return window.localStorage.getItem(QUOTES_ONLY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeQuotesOnly(value: boolean) {
+  try {
+    window.localStorage.setItem(QUOTES_ONLY_KEY, value ? "1" : "0");
+  } catch {
+    // A convenience; the toggle still works for this visit.
+  }
+}
 
 export function SearchScreen({
   onOpenCapture,
@@ -37,6 +78,14 @@ export function SearchScreen({
   const [loading, setLoading] = useState(false);
   const [types, setTypes] = useState<EntityTypeCount[]>([]);
   const [activeType, setActiveType] = useState<string | null>(null);
+  const [answer, setAnswer] = useState<Answer | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState<string | null>(null);
+  const [quotesOnly, setQuotesOnly] = useState(readQuotesOnly);
+  // Only the latest question may land: an answer takes seconds, and one
+  // arriving for a question that has since been replaced would sit above
+  // matches for something else.
+  const askSeq = useRef(0);
 
   useEffect(() => {
     let live = true;
@@ -51,9 +100,34 @@ export function SearchScreen({
     };
   }, []);
 
+  function clearAnswer() {
+    askSeq.current += 1;
+    setAnswer(null);
+    setAsking(false);
+    setAskError(null);
+  }
+
+  async function runAsk(q: string) {
+    const question = q.trim();
+    if (!question) return;
+    const seq = ++askSeq.current;
+    setAsking(true);
+    setAskError(null);
+    setAnswer(null);
+    try {
+      const got = await ask(question);
+      if (askSeq.current === seq) setAnswer(got);
+    } catch (err) {
+      if (askSeq.current === seq) setAskError(String(err));
+    } finally {
+      if (askSeq.current === seq) setAsking(false);
+    }
+  }
+
   async function run(q: string, entityType: string | null = activeType) {
     if (!q.trim()) {
       setResults(null);
+      clearAnswer();
       return;
     }
     setLoading(true);
@@ -94,16 +168,38 @@ export function SearchScreen({
           onChange={(event) => {
             const next = event.currentTarget.value;
             setQuery(next);
-            if (!next.trim()) setResults(null);
+            if (!next.trim()) {
+              setResults(null);
+              clearAnswer();
+            }
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter") void run(query);
+            if (event.key === "Enter") {
+              void run(query);
+              if (looksLikeQuestion(query)) void runAsk(query);
+              else clearAnswer();
+            }
             if (event.key === "Escape") {
               setQuery("");
               setResults(null);
+              clearAnswer();
             }
           }}
         />
+        {query.trim() && (
+          <button
+            type="button"
+            className="chip search-ask"
+            disabled={asking}
+            title="Answer this from your notes"
+            onClick={() => {
+              void run(query);
+              void runAsk(query);
+            }}
+          >
+            Ask
+          </button>
+        )}
       </div>
 
       {types.length > 0 && (
@@ -137,6 +233,20 @@ export function SearchScreen({
             </button>
           ))}
         </div>
+      )}
+
+      {(asking || answer || askError) && (
+        <AnswerCard
+          answer={answer}
+          asking={asking}
+          error={askError}
+          quotesOnly={quotesOnly}
+          onQuotesOnly={(value) => {
+            setQuotesOnly(value);
+            writeQuotesOnly(value);
+          }}
+          onOpenCapture={onOpenCapture}
+        />
       )}
 
       {loading && <p className="today-note">Looking…</p>}
@@ -221,6 +331,107 @@ export function SearchScreen({
         </>
       )}
     </div>
+  );
+}
+
+/// The answer, above the matches.
+///
+/// Sentences first, each with the numbers of the notes it rests on; then
+/// those notes, numbered the same way, so a claim and its source are one
+/// glance apart. "Quotes only" leaves the model's sentences out and shows
+/// just your own words. When the notes do not say, it says so, and shows
+/// the nearest notes instead of a guess.
+function AnswerCard({
+  answer,
+  asking,
+  error,
+  quotesOnly,
+  onQuotesOnly,
+  onOpenCapture,
+}: {
+  answer: Answer | null;
+  asking: boolean;
+  error: string | null;
+  quotesOnly: boolean;
+  onQuotesOnly: (value: boolean) => void;
+  onOpenCapture: (id: string) => void;
+}) {
+  const numbers = useMemo(() => numberSources(answer?.sentences ?? []), [answer]);
+  const said = answer !== null && answer.sentences.length > 0;
+
+  return (
+    <section className="card answer" aria-live="polite" aria-busy={asking}>
+      <header className="answer-head">
+        <h2 className="label-micro">From your notes</h2>
+        {said && (
+          <label className="check answer-toggle">
+            <input
+              type="checkbox"
+              checked={quotesOnly}
+              onChange={() => onQuotesOnly(!quotesOnly)}
+            />
+            <span className="meta">Quotes only</span>
+          </label>
+        )}
+      </header>
+
+      {asking && <p className="today-note answer-reading">Reading your notes…</p>}
+      {error && <p className="today-note">That didn't work: {error}</p>}
+
+      {answer && !answer.can_answer && (
+        <p className="today-note">
+          No model is configured on the backend, so there is no answer — only the closest notes.
+        </p>
+      )}
+      {answer && answer.can_answer && !said && (
+        <p className="prose answer-text">
+          {answer.considered === 0 ? "Nothing in your notes comes close to that." : "Your notes don't say."}
+        </p>
+      )}
+      {said && !quotesOnly && (
+        <Sourced
+          sentences={answer.sentences}
+          numbers={numbers}
+          onOpenCapture={onOpenCapture}
+          className="prose answer-text"
+        />
+      )}
+
+      {answer && answer.notes.length > 0 && (
+        <ol className="answer-notes">
+          {!said && <li className="label-micro answer-nearest">Closest notes</li>}
+          {answer.notes.map((note) => (
+            <li key={note.capture_event_id}>
+              <button
+                type="button"
+                className="answer-note"
+                onClick={() => onOpenCapture(note.capture_event_id)}
+              >
+                <span className="answer-note-meta">
+                  {numbers.has(note.capture_event_id) && (
+                    <span className="source-mark" aria-hidden="true">
+                      {numbers.get(note.capture_event_id)}
+                    </span>
+                  )}
+                  <span className="meta">{onlyDate(note.occurred_at)}</span>
+                </span>
+                <span className="prose answer-note-text">{note.transcript_text}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {answer && answer.model && answer.considered > 0 && (
+        <p className="meta answer-provenance">
+          {said
+            ? `Written by ${answer.model} from ${answer.considered} ${answer.considered === 1 ? "note" : "notes"}, each sentence checked against the notes it cites.`
+            : `Read ${answer.considered} ${answer.considered === 1 ? "note" : "notes"}.`}
+          {answer.dropped > 0 &&
+            ` ${answer.dropped} ${answer.dropped === 1 ? "sentence was" : "sentences were"} left out: the notes did not carry ${answer.dropped === 1 ? "it" : "them"}.`}
+        </p>
+      )}
+    </section>
   );
 }
 

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into capture_context_judged (capture_event_id, model) values ($1, $2)\n            on conflict (capture_event_id) do update set model = excluded.model, judged_at = now()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cee47e8e4fafdfcd4575e1e50c5c97a3a998ad3ee025629d09c6e657b7267222"
+}

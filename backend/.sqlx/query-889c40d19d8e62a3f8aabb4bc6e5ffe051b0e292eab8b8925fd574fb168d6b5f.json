@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        with near as (\n            select other, count(*) as weight from (\n                select to_entity_id as other from relations where from_entity_id = any($1)\n                union all\n                select from_entity_id from relations where to_entity_id = any($1)\n            ) r\n            where not (other = any($1))\n            group by other\n            order by weight desc\n            limit $2\n        )\n        select event_id as \"event_id!\" from (\n            select cs.event_id, cs.occurred_at,\n                   row_number() over (partition by o.entity_id order by cs.occurred_at desc) as n\n            from near\n            join observations o on o.entity_id = near.other\n            join capture_search cs on cs.event_id = o.source_event_id\n            where ($3::timestamptz is null or cs.occurred_at >= $3)\n              and ($4::timestamptz is null or cs.occurred_at < $4)\n        ) ranked\n        where n <= $5\n        order by occurred_at desc\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "event_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "889c40d19d8e62a3f8aabb4bc6e5ffe051b0e292eab8b8925fd574fb168d6b5f"
+}

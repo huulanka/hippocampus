@@ -23,6 +23,7 @@ reasoning behind everything else.
 - **[Consolidation](consolidation.md)** — Reconciling the graph after the fact
 - **[Entity resolution](entity-resolution.md)** — Telling a duplicate from a relation
 - **[Remembering ahead](prospective-memory.md)** — Intentions that come back with the people they are about, before a meeting
+- **[Finding things again](finding-again.md)** — The meeting around a note, episodes, the gist, and answering questions from the notes
 - **[The iPhone](iphone.md)** — Capturing and reading away from the desk, within the limits of free signing
 
 ## Architecture Decision Records
@@ -42,3 +43,5 @@ reasoning behind everything else.
 - **[0013](adr/0013-the-calendar-stays-on-the-mac.md)** — The calendar stays on the Mac; the backend only matches
 - **[0014](adr/0014-structuring-is-a-job-any-device-may-claim.md)** — Structuring is a job any device may claim (not built: the on-device models were not good enough)
 - **[0015](adr/0015-the-echo-judge-needs-a-provider-that-answers.md)** — The echo judge needs a provider that answers
+- **[0016](adr/0016-a-note-remembers-who-the-meeting-was-with.md)** — A note remembers who the meeting was with, not the meeting
+- **[0017](adr/0017-an-answer-is-written-from-chosen-notes-and-checked.md)** — An answer is written from chosen notes, and checked sentence by sentence

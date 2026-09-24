@@ -1,12 +1,15 @@
+mod ask;
 mod audio;
 mod auth;
 mod brief;
 mod config;
 mod consolidation;
+mod context;
 mod echo;
 mod embedding;
 mod error;
 mod events;
+mod gist;
 mod judge;
 mod openrouter;
 mod pipeline;
@@ -175,6 +178,13 @@ async fn main() -> anyhow::Result<()> {
     // for someone to ask.
     pipeline::watch(state.clone(), config.retry);
     pipeline::watch_echoes(state.clone());
+
+    // Reading notes against their neighbours and meetings, and writing
+    // entity gists. Both cost nothing on a quiet archive: a note with
+    // nothing next to it is marked without a call, an entity observed
+    // fewer than three times is never summarised.
+    context::watch(state.clone());
+    gist::watch(state.clone());
 
     // Slow on purpose, and deliberately not on the same clock as the
     // capture pipeline: that one is catching up on work a user is

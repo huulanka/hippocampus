@@ -302,11 +302,19 @@ export interface ForesightSettings {
   calendar_ids: string[];
   lead_minutes: number;
   banner: boolean;
+  /// How far before and after a meeting a note counts as near it.
+  window_minutes: number;
 }
 
 export const FORESIGHT_LEADS = [5, 10, 15, 30] as const;
+export const OCCASION_WINDOWS = [30, 60] as const;
 
-const DEFAULT_FORESIGHT: ForesightSettings = { calendar_ids: [], lead_minutes: 10, banner: true };
+const DEFAULT_FORESIGHT: ForesightSettings = {
+  calendar_ids: [],
+  lead_minutes: 10,
+  banner: true,
+  window_minutes: 60,
+};
 
 /// Whether the calendar may be read, as macOS sees it.
 export type CalendarAccess = "not_determined" | "denied" | "restricted" | "granted" | "write_only";
@@ -568,6 +576,7 @@ export function setForesight(foresight: ForesightSettings): Promise<Settings> {
     calendarIds: foresight.calendar_ids,
     leadMinutes: foresight.lead_minutes,
     banner: foresight.banner,
+    windowMinutes: foresight.window_minutes,
   });
 }
 

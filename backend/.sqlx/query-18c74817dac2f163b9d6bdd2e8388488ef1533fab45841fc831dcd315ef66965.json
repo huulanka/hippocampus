@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into capture_occasion_entities (occasion_id, entity_id) values ($1, $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "18c74817dac2f163b9d6bdd2e8388488ef1533fab45841fc831dcd315ef66965"
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select payload::text as \"payload!\" from events where event_type = 'occasion.offered'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "payload!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "71c34b5fad5c11259a81cf42a16c058d98cb821ad6d9a2f08eddd86ed77caf5a"
+}

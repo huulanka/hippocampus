@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getEntity, type EntityCapture, type EntityDetail, type EntityEdge } from "../api";
 import { BackButton } from "../components/BackButton";
 import { IntentionCard, Sparkle } from "../components/Intention";
+import { Sourced } from "../components/Sourced";
 import { entityColor } from "../entityType";
 import { whenLabel } from "../whenLabel";
 
@@ -64,7 +65,22 @@ export function EntityDetailScreen({
           </span>
         </span>
         <h1 className="entity-name-large">{entity.name}</h1>
-        {entity.current_summary && (
+        {entity.gist ? (
+          /* The gist: what the notes add up to, each sentence with the
+             notes it rests on. Where they changed their mind, it says
+             from when to when rather than picking one. */
+          <div className="entity-gist">
+            <Sourced
+              sentences={entity.gist.sentences}
+              onOpenCapture={onOpenCapture}
+              className="prose entity-gist-text"
+            />
+            <p className="meta">
+              <span className="derived-dot" aria-hidden="true" /> In short, by {entity.gist.model}, from{" "}
+              {entity.gist.observations_seen} observations
+            </p>
+          </div>
+        ) : entity.current_summary && (
           /* Not called a summary on purpose: `current_summary` is
              overwritten by whichever observation came last, so calling it
              a summary would promise a consolidation that has not happened.

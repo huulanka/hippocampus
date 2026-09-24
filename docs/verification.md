@@ -35,6 +35,31 @@ and banner decisions (`foresight::tests`), the routes against Postgres
 (`routes::intentions::db_tests`), and every page in the browser against a
 running backend with a Tauri stub.
 
+### Finding things again against the real model
+The four prompts in `backend/src/context.rs`, `gist.rs` and `ask.rs` have
+**never run against OpenRouter**. What is checked: the routes, the
+episode walk, redaction and the one-look-per-Mac rule against Postgres
+(`context::db_tests`, `gist::db_tests`), the sentence bookkeeping
+(`ask::tests`), the meeting window (`occasions::tests`), and the whole
+chain end to end against a local stand-in model that answers every prompt,
+including a sentence the check has to drop. Open after deploying:
+
+1. A week of notes: do "During a meeting with …" lines appear on the notes
+   that belong, and not on the unrelated ones spoken in the same slot?
+2. Episodes: does a workshop's run of notes chain, and does an unrelated
+   note in the middle stay out?
+3. Gists of the three most mentioned entities: accurate, sourced, and does
+   one with a changed fact say from when to when?
+4. Ten real questions, including one the notes cannot answer. Count the
+   answers that say something the cited notes do not; the check should
+   leave none.
+
+### Meetings in the bundled build
+With a calendar ticked, notes are looked up within two minutes of the app
+starting, the old ones included. Check `GET /occasions/pending?checker=…`
+empties, and that nothing of a meeting's title appears in the events
+(`occasion.offered` carries ids only).
+
 ### Intention detection against the real model
 The prompt has **never run against OpenRouter** from a development
 machine. The parser (missing key, empty text, unknown `about`) and the

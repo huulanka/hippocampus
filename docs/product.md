@@ -76,6 +76,8 @@ place.
 | P11 | No morning brief, no push notifications, with **two** exceptions: the weekly review announces itself once a week at a day and time you set, and a banner appears before a meeting that an open intention fits (once before, once after). Both can be switched off | Every notification is a habit that has to be built on purpose. Both exceptions hang on an appointment you already have instead of inventing a new one. Neither says anything about what is in the notes; the second only names the meeting from your own calendar. Reading is behind the lock, a notification banner is not. See `docs/prospective-memory.md` |
 | P12 | The threshold for automatic judgements is **observations per entity**, not the total number of captures | Early on, almost every entity had exactly one observation. A model deciding from one sentence per side whether two things are the same is guessing, and would write its guess into the graph automatically |
 | P13 | Intentions ("I still need to ask Paul") are picked up in passing and hang on people and subjects, not on times; they come back the next time the subject comes up and before a matching meeting | The moment knowledge matters belongs to the world, not to the app. Detection is a model's judgement, so it is shown straight away and can be dismissed in one move; only you mark something as done (`docs/prospective-memory.md`, F1–F12) |
+| P14 | A note knows what it was said next to: the meeting around it (as who and what it was with, never its title) and the notes just before it. Time only nominates; a model reading the note decides | People find things again through context. Around a meeting people also say unrelated things, so nearness in time proves nothing on its own (`docs/finding-again.md`, R1–R6) |
+| P15 | A question is answered only from notes the backend chose, every sentence cites its notes and is checked against them, and "the notes don't say" is an answer | The reason chat was excluded still holds; what changed is that an answer is now a page of your own notes, arranged, with nothing in it that cannot be followed back (`docs/finding-again.md`, R9–R14; ADR 0017) |
 
 ## What counts as an MVP
 
@@ -100,7 +102,7 @@ system with anything personal at all.
 
 | Not building | Why |
 |---|---|
-| Chat or RAG over the captures | A memory system must not confabulate about your own past; you cannot tell an invented memory from a real one. Dated quotes with a link to the original beat any summary. |
+| Chat over the captures: a model talking about your life with the archive behind it | A memory system must not confabulate about your own past; you cannot tell an invented memory from a real one. Answering questions is built, under P15: from chosen notes, sentence by sentence with sources, checked, with the notes beneath. |
 | A cryptographic hash chain | There is no threat model for it. Anyone with write access to the database rewrites the chain too. Without external anchoring it is theatre. A tested restore is worth more. |
 | A model that **weighs up** which entities are the same, unsupervised | A process that invents relationships in your memory without supervision is a hallucination generator with write access. The threshold is P12, the weight of evidence per entity. *Deterministic* consolidation (same name, inconsistent type vocabulary) is **not** out of scope, because it weighs nothing and so cannot invent anything. |
 | Documents, PDFs, email, screenshots | A different product (document extraction). It doesn't solve the problem above. |

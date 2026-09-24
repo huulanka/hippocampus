@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select event_id as \"event_id!\" from (\n            select cs.event_id, cs.occurred_at,\n                   row_number() over (partition by o.entity_id order by cs.occurred_at desc) as n\n            from observations o\n            join capture_search cs on cs.event_id = o.source_event_id\n            where o.entity_id = any($1)\n              and ($2::timestamptz is null or cs.occurred_at >= $2)\n              and ($3::timestamptz is null or cs.occurred_at < $3)\n        ) ranked\n        where n <= $4\n        order by occurred_at desc\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "capture_search",
+            "name": "event_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Timestamptz",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9e15b0c59a695ffa6d5d858d3288e1ca8740c268368796ce579029219f1d8207"
+}
