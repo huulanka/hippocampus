@@ -39,7 +39,7 @@ do it (recording, speech recognition, Face ID, App Intents).
 | I1 | **Tauri on iOS with Swift plugins**, not a native SwiftUI app | Timeline, detail, graph, intentions and review already exist as React pages, and the request path, the outbox and the keychain handling already exist in Rust. A second code base is too much for a one-person project. The price is a mixed project and a generated Xcode project to maintain. |
 | I2 | **No paid developer account.** The app is signed with a free Apple ID (SideStore, or Xcode directly) | It is a private app for one person. Alternative app marketplaces in the EU do not help: every app distributed there has to be notarised by Apple, which needs the paid membership. |
 | I3 | **Built within the limits of free signing** | A free signature lasts 7 days and has to be renewed, at most 3 apps can be installed at once, and at most 10 app IDs can be registered a week. Every extension (a widget, a control) needs its own app ID. There is no push and no iCloud. Version 1 therefore has no extension at all. |
-| I4 | **The speech engine is a setting**, Apple's `SpeechAnalyzer` first, Parakeet v3 (the model the Mac uses, through FluidAudio on the Neural Engine) as the alternative | `SpeechAnalyzer` is a newer long-form model and a different model from the keyboard dictation that was not good enough, and it needs no download. Whether it holds up against fast, spontaneous speech is measured, not assumed. `transcript.derived` already names its model, so every capture says which engine heard it, and the archive can be re-transcribed later (ADR 0004). |
+| I4 | **Parakeet v3 on the phone too**, the model the Mac uses, through FluidAudio on the Neural Engine | Spike c) ran Apple's `SpeechTranscriber` and `DictationTranscriber` against it on recordings of fast, spontaneous speech. Both got proper names wrong about as often as Parakeet does, and on top of that made clearly more mistakes with ordinary words. A list of known names handed to Apple's model as context did not change that. The price is a model of about 600 MB to download once, which Apple's built-in models would have avoided. One engine on every device also keeps the archive consistent: `transcript.derived` names its model either way (ADR 0004). |
 | I5 | **The Action Button and a button in the app** start a recording. Opening the app does not | An App Intent in the main target can be put on the Action Button without an extension. Opening the app to read must never start a recording; the Mac learned that from the menu bar icon (ADR 0012). |
 | I6 | **Capturing works offline, reading does not** | The outbox is the same promise as on the Mac: nothing is lost. Reading needs the backend, and no copy of the archive lives on the phone, so a lost phone gives away less. |
 | I7 | **Reading is behind Face ID, capturing is not** | ADR 0011, unchanged. |
@@ -69,11 +69,13 @@ is meant to stay.
 - **b) Extension under free signing.** A widget extension with a control
   and an App Group, next to the skeleton.
   *Decides* whether phase 3 is possible without paying.
-- **c) Speech.** Twenty recordings of your own, spoken the way you
-  actually speak, run through `SpeechAnalyzer` and through Parakeet v3,
-  compared by word error rate and by how the proper names come out. The
+- **c) Speech.** Recordings of your own, spoken the way you actually
+  speak, run through `SpeechAnalyzer` and through Parakeet v3, compared
+  by word error rate and by how the proper names come out. The
   recordings stay on your own machine.
-  *Decides* the default engine.
+  *Decides* the default engine. Decided: Parakeet, see I4. Neither
+  engine is good with proper names, so correcting a transcript stays
+  part of the app.
 - **d) Structuring on the device.** The existing structuring prompt, run
   over your own notes with Apple's smaller on-device model, its larger
   one, and the current OpenRouter model, compared on entities, types,
