@@ -960,7 +960,11 @@ mod tests {
     #[test]
     fn quote_marks_and_end_punctuation_are_forgiven() {
         assert_eq!(
-            verbatim("„muss ich noch die Hafenportal-Deadline ansprechen.“", SPOKEN).as_deref(),
+            verbatim(
+                "„muss ich noch die Hafenportal-Deadline ansprechen.“",
+                SPOKEN
+            )
+            .as_deref(),
             Some("muss ich noch die Hafenportal-Deadline ansprechen")
         );
     }
