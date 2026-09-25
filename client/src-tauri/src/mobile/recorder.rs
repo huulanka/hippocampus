@@ -33,6 +33,16 @@ impl Recording {
         let _ = std::fs::remove_file(&recorded.path);
         samples
     }
+
+    /// Closes the microphone and throws the recording away, without the
+    /// conversion [`Self::finish`] would spend on it.
+    pub fn cancel(self) {
+        if let Ok(speech) = crate::asr::speech() {
+            if let Err(err) = speech.cancel_recording() {
+                log::warn!("could not cancel the recording: {err}");
+            }
+        }
+    }
 }
 
 fn read_wav(path: &str) -> anyhow::Result<Vec<f32>> {

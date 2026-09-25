@@ -105,6 +105,22 @@ impl<R: Runtime> Speech<R> {
             .map(|answer| answer.requested)
     }
 
+    /// Starts loading the model and returns at once, so it is ready by the
+    /// time a recording ends.
+    pub fn warm_model(&self) -> Result<(), String> {
+        self.call::<serde_json::Value>("warmModel", ()).map(|_| ())
+    }
+
+    /// Lets the loaded model go. Returns whether it was loaded.
+    pub fn release_model(&self) -> Result<bool, String> {
+        #[derive(Deserialize)]
+        struct Released {
+            released: bool,
+        }
+        self.call::<Released>("releaseModel", ())
+            .map(|answer| answer.released)
+    }
+
     pub fn model_status(&self) -> Result<ModelStatus, String> {
         self.call("modelStatus", ())
     }

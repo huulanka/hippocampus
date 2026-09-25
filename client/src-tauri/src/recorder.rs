@@ -104,14 +104,24 @@ impl Recording {
             anyhow::bail!("the microphone stream failed during recording");
         }
 
-        let raw = self
-            .samples
-            .lock()
-            .map_err(|_| anyhow::anyhow!("recording buffer was poisoned"))?
-            .clone();
+        // Taken rather than copied: at 48 kHz stereo a minute is 23 MB,
+        // and the callback may still append a last buffer or two to the
+        // emptied one before the stream thread drops it, which is harmless.
+        let raw = std::mem::take(
+            &mut *self
+                .samples
+                .lock()
+                .map_err(|_| anyhow::anyhow!("recording buffer was poisoned"))?,
+        );
 
         let mono = to_mono(&raw, self.channels);
         resample(&mono, self.source_rate, TARGET_RATE)
+    }
+
+    /// Stops the stream and throws the recording away, without the
+    /// resampling [`Self::finish`] would spend on it.
+    pub fn cancel(self) {
+        let _ = self.stop.send(());
     }
 }
 

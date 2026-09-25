@@ -4,7 +4,9 @@
 //! never has to cross into JavaScript. The webview only ever learns the
 //! resulting text and its echoes.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use chrono::Utc;
 use contracts::CaptureAccepted;
@@ -33,9 +35,20 @@ const DEVICE: &str = "mac-desktop";
 #[cfg(mobile)]
 const DEVICE: &str = "iphone";
 
+/// How long the speech model stays loaded after it was last needed.
+///
+/// Long enough that a few thoughts in a row do not each wait for it, short
+/// enough that it is not sitting on over a gigabyte all afternoon for a
+/// capture made before lunch. The first recording after it has gone does
+/// not wait either: [`begin_recording`] loads it while you speak.
+const KEEP_MODEL_FOR: Duration = Duration::from_secs(180);
+
 pub struct CaptureState {
     recording: Mutex<Option<Recording>>,
     transcriber: Arc<Transcriber>,
+    /// Bumped whenever the model is wanted, so a release planned after one
+    /// use can tell that another has happened since.
+    model_wanted: AtomicU64,
 }
 
 impl CaptureState {
@@ -43,7 +56,12 @@ impl CaptureState {
         Self {
             recording: Mutex::new(None),
             transcriber: Arc::new(Transcriber::default()),
+            model_wanted: AtomicU64::new(0),
         }
+    }
+
+    fn want_model(&self) -> u64 {
+        self.model_wanted.fetch_add(1, Ordering::SeqCst) + 1
     }
 }
 
@@ -51,6 +69,44 @@ impl Default for CaptureState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Loads the model in the background, so it is ready by the time the
+/// speaking is done. A failure here is only logged: transcribing loads it
+/// again and reports whatever is wrong where the user can see it.
+fn warm_model(state: &CaptureState) {
+    state.want_model();
+    let transcriber = Arc::clone(&state.transcriber);
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(err) = transcriber.warm() {
+            log::warn!("could not load the speech model ahead of time: {err:#}");
+        }
+    });
+}
+
+/// Lets the model go once it has not been wanted for [`KEEP_MODEL_FOR`].
+fn release_model_later(app: &tauri::AppHandle) {
+    let wanted = app.state::<CaptureState>().want_model();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(KEEP_MODEL_FOR).await;
+        let state = app.state::<CaptureState>();
+        if state.model_wanted.load(Ordering::SeqCst) != wanted {
+            return;
+        }
+        // A recording in flight wants it; its end plans the next release.
+        if state.recording.lock().map_or(true, |slot| slot.is_some()) {
+            return;
+        }
+        let transcriber = Arc::clone(&state.transcriber);
+        if let Ok(true) = tauri::async_runtime::spawn_blocking(move || transcriber.release()).await
+        {
+            log::info!(
+                "let the speech model go after {}s unused",
+                KEEP_MODEL_FOR.as_secs()
+            );
+        }
+    });
 }
 
 #[derive(Serialize)]
@@ -120,6 +176,7 @@ fn begin_recording(app: &tauri::AppHandle, state: &CaptureState) -> Result<(), S
     }
 
     *slot = Some(Recording::start().map_err(|err| err.to_string())?);
+    warm_model(state);
     // The one visible sign, from the menu bar, that the mic is actually
     // listening — see `crate::tray`.
     crate::tray::activity_begin(app);
@@ -149,8 +206,9 @@ pub async fn cancel_recording(
 fn discard_recording(app: &tauri::AppHandle, state: &CaptureState) -> Result<(), String> {
     let mut slot = state.recording.lock().map_err(|_| "recorder is wedged")?;
     if let Some(recording) = slot.take() {
-        let _ = recording.finish();
+        recording.cancel();
         crate::tray::activity_end(app);
+        release_model_later(app);
     }
     Ok(())
 }
@@ -256,6 +314,9 @@ pub async fn stop_recording(
         .take()
         .ok_or("not recording")?;
     crate::tray::activity_end(&app);
+    // Planned before anything below can return early, so a recording that
+    // turns out empty does not leave the model loaded that its start warmed.
+    release_model_later(&app);
 
     let samples = recording.finish().map_err(|err| err.to_string())?;
     let duration_ms = (samples.len() as u64 * 1000 / u64::from(TARGET_RATE)) as u32;
@@ -271,11 +332,13 @@ pub async fn stop_recording(
     }
 
     let transcriber = Arc::clone(&state.transcriber);
-    let for_asr = samples.clone();
-    let transcript = tauri::async_runtime::spawn_blocking(move || transcriber.transcribe(&for_asr))
-        .await
-        .map_err(|err| format!("transcription task failed: {err}"))?
-        .map_err(|err| err.to_string())?;
+    let (samples, transcript) = tauri::async_runtime::spawn_blocking(move || {
+        let transcript = transcriber.transcribe(&samples);
+        (samples, transcript)
+    })
+    .await
+    .map_err(|err| format!("transcription task failed: {err}"))?;
+    let transcript = transcript.map_err(|err| err.to_string())?;
 
     if transcript.is_empty() {
         return Err("nothing was recognised in that recording".to_string());
