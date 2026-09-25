@@ -44,6 +44,24 @@ pub struct Transcriber {
 }
 
 impl Transcriber {
+    /// Starts loading the model onto the Neural Engine and returns at
+    /// once; transcribing waits for the same load rather than starting a
+    /// second one.
+    pub fn warm(&self) -> anyhow::Result<()> {
+        speech()?.warm_model().map_err(|err| anyhow!(err))
+    }
+
+    /// Lets the model go. Swift also does this on its own when the app
+    /// goes to the background or iOS runs short of memory.
+    pub fn release(&self) -> bool {
+        speech()
+            .and_then(|speech| speech.release_model().map_err(|err| anyhow!(err)))
+            .unwrap_or_else(|err| {
+                log::warn!("could not let the speech model go: {err:#}");
+                false
+            })
+    }
+
     /// Hands the samples to Parakeet as a file, which is how the Swift
     /// side reads them, and removes the file afterwards whatever happened.
     pub fn transcribe(&self, samples: &[f32]) -> anyhow::Result<String> {

@@ -60,11 +60,6 @@ const PULSE_PERIOD: Duration = Duration::from_millis(1600);
 /// and "am I still recording?" is the one question this must always answer.
 const DOT_MIN_ALPHA: f32 = 0.30;
 
-/// How often the loop looks for work while nothing is recording. Long
-/// enough to be nearly free, short enough that the dot appears without a
-/// noticeable wait after the shortcut is pressed.
-const IDLE_POLL: Duration = Duration::from_millis(250);
-
 /// Composites the recording dot onto a copy of the resting mark at the
 /// given strength.
 ///
@@ -331,28 +326,37 @@ impl Frames {
 /// commands with no guarantee only one is ever outstanding at once — a
 /// count that never goes negative is simpler than reasoning about which
 /// call is allowed to turn the pulse off.
+///
+/// Every change also wakes the loop, so the dot appears the moment a
+/// recording starts rather than whenever the loop next looks.
 #[derive(Default)]
-struct Activity(AtomicUsize);
+struct Activity {
+    count: AtomicUsize,
+    changed: tokio::sync::Notify,
+}
 
 /// Marks a recording as having started. Pair with [`activity_end`] —
 /// every path out of `start_recording` that returns `Ok` must eventually
 /// call it, including cancellation.
 pub fn activity_begin(app: &AppHandle) {
-    app.state::<Activity>().0.fetch_add(1, Ordering::SeqCst);
+    let activity = app.state::<Activity>();
+    activity.count.fetch_add(1, Ordering::SeqCst);
+    activity.changed.notify_one();
 }
 
 /// Marks a recording as finished. Saturates at zero instead of
 /// underflowing: a stray extra call here should be a no-op, not a pulse
 /// that never turns off because the counter wrapped around.
 pub fn activity_end(app: &AppHandle) {
-    let _ = app
-        .state::<Activity>()
-        .0
+    let activity = app.state::<Activity>();
+    let _ = activity
+        .count
         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
+    activity.changed.notify_one();
 }
 
 fn is_active(app: &AppHandle) -> bool {
-    app.state::<Activity>().0.load(Ordering::SeqCst) > 0
+    app.state::<Activity>().count.load(Ordering::SeqCst) > 0
 }
 
 /// Brings the window back, nothing else. Deliberately *not*
@@ -663,7 +667,9 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
 ///
 /// The loop idles slowly and only wakes at frame rate while there is
 /// something to draw; a menu-bar item has no business waking the machine
-/// twelve times a second to redraw a picture that is not changing.
+/// twelve times a second to redraw a picture that is not changing. Idle,
+/// it wakes once a second for the menu, and at once when a recording
+/// starts or ends.
 fn watch(app: AppHandle, tray: TrayIcon, first: Vec<Entry>) {
     let pulse_gap = PULSE_PERIOD / PULSE_FRAMES as u32;
     let twinkle_gap = SPARKLE_PERIOD / SPARKLE_FRAMES as u32;
@@ -768,14 +774,15 @@ fn watch(app: AppHandle, tray: TrayIcon, first: Vec<Entry>) {
             }
             shown = next;
 
-            tokio::time::sleep(match want {
+            let pause = match want {
                 Want::Pulse => pulse_gap,
                 Want::Lit {
                     twinkling: true, ..
                 } => twinkle_gap,
-                _ => IDLE_POLL,
-            })
-            .await;
+                _ => MENU_CHECK,
+            };
+            let activity = app.state::<Activity>();
+            let _ = tokio::time::timeout(pause, activity.changed.notified()).await;
         }
     });
 }

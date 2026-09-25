@@ -16,7 +16,10 @@ class SpeechPlugin: Plugin {
   private var raw: AVAudioFile?
   private var rawURL: URL?
 
-  private var asr: AsrManager?
+  /// The model, loaded or loading. A task rather than the manager itself,
+  /// so a warm-up and a transcription arriving together wait for one load
+  /// instead of each starting their own. Nil when it has been let go.
+  private var loading: Task<AsrManager, Error>?
 
   private var downloading = false
   private var fraction = 0.0
@@ -44,6 +47,20 @@ class SpeechPlugin: Plugin {
       forName: Self.requestNotice, object: nil, queue: .main
     ) { [weak self] _ in
       self?.trigger("record", data: JSObject())
+    }
+    // Loaded, the model is several hundred megabytes, and a suspended app
+    // that big is among the first iOS ends to make room — which turns the
+    // next Action Button press into a cold start. Let go of it on the way
+    // out, and whenever iOS asks; the next recording loads it again while
+    // you speak.
+    for name in [
+      UIApplication.didEnterBackgroundNotification,
+      UIApplication.didReceiveMemoryWarningNotification,
+    ] {
+      NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) {
+        [weak self] _ in
+        self?.dropModel()
+      }
     }
   }
 
@@ -235,13 +252,55 @@ class SpeechPlugin: Plugin {
     }
   }
 
+  /// Starts loading the model and answers at once, so it is ready by the
+  /// time the recording that asked for it ends.
+  @objc public func warmModel(_ invoke: Invoke) {
+    invoke.resolve()
+    guard AsrModels.modelsExist(at: Self.modelDirectory, version: Self.version) else { return }
+    Task { _ = try? await self.loadedManager() }
+  }
+
+  @objc public func releaseModel(_ invoke: Invoke) {
+    invoke.resolve(["released": dropModel()])
+  }
+
   private func loadedManager() async throws -> AsrManager {
-    if let asr { return asr }
-    let models = try await AsrModels.load(from: Self.modelDirectory, version: Self.version)
-    let asr = AsrManager()
-    try await asr.loadModels(models)
-    self.asr = asr
-    return asr
+    lock.lock()
+    let task: Task<AsrManager, Error>
+    if let loading {
+      task = loading
+    } else {
+      task = Task {
+        let models = try await AsrModels.load(from: Self.modelDirectory, version: Self.version)
+        let asr = AsrManager()
+        try await asr.loadModels(models)
+        return asr
+      }
+      loading = task
+    }
+    lock.unlock()
+
+    do {
+      return try await task.value
+    } catch {
+      // Not kept: the next attempt should try again, not repeat this one.
+      lock.lock()
+      if loading == task { loading = nil }
+      lock.unlock()
+      throw error
+    }
+  }
+
+  /// Lets go of the model, unless a recording is running. A transcription
+  /// already under way holds its own reference and finishes normally; the
+  /// model is freed when it does.
+  @discardableResult
+  private func dropModel() -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    guard engine == nil, loading != nil else { return false }
+    loading = nil
+    return true
   }
 
   // MARK: - transcription
