@@ -1,3 +1,11 @@
+## [1.18.1](https://github.com/huulanka/hippocampus/compare/v1.18.0...v1.18.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* a garbled answer from the echo judge is retried instead of stored as no echo ([#14](https://github.com/huulanka/hippocampus/issues/14)) ([dcfd359](https://github.com/huulanka/hippocampus/commit/dcfd359c26eda43fecacf57ee98d5e4c53cbb2a2))
+* a long recording is transcribed in pieces instead of lost, and the speech model is let go when unused ([#15](https://github.com/huulanka/hippocampus/issues/15)) ([b4d5c49](https://github.com/huulanka/hippocampus/commit/b4d5c49f50e4c362bbed834487619545403dda08))
+
 # [1.18.0](https://github.com/huulanka/hippocampus/compare/v1.17.1...v1.18.0) (2026-09-24)
 
 
