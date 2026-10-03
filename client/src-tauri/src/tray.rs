@@ -351,7 +351,7 @@ pub fn activity_end(app: &AppHandle) {
     let activity = app.state::<Activity>();
     let _ = activity
         .count
-        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
+        .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
     activity.changed.notify_one();
 }
 
