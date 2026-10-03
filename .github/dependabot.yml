@@ -8,6 +8,23 @@ updates:
       cargo-dependencies:
         patterns: ["*"]
 
+  # The client is its own Cargo workspace (docs/adr/0007), so it needs an
+  # entry of its own; without one its crates are never looked at.
+  - package-ecosystem: cargo
+    directory: /client/src-tauri
+    schedule:
+      interval: weekly
+    groups:
+      client-cargo-dependencies:
+        patterns: ["*"]
+    # Tauri's Rust crates and its npm packages have to share major.minor,
+    # or `tauri build` refuses to run. Dependabot cannot update the two
+    # ecosystems in one PR, so a Tauri upgrade is done by hand, both sides
+    # at once; only patch releases come from here.
+    ignore:
+      - dependency-name: "tauri*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+
   - package-ecosystem: npm
     directory: /client
     schedule:
@@ -15,6 +32,10 @@ updates:
     groups:
       npm-dependencies:
         patterns: ["*"]
+    # See the client's Cargo entry above.
+    ignore:
+      - dependency-name: "@tauri-apps/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
