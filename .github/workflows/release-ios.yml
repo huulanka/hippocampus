@@ -45,7 +45,11 @@ jobs:
           # The tag, not the branch, as in release-app.yml. Empty on a
           # pull request, which means the pull request itself.
           ref: ${{ github.event.release.tag_name || inputs.tag }}
-          token: ${{ secrets.RELEASE_TOKEN }}
+          # Only publishing needs RELEASE_TOKEN (to push to main). A
+          # pull request from Dependabot gets no repository secrets, and
+          # an empty token fails the checkout, so a build-only run falls
+          # back to the workflow's own token.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
