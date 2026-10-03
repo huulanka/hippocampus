@@ -1,0 +1,149 @@
+name: Release iPhone app
+
+# Builds the iPhone app for a published release, attaches the IPA, and
+# points the SideStore source at it. SideStore on the phone reads that
+# source, offers the update and signs it with the free Apple ID it is
+# logged in with, so a release reaches the phone without a Mac.
+#
+# The IPA is unsigned. There is no Apple account in CI, and a free one
+# could not sign for a phone it has never seen anyway; SideStore signs it
+# on the device. That is also why this is not a step of release-app.yml:
+# nothing here can fail the Mac download, and the other way round.
+#
+# On pull requests that touch the native side it only builds, so a change
+# that breaks the iPhone build shows up before the release does.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build, e.g. v1.19.0"
+        required: true
+  pull_request:
+    paths:
+      - client/src-tauri/**
+      - client/package.json
+      - client/package-lock.json
+      - scripts/prepare-ios.sh
+      - scripts/write-sidestore-source.py
+      - .github/workflows/release-ios.yml
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-26
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      PUBLISH: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The tag, not the branch, as in release-app.yml. Empty on a
+          # pull request, which means the pull request itself.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      # Xcode 27's Swift compiler keeps the @_cdecl entry points of
+      # Tauri's Swift packages local in a release build, and the app then
+      # fails to link ("_register_plugin" undefined); a debug build is not
+      # affected. Pinned to the newest Xcode 26 until that is sorted out
+      # upstream. Named rather than left to the runner's default, which
+      # will move to 27 one day.
+      - name: Select Xcode 26
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri
+          key: ios
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install the tools `tauri ios init` needs
+        run: |
+          brew install xcodegen
+          command -v pod >/dev/null || brew install cocoapods
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      # src-tauri/gen/ is not in the repository (docs/development.md), so
+      # every build starts from a freshly generated Xcode project.
+      - name: Generate the Xcode project
+        working-directory: client
+        run: |
+          npx tauri ios init --ci
+          ../scripts/prepare-ios.sh
+
+      - name: Build the IPA
+        working-directory: client
+        run: npx tauri ios build --no-sign --target aarch64 --ci
+
+      - name: Name it after the version
+        id: ipa
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' \
+            client/src-tauri/gen/apple/client_iOS/Info.plist)"
+          path="${RUNNER_TEMP}/Hippocampus_${version}_aarch64.ipa"
+          cp client/src-tauri/gen/apple/build/arm64/Hippocampus.ipa "$path"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          ls -l "$path"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Hippocampus-ios
+          path: ${{ steps.ipa.outputs.path }}
+          retention-days: 7
+
+      - name: Attach it to the release
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: gh release upload "$TAG" "${{ steps.ipa.outputs.path }}" --clobber
+
+      - name: Point the SideStore source at it
+        if: env.PUBLISH == 'true'
+        run: |
+          ./scripts/write-sidestore-source.py "${TAG#v}" "${{ steps.ipa.outputs.path }}"
+          cp sidestore/hippocampus.json "${RUNNER_TEMP}/hippocampus.json"
+
+      # release-app.yml commits the cask to main at about the same time,
+      # so the push may find main moved on; the source and the cask never
+      # touch the same file, which makes a rebase and a second try safe.
+      - name: Commit the source to main
+        if: env.PUBLISH == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          mkdir -p sidestore
+          cp "${RUNNER_TEMP}/hippocampus.json" sidestore/hippocampus.json
+          git add sidestore/hippocampus.json
+          if git diff --cached --quiet -- sidestore/hippocampus.json; then
+            echo "source already current"
+            exit 0
+          fi
+          git commit -m "chore(release): sidestore source for ${TAG} [skip ci]"
+          for attempt in 1 2 3; do
+            git push origin main && exit 0
+            sleep 5
+            git fetch origin main
+            git rebase origin/main
+          done
+          exit 1
