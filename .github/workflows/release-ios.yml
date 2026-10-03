@@ -47,17 +47,6 @@ jobs:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
           token: ${{ secrets.RELEASE_TOKEN }}
 
-      # Xcode 27's Swift compiler keeps the @_cdecl entry points of
-      # Tauri's Swift packages local in a release build, and the app then
-      # fails to link ("_register_plugin" undefined); a debug build is not
-      # affected. Pinned to the newest Xcode 26 until that is sorted out
-      # upstream. Named rather than left to the runner's default, which
-      # will move to 27 one day.
-      - name: Select Xcode 26
-        run: |
-          sudo xcode-select -s /Applications/Xcode_26.6.app
-          xcodebuild -version
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios
@@ -89,9 +78,16 @@ jobs:
           npx tauri ios init --ci
           ../scripts/prepare-ios.sh
 
+      # A debug build, on purpose. A release build does not link: the
+      # @_cdecl entry points of Tauri's Swift packages (register_plugin,
+      # init_plugin_speech, ...) come out of Swift's release build as
+      # local symbols, so nothing outside the package finds them. Seen
+      # with Xcode 26.6 and 27 alike. The debug build is the one that has
+      # been running on the phone all along; the Rust side is unoptimised,
+      # which an app that is mostly a webview and HTTP does not notice.
       - name: Build the IPA
         working-directory: client
-        run: npx tauri ios build --no-sign --target aarch64 --ci
+        run: npx tauri ios build --debug --no-sign --target aarch64 --ci
 
       - name: Name it after the version
         id: ipa

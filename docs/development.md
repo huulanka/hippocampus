@@ -219,11 +219,11 @@ given tag. `release-ios.yml` also builds, without publishing, on every
 pull request that touches `client/src-tauri/`, so a change that breaks
 the iPhone build is seen before it is released.
 
-It builds with Xcode 26. With Xcode 27, a release build of the iPhone app
-does not link: its Swift compiler keeps the `@_cdecl` entry points of
-Tauri's Swift packages (`register_plugin`, `init_plugin_speech`, ...)
-local, so nothing outside the package finds them. A debug build is not
-affected, which is why `tauri ios build --debug` still works locally.
+The IPA is a debug build. A release build of the iPhone app does not
+link, with Xcode 26 or 27: Swift's release build leaves the `@_cdecl`
+entry points of Tauri's Swift packages (`register_plugin`,
+`init_plugin_speech`, ...) as local symbols, and the Rust side cannot
+find them. The debug build is what has run on the phone from the start.
 
 ## The brand
 
