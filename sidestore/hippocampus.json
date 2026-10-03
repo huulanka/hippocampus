@@ -1,0 +1,41 @@
+{
+  "name": "Hippocampus",
+  "identifier": "com.andreasbauer.hippocampus.source",
+  "sourceURL": "https://raw.githubusercontent.com/huulanka/hippocampus/main/sidestore/hippocampus.json",
+  "iconURL": "https://raw.githubusercontent.com/huulanka/hippocampus/main/client/src-tauri/icons/icon.png",
+  "apps": [
+    {
+      "name": "Hippocampus",
+      "bundleIdentifier": "com.andreasbauer.hippocampus",
+      "developerName": "huulanka",
+      "subtitle": "Speak a thought, find it again.",
+      "localizedDescription": "Personal knowledge system fed by voice, structured without losing the original.",
+      "iconURL": "https://raw.githubusercontent.com/huulanka/hippocampus/main/client/src-tauri/icons/icon.png",
+      "category": "productivity",
+      "versions": [
+        {
+          "version": "1.19.0",
+          "buildVersion": "1.19.0",
+          "date": "2026-10-03T10:11:45Z",
+          "localizedDescription": "https://github.com/huulanka/hippocampus/releases/tag/v1.19.0",
+          "downloadURL": "https://github.com/huulanka/hippocampus/releases/download/v1.19.0/Hippocampus_1.19.0_aarch64.ipa",
+          "size": 27755477,
+          "minOSVersion": "26.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {
+          "NSCalendarsFullAccessUsageDescription": "Hippocampus reads only the calendars you tick in Settings, so it can bring up what you meant to say shortly before a meeting with the people it concerns. It never changes your calendar.",
+          "NSCalendarsUsageDescription": "Hippocampus reads only the calendars you tick in Settings, so it can bring up what you meant to say shortly before a meeting with the people it concerns. It never changes your calendar.",
+          "NSMicrophoneUsageDescription": "Hippocampus records what you say to keep it as a note. It is transcribed on this iPhone, and the recording is kept with the note on your own backend."
+        }
+      },
+      "version": "1.19.0",
+      "versionDate": "2026-10-03T10:11:45Z",
+      "downloadURL": "https://github.com/huulanka/hippocampus/releases/download/v1.19.0/Hippocampus_1.19.0_aarch64.ipa",
+      "size": 27755477
+    }
+  ],
+  "news": []
+}
