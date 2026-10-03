@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/huulanka/hippocampus/compare/v1.18.1...v1.19.0) (2026-10-03)
+
+
+### Features
+
+* the iPhone app is built for every release and reaches the phone through SideStore ([#18](https://github.com/huulanka/hippocampus/issues/18)) ([821f812](https://github.com/huulanka/hippocampus/commit/821f812e6332ed7a3716bea21789a8c6550edb18))
+
 ## [1.18.1](https://github.com/huulanka/hippocampus/compare/v1.18.0...v1.18.1) (2026-09-25)
 
 
