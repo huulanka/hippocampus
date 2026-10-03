@@ -56,6 +56,56 @@ The cask and the `.dmg` it points at are produced by
 `.github/workflows/release-app.yml` on every published release, so the
 version you get is the version that was released.
 
+## The iPhone app
+
+iOS 26 or newer. There is no paid Apple Developer account behind the app
+(`docs/iphone.md`, I2), so it does not come from the App Store or
+TestFlight. It comes from [SideStore](https://sidestore.io), which signs
+it on the phone with a free Apple ID and renews that signature before it
+runs out. A free signature lasts seven days; without a renewal the app
+stops opening, and the data in it stays.
+
+Setting SideStore up needs a Mac once, with the phone on a cable:
+
+1. On the phone, install **LocalDevVPN** from the App Store. SideStore
+   talks to the phone's own installation service through it.
+2. On the Mac, `brew install --cask iloader`, start it, sign in with the
+   Apple ID that should sign the app, and install **SideStore** (not
+   the LiveContainer variant: an app inside LiveContainer does not get
+   its own Action Button intent). iloader also writes the pairing file
+   SideStore needs later.
+3. On the phone, trust the developer profile under Settings, General,
+   VPN & Device Management, open SideStore and sign in there with the
+   same Apple ID.
+4. In SideStore, add this source:
+
+   ```
+   https://raw.githubusercontent.com/huulanka/hippocampus/main/sidestore/hippocampus.json
+   ```
+
+   and install Hippocampus from it, with LocalDevVPN switched on.
+5. Open Hippocampus, enter the backend address and the Service Token in
+   Settings, and download the speech model there, on Wi-Fi.
+
+From then on the phone looks after itself. SideStore renews the
+signature when it is opened with the VPN on; a Shortcuts automation that
+runs every day (connect LocalDevVPN, then SideStore's "Refresh All
+Apps") does that without anyone thinking about it. Updates show up in
+SideStore's source by themselves: `.github/workflows/release-ios.yml`
+builds an unsigned IPA for every published release, attaches it to the
+release and rewrites the source to point at it.
+
+Two things to know:
+
+- SideStore installs the app under a bundle identifier of its own (the
+  team ID is appended). To iOS it is a different app from one installed
+  by Xcode, with its own data and keychain. An app installed from a
+  development build has to be emptied (its outbox sent) before it is
+  deleted, and the new one set up from step 5.
+- An iOS update can invalidate the pairing file. Then SideStore cannot
+  renew anything until iloader has written a new one, which needs the
+  Mac again. Away from the Mac for a while, leave iOS where it is.
+
 ## The speech model
 
 Speech recognition runs on this machine, never on the server: audio is the

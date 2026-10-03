@@ -9,6 +9,7 @@ client/       Tauri v2 desktop app (capture, browse, search, graph)
 docs/         Product scope, design, ADRs, operations
 scripts/      Speech model download, brand rendering, release helpers
 Casks/        The Homebrew cask, rewritten on every release
+sidestore/    The SideStore source for the iPhone app, rewritten on every release
 ```
 
 `backend/` and `contracts/` form the root Cargo workspace; `client/src-tauri/`
@@ -207,6 +208,22 @@ publishing anything:
 npm install   # once, at the repo root — this is release tooling, not the app
 npm run release:dry-run
 ```
+
+A published release starts two more workflows, independent of each
+other so that one failing cannot take the other's download with it:
+`release-app.yml` builds the Mac `.dmg` and rewrites the cask,
+`release-ios.yml` builds an unsigned iPhone IPA and rewrites
+`sidestore/hippocampus.json`, the source SideStore reads
+(`docs/install.md`). Either can be run again from the Actions tab for a
+given tag. `release-ios.yml` also builds, without publishing, on every
+pull request that touches `client/src-tauri/`, so a change that breaks
+the iPhone build is seen before it is released.
+
+The IPA is a debug build. A release build of the iPhone app does not
+link, with Xcode 26 or 27: Swift's release build leaves the `@_cdecl`
+entry points of Tauri's Swift packages (`register_plugin`,
+`init_plugin_speech`, ...) as local symbols, and the Rust side cannot
+find them. The debug build is what has run on the phone from the start.
 
 ## The brand
 
