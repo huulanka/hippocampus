@@ -56,7 +56,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-single-instance = "2.4.5"
 cpal = "0.18"
-rubato = "0.16"
+rubato = "5.0"
 # ONNX rather than the whisper-cpp backend: that one builds whisper.cpp
 # from source and so would make cmake a hard build dependency for the whole
 # workspace, CI included. `ort` ships prebuilt binaries.
