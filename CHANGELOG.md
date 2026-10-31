@@ -1,3 +1,10 @@
+## [1.19.1](https://github.com/huulanka/hippocampus/compare/v1.19.0...v1.19.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* the TLS stack and zip archive handling pick up this month's security fixes ([#31](https://github.com/huulanka/hippocampus/issues/31)) ([fb35983](https://github.com/huulanka/hippocampus/commit/fb35983abe4990348386553ee24ff8934b71061f))
+
 # [1.19.0](https://github.com/huulanka/hippocampus/compare/v1.18.1...v1.19.0) (2026-10-03)
 
 
