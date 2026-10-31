@@ -101,26 +101,45 @@ system and be gone after the next `docker compose up --force-recreate`.
 
 ## Deploying to a NAS
 
-`backend/Dockerfile` builds the image. The build context in
-`docker-compose.yml` is deliberately the repository root, not `backend/`,
+The NAS does not build the backend, it pulls it.
+`.github/workflows/release-backend.yml` builds `backend/Dockerfile` for
+every published release and pushes it to the GitHub Container Registry as
+`ghcr.io/huulanka/hippocampus-backend:<version>` and `:latest`, which is
+what `docker-compose.yml` refers to.
+
+Building on the NAS used to be the setup, and it stopped working once the
+build outgrew Portainer: a release build with full LTO compiles for well
+over ten minutes on a NAS CPU, and Portainer gives a stack deploy a fixed
+time limit it cannot be told to extend. Past it the deploy fails with
+`DeadlineExceeded: context deadline exceeded` while the compiler is still
+running. A Git stack in Portainer therefore needs no build at all now;
+"Pull and redeploy" fetches the image of the release the stack points at
+(`latest` unless `HIPPOCAMPUS_VERSION` is set in the stack's environment).
+
+A second thing that only shows up when building on a Synology: BuildKit
+resolves names during `RUN` steps through the host's own
+`/etc/resolv.conf`, not through the DNS servers Docker hands to running
+containers. When DSM's network settings leave that file pointing at a
+server the build cannot reach, `apt-get update` fails with
+`Temporary failure resolving 'deb.debian.org'` and the step exits with
+code 100, while every running container resolves fine. Setting the DNS
+servers by hand in DSM (Control Panel, Network, General) fixes it.
+
+The image itself is built from the repository root, not `backend/`,
 because `backend` is a workspace member and needs the root
 `Cargo.toml`/`Cargo.lock` and the `contracts` crate next to it (see
 [ADR 0007](adr/0007-separate-client-workspace.md) for the related reason
 why the client, the other way round, is a workspace of its own).
+`docker-compose.build.yml` does the same locally, for a change that has
+not been released yet.
 
-Tested with `docker build --platform linux/amd64 -f backend/Dockerfile .`
-from the repository root, through QEMU emulation on an Apple Silicon Mac,
-against a running Postgres: migrations, the embedding model, the reranker
-and `/health` and `/version` all work. `fastembed` is pinned to
-`ort-download-binaries-rustls-tls` and `hf-hub-rustls-tls` instead of the
-default native-tls features (otherwise the slim Debian image has no
-OpenSSL at all), and the runtime stage needs Debian **Trixie**, not
-Bookworm: the ONNX Runtime binary that `ort` downloads needs glibc and
-libstdc++ symbols that Bookworm's glibc 2.36 doesn't have yet.
-
-On an x86_64 NAS the image works unchanged. The `--platform` override is
-only needed for testing locally on Apple Silicon; on the NAS itself Docker
-builds natively for the right architecture.
+`fastembed` is pinned to `ort-download-binaries-rustls-tls` and
+`hf-hub-rustls-tls` instead of the default native-tls features (otherwise
+the slim Debian image has no OpenSSL at all), and the runtime stage needs
+Debian **Trixie**, not Bookworm: the ONNX Runtime binary that `ort`
+downloads needs glibc and libstdc++ symbols that Bookworm's glibc 2.36
+doesn't have yet. The published image is linux/amd64 only, which is what
+an x86_64 NAS runs.
 
 Putting the backend behind Cloudflare Tunnel and Access is described in
 [`docs/install.md`](install.md).

@@ -132,6 +132,16 @@ cp .env.example .env   # at least OPENROUTER_API_KEY, see below
 docker compose up -d
 ```
 
+The backend image is not built on your machine: every release publishes
+it as `ghcr.io/huulanka/hippocampus-backend`, and `docker compose up`
+pulls it. Set `HIPPOCAMPUS_VERSION` (e.g. `1.19.2`) to stay on one release;
+without it the stack follows the latest. To run a change that has not been
+released yet, build from the checkout instead:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
 It listens on port 8080. Every setting is described where it is set, in
 [`.env.example`](../.env.example). The one that matters on day one is
 `OPENROUTER_API_KEY`: without it captures are still stored, transcribed and
