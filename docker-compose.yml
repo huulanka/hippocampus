@@ -25,12 +25,11 @@ services:
       retries: 10
 
   backend:
-    build:
-      # Root, not ./backend: `backend` is a workspace member and needs its
-      # siblings (root Cargo.toml/Cargo.lock, the `contracts` path
-      # dependency) to build at all.
-      context: .
-      dockerfile: backend/Dockerfile
+    # Built by .github/workflows/release-backend.yml for every release, so
+    # the machine running it never compiles anything. HIPPOCAMPUS_VERSION
+    # pins a release (e.g. 1.19.2); unset, it follows the latest one. To
+    # build from this checkout instead, add docker-compose.build.yml.
+    image: ghcr.io/huulanka/hippocampus-backend:${HIPPOCAMPUS_VERSION:-latest}
     restart: unless-stopped
     depends_on:
       postgres:
