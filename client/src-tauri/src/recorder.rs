@@ -13,7 +13,8 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use rubato::{FftFixedIn, Resampler};
+use rubato::audioadapter_buffers::direct::InterleavedSlice;
+use rubato::{Fft, FixedSync, Resampler};
 
 /// What on-device ASR models expect, Parakeet included.
 pub const TARGET_RATE: u32 = 16_000;
@@ -150,20 +151,16 @@ fn resample(samples: &[f32], from: u32, to: u32) -> anyhow::Result<Vec<f32>> {
         return Ok(samples.to_vec());
     }
 
+    // `process_all` cuts the clip into chunks of the size given here, trims
+    // the resampler's startup delay and stops at the end of the input, so
+    // the result lines up with the recording without padding or a leading
+    // stretch of silence.
     const CHUNK: usize = 1024;
-    let mut resampler = FftFixedIn::<f32>::new(from as usize, to as usize, CHUNK, 2, 1)?;
-    let mut out = Vec::with_capacity(samples.len() * to as usize / from as usize + CHUNK);
+    let mut resampler = Fft::<f32>::new(from as usize, to as usize, CHUNK, 1, FixedSync::Both)?;
+    let input = InterleavedSlice::new(samples, 1, samples.len())?;
+    let resampled = resampler.process_all(&input, samples.len(), None)?;
 
-    for block in samples.chunks(CHUNK) {
-        // The final block is zero-padded to a full chunk, which appends at
-        // most a chunk of silence to the end of the recording.
-        let mut padded = block.to_vec();
-        padded.resize(CHUNK, 0.0);
-        let resampled = resampler.process(&[padded], None)?;
-        out.extend_from_slice(&resampled[0]);
-    }
-
-    Ok(out)
+    Ok(resampled.take_data())
 }
 
 /// Encodes samples as a 16-bit mono WAV in memory, which is what the
@@ -209,10 +206,9 @@ mod tests {
         let input = vec![0.0f32; 48_000];
         let out = resample(&input, 48_000, 16_000).unwrap();
 
-        // Not exactly a third: the FFT resampler emits a whole number of
-        // frames per chunk, so a second of audio comes back a handful of
-        // samples short. A 2% band catches a wrong ratio (the mistake that
-        // would matter) without pinning the crate's internal chunking.
+        // A 2% band catches a wrong ratio (the mistake that would matter)
+        // without pinning how the crate rounds the length at the end of
+        // the clip.
         let expected = 16_000i64;
         let drift = (out.len() as i64 - expected).abs();
         assert!(
@@ -220,6 +216,48 @@ mod tests {
             "expected ~{expected} samples, got {}",
             out.len()
         );
+    }
+
+    #[test]
+    fn resampling_keeps_a_tone_intact_from_the_first_sample() {
+        // One second of a 440 Hz tone at half scale, at both rates Mac input
+        // devices commonly run at. Speech sits well below the 8 kHz cutoff,
+        // so a tone like this must come through unchanged in pitch and
+        // level, and must not start late.
+        for source_rate in [44_100u32, 48_000] {
+            let freq = 440.0f32;
+            let input: Vec<f32> = (0..source_rate)
+                .map(|n| {
+                    0.5 * (2.0 * std::f32::consts::PI * freq * n as f32 / source_rate as f32).sin()
+                })
+                .collect();
+            let out = resample(&input, source_rate, 16_000).unwrap();
+
+            let rms = |s: &[f32]| (s.iter().map(|x| x * x).sum::<f32>() / s.len() as f32).sqrt();
+            let expected_rms = 0.5 / 2f32.sqrt();
+            let middle = &out[1_000..15_000];
+            assert!(
+                (rms(middle) - expected_rms).abs() < expected_rms * 0.02,
+                "{source_rate} Hz: level changed, rms {}",
+                rms(middle)
+            );
+
+            // Two zero crossings per period: about 880 in one second.
+            let crossings = out
+                .windows(2)
+                .filter(|w| (w[0] < 0.0) != (w[1] < 0.0))
+                .count() as i64;
+            assert!(
+                (crossings - 880).abs() < 18,
+                "{source_rate} Hz: pitch changed, {crossings} crossings"
+            );
+
+            // The startup delay is trimmed: the first 10 ms already carry the tone.
+            assert!(
+                rms(&out[..160]) > expected_rms * 0.5,
+                "{source_rate} Hz: the output starts with silence"
+            );
+        }
     }
 
     #[test]
