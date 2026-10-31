@@ -1,3 +1,10 @@
+## [1.19.2](https://github.com/huulanka/hippocampus/compare/v1.19.1...v1.19.2) (2026-10-31)
+
+
+### Bug Fixes
+
+* the NAS pulls a released backend image instead of compiling past Portainer's time limit ([#34](https://github.com/huulanka/hippocampus/issues/34)) ([912162e](https://github.com/huulanka/hippocampus/commit/912162e7ce30a84b33f42f2bc0ff94c82588ff5f))
+
 ## [1.19.1](https://github.com/huulanka/hippocampus/compare/v1.19.0...v1.19.1) (2026-10-31)
 
 
