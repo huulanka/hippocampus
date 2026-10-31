@@ -1,0 +1,17 @@
+# Builds the backend from this checkout instead of pulling the released
+# image. Only needed to run a change that has not been released yet:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Not for Portainer. A release build compiles for well over ten minutes on
+# a NAS, longer than Portainer lets a stack deploy take (see
+# .github/workflows/release-backend.yml).
+services:
+  backend:
+    image: hippocampus-backend:local
+    build:
+      # Root, not ./backend: `backend` is a workspace member and needs its
+      # siblings (root Cargo.toml/Cargo.lock, the `contracts` path
+      # dependency) to build at all.
+      context: .
+      dockerfile: backend/Dockerfile
