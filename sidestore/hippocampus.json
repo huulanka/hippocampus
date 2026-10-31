@@ -14,12 +14,12 @@
       "category": "productivity",
       "versions": [
         {
-          "version": "1.19.0",
-          "buildVersion": "1.19.0",
-          "date": "2026-10-03T10:11:45Z",
-          "localizedDescription": "https://github.com/huulanka/hippocampus/releases/tag/v1.19.0",
-          "downloadURL": "https://github.com/huulanka/hippocampus/releases/download/v1.19.0/Hippocampus_1.19.0_aarch64.ipa",
-          "size": 27755477,
+          "version": "1.19.1",
+          "buildVersion": "1.19.1",
+          "date": "2026-10-31T19:08:53Z",
+          "localizedDescription": "https://github.com/huulanka/hippocampus/releases/tag/v1.19.1",
+          "downloadURL": "https://github.com/huulanka/hippocampus/releases/download/v1.19.1/Hippocampus_1.19.1_aarch64.ipa",
+          "size": 27548492,
           "minOSVersion": "26.0"
         }
       ],
@@ -31,10 +31,10 @@
           "NSMicrophoneUsageDescription": "Hippocampus records what you say to keep it as a note. It is transcribed on this iPhone, and the recording is kept with the note on your own backend."
         }
       },
-      "version": "1.19.0",
-      "versionDate": "2026-10-03T10:11:45Z",
-      "downloadURL": "https://github.com/huulanka/hippocampus/releases/download/v1.19.0/Hippocampus_1.19.0_aarch64.ipa",
-      "size": 27755477
+      "version": "1.19.1",
+      "versionDate": "2026-10-31T19:08:53Z",
+      "downloadURL": "https://github.com/huulanka/hippocampus/releases/download/v1.19.1/Hippocampus_1.19.1_aarch64.ipa",
+      "size": 27548492
     }
   ],
   "news": []
