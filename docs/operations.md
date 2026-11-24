@@ -113,8 +113,45 @@ over ten minutes on a NAS CPU, and Portainer gives a stack deploy a fixed
 time limit it cannot be told to extend. Past it the deploy fails with
 `DeadlineExceeded: context deadline exceeded` while the compiler is still
 running. A Git stack in Portainer therefore needs no build at all now;
-"Pull and redeploy" fetches the image of the release the stack points at
-(`latest` unless `HIPPOCAMPUS_VERSION` is set in the stack's environment).
+"Pull and redeploy" fetches the image of the release the stack points at.
+A stack pinned to a Git tag runs that tag's image, because
+`docker-compose.yml` defaults to the version it was released with;
+`HIPPOCAMPUS_VERSION` in the stack's environment overrides that.
+
+What a NAS stack should set in its environment, beyond the backend's own
+settings:
+
+| Variable | Why |
+| --- | --- |
+| `HIPPOCAMPUS_DATA_DIR` | Real, backed-up storage instead of Portainer's stack directory |
+| `POSTGRES_PASSWORD` | The default is public; see below for an existing database |
+| `HIPPOCAMPUS_PUBLISH` | Only if other machines must reach the backend without the tunnel |
+
+Neither the backend nor Postgres is published beyond `127.0.0.1` by
+default. A Cloudflare Tunnel reaches the backend by container name, so
+`cloudflared` needs to share a Docker network with it, not a published
+port.
+
+### Changing the database password
+
+`POSTGRES_PASSWORD` only takes effect when Postgres initialises an empty
+data directory. A database that already exists keeps the password it was
+created with, and the backend, which builds its `DATABASE_URL` from the
+variable, can no longer log in. Change it in the database first, then in
+the environment:
+
+```sh
+docker compose exec -T postgres \
+  psql -U hippocampus -d hippocampus \
+  -c "ALTER USER hippocampus WITH PASSWORD 'the-new-password'"
+```
+
+In Portainer, the same command runs in the Postgres container's console
+(`psql -U hippocampus -d hippocampus`). Then set `POSTGRES_PASSWORD` to the
+new value and redeploy. Inside the container Postgres trusts local
+connections, so the `psql` above works without the old password. Keep the
+password URL-safe (letters and digits, e.g. `openssl rand -hex 32`), since
+it becomes part of a connection URL.
 
 A second thing that only shows up when building on a Synology: BuildKit
 resolves names during `RUN` steps through the host's own

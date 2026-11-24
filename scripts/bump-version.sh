@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Sets the version in every place it is duplicated, in one step.
 #
-# There are six of them (backend, contracts and client are three separate
-# Cargo/npm packages, plus Tauri's own tauri.conf.json), with no shared
+# There are seven of them (backend, contracts and client are three separate
+# Cargo/npm packages, plus Tauri's own tauri.conf.json and the backend
+# image tag in docker-compose.yml), with no shared
 # source between them, so they are only ever consistent because something
 # set them all together. This is that something.
 #
@@ -50,6 +51,15 @@ set_contracts_dependency_version() {
   echo "  $file (contracts dependency)"
 }
 
+# The backend image tag docker-compose.yml falls back to when
+# HIPPOCAMPUS_VERSION is unset, so a checkout of a release tag runs that
+# release's image rather than whatever `latest` is at the time.
+set_compose_image_version() {
+  local file="$1"
+  sed -i '' -E "s/(hippocampus-backend:\\$\{HIPPOCAMPUS_VERSION:-)[0-9]+\.[0-9]+\.[0-9]+\}/\1$VERSION}/" "$file"
+  echo "  $file (backend image tag)"
+}
+
 echo "Setting version to $VERSION in:"
 set_cargo_version "Cargo.toml"
 set_cargo_version "backend/Cargo.toml"
@@ -59,6 +69,7 @@ set_json_version "client/package.json"
 set_json_version "client/src-tauri/tauri.conf.json"
 set_contracts_dependency_version "backend/Cargo.toml"
 set_contracts_dependency_version "client/src-tauri/Cargo.toml"
+set_compose_image_version "docker-compose.yml"
 
 echo
 echo "Refreshing lockfiles..."
