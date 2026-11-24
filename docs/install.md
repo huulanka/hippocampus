@@ -134,15 +134,30 @@ docker compose up -d
 
 The backend image is not built on your machine: every release publishes
 it as `ghcr.io/huulanka/hippocampus-backend`, and `docker compose up`
-pulls it. Set `HIPPOCAMPUS_VERSION` (e.g. `1.19.2`) to stay on one release;
-without it the stack follows the latest. To run a change that has not been
-released yet, build from the checkout instead:
+pulls the image of the release the checkout belongs to: a checkout of tag
+`vX.Y.Z` runs image `X.Y.Z`, and nothing changes until the checkout does.
+Set `HIPPOCAMPUS_VERSION` to pick another one, or `latest` to follow every
+release. To run a change that has not been released yet, build from the
+checkout instead:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
-It listens on port 8080. Every setting is described where it is set, in
+It listens on port 8080, published on `127.0.0.1` only: the machine it runs
+on reaches it, nothing else does. That is enough when the app runs on the
+same Mac, or when the backend is reached through a Cloudflare Tunnel, which
+talks to the container directly. To reach it from other machines, set
+`HIPPOCAMPUS_PUBLISH=8080` (or `<host address>:8080`). Postgres is published
+the same way, on `127.0.0.1:5433`, through `HIPPOCAMPUS_DB_PUBLISH`.
+
+Set `POSTGRES_PASSWORD` before the first start. The default, `hippocampus`,
+is there so a local try-out needs no setup; it is public, since it is in
+this repository. Postgres only reads the variable when it creates an empty
+database, so changing it later is a step of its own, described in
+[`operations.md`](operations.md#changing-the-database-password).
+
+Every setting is described where it is set, in
 [`.env.example`](../.env.example). The one that matters on day one is
 `OPENROUTER_API_KEY`: without it captures are still stored, transcribed and
 searchable, but nothing reads them, so there are no entities, no dates and

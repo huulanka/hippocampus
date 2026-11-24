@@ -22,7 +22,8 @@
           "client/src-tauri/Cargo.toml",
           "client/src-tauri/Cargo.lock",
           "client/src-tauri/tauri.conf.json",
-          "CHANGELOG.md"
+          "CHANGELOG.md",
+          "docker-compose.yml"
         ],
         "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
       }
