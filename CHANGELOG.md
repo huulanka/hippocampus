@@ -1,3 +1,11 @@
+## [1.19.3](https://github.com/huulanka/hippocampus/compare/v1.19.2...v1.19.3) (2026-11-24)
+
+
+### Bug Fixes
+
+* the database password comes from the environment, and ports stay on localhost ([#41](https://github.com/huulanka/hippocampus/issues/41)) ([45aec3a](https://github.com/huulanka/hippocampus/commit/45aec3aa5115d62e032805eb7b4d92aee88e39c4))
+* the JWT check, the HTTP stack and the release tooling pick up security fixes ([#42](https://github.com/huulanka/hippocampus/issues/42)) ([8231df6](https://github.com/huulanka/hippocampus/commit/8231df686a71486557b18ce4a54f8e13c89155f0))
+
 ## [1.19.2](https://github.com/huulanka/hippocampus/compare/v1.19.1...v1.19.2) (2026-10-31)
 
 

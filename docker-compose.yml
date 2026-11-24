@@ -46,7 +46,7 @@ services:
     # and nothing changes until the checkout does. HIPPOCAMPUS_VERSION
     # overrides it, e.g. `latest` to follow every release. To build from
     # this checkout instead, add docker-compose.build.yml.
-    image: ghcr.io/huulanka/hippocampus-backend:${HIPPOCAMPUS_VERSION:-1.19.2}
+    image: ghcr.io/huulanka/hippocampus-backend:${HIPPOCAMPUS_VERSION:-1.19.3}
     restart: unless-stopped
     depends_on:
       postgres:
